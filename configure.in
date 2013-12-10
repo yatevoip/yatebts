@@ -1,0 +1,84 @@
+# Process this file with autoconf to produce a configure script.
+AC_INIT(Yate-BTS, 0.0.1)
+AC_CONFIG_SRCDIR([README])
+AC_PREREQ(2.52)
+AC_CONFIG_HEADERS([config.h])
+
+PACKAGE_RELEASE="1"
+
+PACKAGE_REVISION=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`
+test -z "$PACKAGE_REVISION" && PACKAGE_REVISION=`cat "$srcdir/tarballs/revision.txt" 2>/dev/null`
+
+PACKAGE_VERSION_MAJOR="${PACKAGE_VERSION%%.*}"
+PACKAGE_VERSION_MINOR="${PACKAGE_VERSION#*.}"
+PACKAGE_VERSION_MINOR="${PACKAGE_VERSION_MINOR%.*}"
+PACKAGE_VERSION_BUILD="${PACKAGE_VERSION##*.}"
+PACKAGE_VERSION_RELEASE="$((0+${PACKAGE_RELEASE}))"
+AC_SUBST(PACKAGE_VERSION_MAJOR)
+AC_SUBST(PACKAGE_VERSION_MINOR)
+AC_SUBST(PACKAGE_VERSION_BUILD)
+AC_SUBST(PACKAGE_VERSION_RELEASE)
+AC_SUBST(PACKAGE_RELEASE)
+AC_SUBST(PACKAGE_REVISION)
+
+# We may need the host OS type but avoid the overhead of AC_CANONICAL_SYSTEM
+AC_MSG_CHECKING([for local operating system type])
+uname_os=`uname -s`
+test -x "$uname_os" && uname_os=Unknown
+AC_MSG_RESULT([$uname_os])
+
+# Checks for programs.
+AC_PROG_CXX
+AC_PROG_CC
+AC_PROG_AWK
+
+# Check for Yate (required)
+YATE_VER=""
+YATE_INC=""
+YATE_LIB=""
+YATE_STR=""
+YATE_MOD=""
+YATE_SCR=""
+YATE_SHR=""
+YATE_CFG=""
+yc="yate-config"
+AC_ARG_WITH(yate,AC_HELP_STRING([--with-yate=DIR],[use Yate from DIR]),[ac_cv_use_yate=$withval],[ac_cv_use_yate=yes])
+if [[ "x$ac_cv_use_yate" = "xno" ]]; then
+    YATE_VER="no"
+else
+if [[ "x$ac_cv_use_yate" != "xyes" ]]; then
+    yc="$ac_cv_use_yate/$yc"
+    YATE_INC="-I$ac_cv_use_yate"
+    YATE_LIB="-L$ac_cv_use_yate"
+fi
+AC_MSG_CHECKING([for Yate using $yc])
+YATE_VER=`"$yc" --version 2>/dev/null`
+YATE_INC="$YATE_INC "`"$yc" --c-all 2>/dev/null`
+YATE_LIB="$YATE_LIB "`"$yc" --ld-nostrip 2>/dev/null`
+YATE_STR=`"$yc" --ld-strip 2>/dev/null`
+YATE_MOD=`"$yc" --modules 2>/dev/null`
+YATE_SCR=`"$yc" --scripts 2>/dev/null`
+YATE_SHR=`"$yc" --share 2>/dev/null`
+YATE_CFG=`"$yc" --config 2>/dev/null`
+if [[ "x$YATE_VER" = "x" ]]; then
+    YATE_VER="no"
+fi
+AC_MSG_RESULT([$YATE_VER])
+if [[ "x$YATE_VER" = "xno" ]]; then
+    AC_ERROR([Could not find Yate])
+fi
+fi
+AC_SUBST(YATE_VER)
+AC_SUBST(YATE_INC)
+AC_SUBST(YATE_LIB)
+AC_SUBST(YATE_STR)
+AC_SUBST(YATE_MOD)
+AC_SUBST(YATE_SCR)
+AC_SUBST(YATE_SHR)
+AC_SUBST(YATE_CFG)
+
+AC_CONFIG_FILES([yate-bts.spec
+                 Makefile])
+CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//'`
+AC_SUBST(CONFIGURE_FILES)
+AC_OUTPUT

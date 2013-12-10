@@ -1,0 +1,7 @@
+/* config.h.in - template for generating config.h */
+
+/* Version number of package */
+#undef VERSION
+
+/* Support SSE2 (Streaming SIMD Extensions 2) instructions */
+#undef HAVE_SSE2

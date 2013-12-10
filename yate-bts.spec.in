@@ -1,0 +1,163 @@
+# to add a distro release tag run rpmbuild --define 'dist value'
+# to add a revision tag run rpmbuild --define 'revision value'
+# to create a debug info package run rpmbuild --define 'debuginfo 1'
+# to suppress auto dependencies run rpmbuild --define 'nodeps 1'
+
+%{!?dist:%define dist %{nil}}
+%{!?revision:%define revision %{nil}}
+%{?nodeps:%define no_auto_deps 1}
+
+%{!?debuginfo:%define debuginfo %{nil}}
+%if "%{debuginfo}"
+%define stripped debug
+%else
+%define stripped strip
+%define debug_package ${nil}
+%endif
+
+%if "%{revision}" == "svn"
+%define revision @PACKAGE_REVISION@svn
+%endif
+
+%if "%{dist}" == ""
+%define dist %{?distsuffix:%distsuffix}%{?product_version:%product_version}
+%endif
+%if "%{dist}" == ""
+%define dist %(test -f /etc/mandriva-release && echo mdv)
+%endif
+%if "%{dist}" == ""
+%define dist %(test -f /etc/mandrake-release && echo mdk)
+%endif
+%if "%{dist}" == ""
+%define dist %(test -f /etc/fedora-release && echo fc)
+%endif
+%if "%{dist}" == ""
+%define dist %(grep -q ^CentOS /etc/issue && echo centos)
+%endif
+%if "%{dist}" == ""
+%define dist %(test -f /etc/redhat-release && echo rh)
+%endif
+%if "%{dist}" == ""
+%define dist %(test -f /etc/SuSE-release && echo suse)
+%endif
+%if "%{dist}" == "none"
+%define dist %{nil}
+%endif
+
+Summary:	GSM BTS based on Yet Another Telephony Engine
+Name:     	@PACKAGE_TARNAME@
+Version: 	@PACKAGE_VERSION@
+Release:	@PACKAGE_RELEASE@%{dist}
+License:	GPL
+Packager:	Paul Chitescu <paulc@null.ro>
+Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_RELEASE@.tar.gz
+Group:		Applications/Communications
+BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
+URL:		http://yatebts.com/
+BuildRequires:	gcc-c++
+BuildRequires:	yate-devel = @YATE_VER@
+Requires:	yate = @YATE_VER@
+Requires:	%{name}-transceiver = %{version}-%{release}
+
+%define prefix	/usr
+%define moddir	%{_libdir}/yate/bts
+
+
+%description
+Yate is a telephony engine designed to implement PBX and IVR solutions
+for small to large scale projects.
+This module implements a 2G GSM BTS for Yate.
+At least one transceiver package must also be installed for interfacing with the hardware.
+
+%files
+%defattr(-, root, root)
+%dir %{_defaultdocdir}/%{name}-%{version}
+%doc %{_defaultdocdir}/%{name}-%{version}/README
+%dir %{moddir}
+%{moddir}/*.yate
+%{moddir}/localbss
+%config(noreplace) %{_sysconfdir}/yate/*.conf
+
+
+%package rad1
+Summary:	RAD1 transceiver support for Yate-BTS
+Group:		Applications/Communications
+Provides:	%{name}-transceiver
+Requires:	%{name} = %{version}-%{release}
+
+%description rad1
+RAD1 transceiver executable and support files for Yate-BTS.
+
+%files rad1
+%{moddir}/bts/transceiver-rad1
+%{moddir}/bts/ezusb.ihx
+%{moddir}/bts/fpga.rbf
+
+
+%package usrp
+Summary:	USRP transceiver support for Yate-BTS
+Group:		Applications/Communications
+Provides:	%{name}-transceiver
+Requires:	%{name} = %{version}-%{release}
+
+%description usrp
+USRP transceiver executable and support files for Yate-BTS.
+
+%files usrp
+%{moddir}/bts/transceiver-usrp
+%{moddir}/bts/std_inband.rbf
+
+
+%package uhd
+Summary:	UHD transceiver support for Yate-BTS
+Group:		Applications/Communications
+Provides:	%{name}-transceiver
+Requires:	%{name} = %{version}-%{release}
+
+%description uhd
+UHD transceiver executable and support files for Yate-BTS.
+
+%files uhd
+%{moddir}/bts/transceiver-uhd
+
+
+%prep
+%setup -q -n %{name}
+
+%if "%{no_auto_deps}" == "1"
+%define local_find_requires %{_builddir}/%{name}/local-find-requires
+%define local_find_provides %{_builddir}/%{name}/local-find-provides
+#
+%{__cat} <<EOF >%{local_find_requires}
+#! /bin/sh
+grep -v '\.yate$' | %{__find_requires} | grep -v '^perl'
+exit 0
+EOF
+#
+%{__cat} <<EOF >%{local_find_provides}
+#! /bin/sh
+%{__find_provides} | grep -v '\.yate$'
+exit 0
+EOF
+#
+chmod +x %{local_find_requires} %{local_find_provides}
+%define _use_internal_dependency_generator 0
+%define __find_requires %{local_find_requires}
+%define __find_provides %{local_find_provides}
+%define __perl_requires /bin/true
+%endif
+
+%build
+./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man
+make strip
+
+%install
+make install DESTDIR=%{buildroot}
+
+%clean
+# make clean
+rm -rf %{buildroot}
+
+%changelog
+* Wed Dec 09 2013 Paul Chitescu <paulc@null.ro>
+- Created specfile
