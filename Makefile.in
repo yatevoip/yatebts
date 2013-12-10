@@ -18,7 +18,7 @@ CFLAGS := $(subst -fno-check-new,,$(CCFLAGS))
 LDFLAGS:= @YATE_LIB@
 MODSTRIP:= @YATE_STR@
 
-PROGS := gsmbts.yate
+PROGS := gsmbts.yate ybts.yate
 LIBS  :=
 OEXE  :=
 OTRAN :=
@@ -147,6 +147,8 @@ rpm: tarball
 	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS)
 
 gsmbts.yate: gsmbts.cpp
+
+ybts.yate: ybts.cpp
 
 @srcdir@/configure: @srcdir@/configure.in
 	cd @srcdir@ && autoconf
