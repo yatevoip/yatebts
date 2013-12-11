@@ -20,22 +20,38 @@
  */
 
 #include <yatephone.h>
-#include <arpa/inet.h>
+
+#ifdef _WINDOWS
+#error This module is not for Windows
+#endif
+
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <string.h>
 #include <signal.h>
 #include <stdio.h>
 
 using namespace TelEngine;
 namespace { // anonymous
 
-#define YBTS_BTS_CMD "/usr/bin/mobts"
+#define YBTST_F FMT64U "." FMT64U
+#define YBTST_V(val) val / 1000000,val % 1000000
+
+#define YBTS_PEER_CMD "path_to_app_to_run"
+
+#define YBTS_LOGFILE_INDEX 0
+#define YBTS_SIGNALLINGFILE_INDEX 1
+#define YBTS_MEDIAFILE_INDEX 2
+#define YBTS_FILE_COUNT 3
 
 class YBTSConnIdHolder;                  // A connection id holder
 class YBTSThread;
 class YBTSThreadOwner;
 class YBTSMessage;                       // YBTS <-> BTS PDU
 class YBTSTransport;
-class YBTSSignalling;                    // Signalling transport
-class YBTSMedia;                         // Media transport
+class YBTSLog;                           // Log interface
+class YBTSSignalling;                    // Signalling interface
+class YBTSMedia;                         // Media interface
 class YBTSUE;                            // A registered equipment
 class YBTSLocationUpd;                   // Pending location update from UE
 class YBTSMM;                            // Mobility management entity
@@ -138,41 +154,50 @@ protected:
 
 class YBTSTransport : public GenObject, public YBTSDebug
 {
+    friend class YBTSLog;
     friend class YBTSSignalling;
     friend class YBTSMedia;
 public:
     inline YBTSTransport()
-	: m_socket(0), m_localAddr("127.0.0.1"), m_localPort(0),
-	m_remoteAddr("127.0.0.1"), m_remotePort(0)
 	{}
     ~YBTSTransport()
-	{ setTransport(); }
-    bool sendTo(const void* buf, unsigned int len);
-    inline bool sendTo(const DataBlock& data)
-	{ return sendTo(data.data(),data.length()); }
-    // Read socket data. Return 0: nothing read, >1: read data, negative: fatal error
-    int recvFrom();
-    inline const SocketAddr& local() const
-	{ return m_local; }
-    inline const SocketAddr& remote() const
-	{ return m_remote; }
-
-    DataBlock m_readBuf;
+	{ resetTransport(); }
+    inline const DataBlock& readBuf() const
+	{ return m_readBuf; }
+    inline HANDLE detachRemote()
+	{ return m_remoteSocket.detach(); }
 
 protected:
-    bool startUdp();
-    void setTransport(Socket* sock = 0, bool updAddrLocal = false,
-	bool updAddrRemote = false);
+    bool send(const void* buf, unsigned int len);
+    inline bool send(const DataBlock& data)
+	{ return send(data.data(),data.length()); }
+    // Read socket data. Return 0: nothing read, >1: read data, negative: fatal error
+    int recv();
+    bool initTransport(bool stream, unsigned int buflen = 0);
+    void resetTransport();
 
-    Socket* m_socket;
+    Socket m_socket;
     Socket m_readSocket;
     Socket m_writeSocket;
-    SocketAddr m_local;
-    SocketAddr m_remote;
-    String m_localAddr;
-    int m_localPort;
-    String m_remoteAddr;
-    int m_remotePort;
+    Socket m_remoteSocket;
+    DataBlock m_readBuf;
+};
+
+class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
+    public YBTSThreadOwner
+{
+public:
+    YBTSLog();
+    inline YBTSTransport& transport()
+	{ return m_transport; }
+    bool start();
+    void stop();
+    // Read socket
+    virtual void processLoop();
+
+protected:
+    String m_name;
+    YBTSTransport m_transport;
 };
 
 class YBTSSignalling : public GenObject, public DebugEnabler, public Mutex,
@@ -180,8 +205,9 @@ class YBTSSignalling : public GenObject, public DebugEnabler, public Mutex,
 {
 public:
     YBTSSignalling();
-    inline const YBTSTransport& transport() const
+    inline YBTSTransport& transport()
 	{ return m_transport; }
+    void waitHandshake();
     // Send a message
     bool send(YBTSMessage& msg);
     bool start();
@@ -191,10 +217,13 @@ public:
 
 protected:
     void handlePDU(YBTSMessage& msg);
+    void setTimeout(unsigned int intervalMs, uint64_t timeUs = Time::now());
 
     String m_name;
     int m_printMsg;
     YBTSTransport m_transport;
+    bool m_waitHandshake;
+    uint64_t m_timeout;
 };
 
 class YBTSMedia : public GenObject, public DebugEnabler, public Mutex,
@@ -203,7 +232,7 @@ class YBTSMedia : public GenObject, public DebugEnabler, public Mutex,
     friend class YBTSDataConsumer;
 public:
     YBTSMedia();
-    inline const YBTSTransport& transport() const
+    inline YBTSTransport& transport()
 	{ return m_transport; }
     YBTSDataSource* buildSource(unsigned int connId);
     YBTSDataConsumer* buildConsumer(unsigned int connId);
@@ -216,25 +245,13 @@ public:
     virtual void processLoop();
 
 protected:
-    inline void forward(const void* data, unsigned int len) {
-	    if (len < 2)
-		return;
-	    uint16_t* d = (uint16_t*)data;
-	    YBTSDataSource* src = find(ntohs(*d));
-	    if (src) {
-		DataBlock tmp(d + 1,len - 2,false);
-		src->Forward(tmp);
-		tmp.clear(false);
-	    }
-	    TelEngine::destruct(src);
-	}
     inline void consume(const DataBlock& data, uint16_t connId) {
 	    if (!data.length())
 		return;
 	    uint8_t cid[2] = {(uint8_t)(connId >> 8),(uint8_t)connId};
 	    DataBlock tmp(cid,2);
 	    tmp += data;
-	    m_transport.sendTo(tmp);
+	    m_transport.send(tmp);
 	}
     // Find a source object by connection id, return referrenced pointer
     YBTSDataSource* find(unsigned int connId);
@@ -322,10 +339,10 @@ public:
     };
     enum State {
 	Idle = 0,
-	Starting,                        // The link with BTS is starting
-	WaitHandshake,                   // The BTS was started, waiting for handshake
-	Running,                         // BTS hadshake done
-	BTSUp
+	Starting,                        // The link with peer is starting
+	WaitHandshake,                   // The peer was started, waiting for handshake
+	Running,                         // Peer hadshake done
+	RadioUp
     };
     YBTSDriver();
     ~YBTSDriver();
@@ -333,6 +350,7 @@ public:
 	{ return m_media; }
     inline YBTSSignalling* signalling()
 	{ return m_signalling; }
+    void stop(unsigned int waitIntervalMs);
     inline bool findChan(uint8_t connId, RefPointer<YBTSChan>& chan) {
 	    Lock lck(this);
 	    chan = findChanConnId(connId);
@@ -345,14 +363,14 @@ protected:
     void start();
     inline void startIdle() {
 	    Lock lck(m_stateMutex);
-	    if (!m_engineStart || m_state != Idle)
+	    if (!m_engineStart || m_state != Idle || Engine::exiting())
 		return;
 	    lck.drop();
 	    start();
 	}
     void stop();
-    bool startBTS();
-    void stopBTS();
+    bool startPeer();
+    void stopPeer();
     bool handleEngineStop(Message& msg);
     YBTSChan* findChanConnId(uint8_t connId);
     void changeState(int newStat);
@@ -362,8 +380,12 @@ protected:
 
     int m_state;
     Mutex m_stateMutex;
-    YBTSMedia* m_media;                  // Media transport
-    YBTSSignalling* m_signalling;        // Signalling transport
+    pid_t m_peerPid;                     // Peer PID
+    bool m_stop;                         // Stop flag
+    uint64_t m_stopTime;                 // Stop time
+    YBTSLog* m_log;                      // Log
+    YBTSMedia* m_media;                  // Media
+    YBTSSignalling* m_signalling;        // Signalling
     YBTSMM* m_mm;                        // Mobility management
     bool m_engineStart;
     unsigned int m_engineStop;
@@ -372,13 +394,12 @@ protected:
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
 static String s_format = "gsm";          // Format to use
-static String s_btsCmd;                  // BTS command
+static String s_peerPath;                // Peer path
 static unsigned int s_bufLen = 1024;     // Read buffer length
-// Handshake params
-static const String s_signallingPort = "signalling-port";
-static const String s_mediaPort = "media-port";
-static const String s_controlPort = "control-port";
-static const String s_statusPort = "status-port";
+static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
+static unsigned int s_bufLenSign = 0;    // Read buffer length for signalling interface
+static unsigned int s_bufLenMedia = 0;   // Read buffer length for media interface
+static unsigned int s_handshakeIntervalMs = 60000; // Time (in miliseconds) to wait for handshake
 
 #define YBTS_MAKENAME(x) {#x, x}
 
@@ -388,7 +409,7 @@ const TokenDict YBTSDriver::s_stateName[] =
     YBTS_MAKENAME(Starting),
     YBTS_MAKENAME(WaitHandshake),
     YBTS_MAKENAME(Running),
-    YBTS_MAKENAME(BTSUp),
+    YBTS_MAKENAME(RadioUp),
     {0,0}
 };
 
@@ -460,6 +481,7 @@ void YBTSThreadOwner::stopThread()
     Lock lck(m_mutex);
     if (!m_thread)
 	return;
+    DDebug(m_enabler,DebugAll,"Stopping worker thread [%p]",m_ptr);
     m_thread->cancel();
     while (m_thread) {
 	lck.drop();
@@ -504,11 +526,11 @@ unsigned long YBTSDataConsumer::Consume(const DataBlock& data, unsigned long tSt
 //
 // YBTSTransport
 //
-bool YBTSTransport::sendTo(const void* buf, unsigned int len)
+bool YBTSTransport::send(const void* buf, unsigned int len)
 {
     if (!len)
 	return true;
-    int wr = m_writeSocket.sendTo(buf,len,m_remote);
+    int wr = m_writeSocket.send(buf,len);
     if (wr == (int)len)
 	return true;
     if (wr >= 0)
@@ -523,12 +545,11 @@ bool YBTSTransport::sendTo(const void* buf, unsigned int len)
 }
 
 // Read socket data. Return 0: nothing read, >1: read data, negative: fatal error
-int YBTSTransport::recvFrom()
+int YBTSTransport::recv()
 {
-    m_readBuf.resize(s_bufLen);
     if (!m_readSocket.valid())
 	return 0;
-    int rd = m_readSocket.recvFrom((void*)m_readBuf.data(),m_readBuf.length());
+    int rd = m_readSocket.recv((void*)m_readBuf.data(),m_readBuf.length());
     if (rd >= 0)
 	return rd;
     if (m_readSocket.canRetry())
@@ -540,72 +561,101 @@ int YBTSTransport::recvFrom()
     return -1;
 }
 
-bool YBTSTransport::startUdp()
+bool YBTSTransport::initTransport(bool stream, unsigned int buflen)
 {
-    setTransport();
+    resetTransport();
     String error;
-    while (true) {
-	SocketAddr sa;
-	sa.host(m_localAddr);
-	sa.port(m_localPort);
-	if (!sa.host()) {
-	    error << "Failed to resolve local addr '" << m_localAddr << "'";
-	    break;
+#ifdef PF_UNIX
+    SOCKET pair[2];
+    if (::socketpair(PF_UNIX,stream ? SOCK_STREAM : SOCK_DGRAM,0,pair) == 0) {
+	m_socket.attach(pair[0]);
+	m_remoteSocket.attach(pair[1]);
+	if (m_socket.setBlocking(false)) {
+	    m_readSocket.attach(m_socket.handle());
+	    m_writeSocket.attach(m_socket.handle());
+	    m_readBuf.assign(0,buflen ? buflen : s_bufLen);
+	    return true;
 	}
-	m_remote.host(m_remoteAddr);
-	if (!m_remote.host()) {
-	    error << "Failed to resolve remote addr '" << m_remoteAddr << "'";
-	    break;
-	}
-	m_remote.port(m_remotePort);
-	setTransport(new Socket(sa.family(),SOCK_DGRAM,IPPROTO_UDP));
-	if (m_socket->valid()) {
-	    if (m_socket->bind(sa)) {
-		if (m_socket->getSockName(m_local)) {
-		    if (m_socket->setBlocking(false))
-			return true;
-		    error << "Failed to set non blocking mode";
-		}
-		else
-		    error << "Failed to retrieve bind address";
-	    }
-	    else
-		error << "Failed to bind on " << sa.addr();
-	}
-	else
-	    error << "Failed to create socket";
-	addLastError(error,m_socket->error());
-	break;
+	error << "Failed to set non blocking mode";
+        addLastError(error,m_socket.error());
     }
-    setTransport();
+    else {
+	error << "Failed to create pair";
+        addLastError(error,errno);
+    }
+#else
+    error = "UNIX sockets not supported";
+#endif
     Alarm(m_enabler,"socket",DebugWarn,"%s [%p]",error.c_str(),m_ptr);
     return false;
 }
 
-void YBTSTransport::setTransport(Socket* sock, bool updAddrLocal, bool updAddrRemote)
+void YBTSTransport::resetTransport()
 {
-    if (sock) {
-	if (sock != m_socket) {
-	    setTransport();
-	    m_socket = sock;
-	}
-	m_readSocket.attach(m_socket->handle());
-	m_writeSocket.attach(m_socket->handle());
-	if (updAddrLocal)
-	    m_socket->getSockName(m_local);
-	if (updAddrRemote)
-	    m_socket->getPeerName(m_remote);
-	return;
-    }
-    if (m_socket) {
-	m_socket->terminate();
-	delete m_socket;
-	m_socket = 0;
-    }
+    m_socket.terminate();
     m_readSocket.detach();
     m_writeSocket.detach();
-    m_local.clear();
-    m_remote.clear();
+    m_remoteSocket.terminate();
+}
+
+
+//
+// YBTSLog
+//
+YBTSLog::YBTSLog()
+    : Mutex(false,"YBTSLog")
+{
+    m_name = "ybts-log";
+    debugName(m_name);
+    debugChain(&__plugin);
+    YBTSThreadOwner::initThreadOwner(this);
+    YBTSThreadOwner::setDebugPtr(this,this);
+    m_transport.setDebugPtr(this,this);
+}
+
+bool YBTSLog::start()
+{
+    stop();
+    while (true) {
+	Lock lck(this);
+	if (!m_transport.initTransport(false,s_bufLenLog))
+	    break;
+	if (!startThread("YBTSLog"))
+	    break;
+	Debug(this,DebugInfo,"Started [%p]",this);
+	return true;
+    }
+    stop();
+    return false;
+}
+
+void YBTSLog::stop()
+{
+    stopThread();
+    Lock lck(this);
+    if (!m_transport.m_socket.valid())
+	return;
+    m_transport.resetTransport();
+    Debug(this,DebugInfo,"Stopped [%p]",this);
+}
+
+// Read socket
+void YBTSLog::processLoop()
+{
+    while (!Thread::check(false)) {
+	int rd = m_transport.recv();
+	if (rd > 0) {
+	    // TODO: decode data, output the debug message
+	    Debug(this,DebugStub,"process recv not implemented");
+	    continue;
+	}
+	if (!rd) {
+	    Thread::idle();
+	    continue;
+	}
+	// TODO: what ????
+	m_transport.m_readSocket.detach();
+    }
 }
 
 
@@ -614,7 +664,9 @@ void YBTSTransport::setTransport(Socket* sock, bool updAddrLocal, bool updAddrRe
 //
 YBTSSignalling::YBTSSignalling()
     : Mutex(false,"YBTSSignalling"),
-    m_printMsg(0)
+    m_printMsg(0),
+    m_waitHandshake(false),
+    m_timeout(0)
 {
     m_name = "ybts-signalling";
     debugName(m_name);
@@ -622,6 +674,13 @@ YBTSSignalling::YBTSSignalling()
     YBTSThreadOwner::initThreadOwner(this);
     YBTSThreadOwner::setDebugPtr(this,this);
     m_transport.setDebugPtr(this,this);
+}
+
+void YBTSSignalling::waitHandshake()
+{
+    Lock lck(this);
+    m_waitHandshake = true;
+    setTimeout(s_handshakeIntervalMs);
 }
 
 // Send a message
@@ -636,12 +695,11 @@ bool YBTSSignalling::start()
     stop();
     while (true) {
 	Lock lck(this);
-	if (!m_transport.startUdp())
+	if (!m_transport.initTransport(false,s_bufLenSign))
 	    break;
-	if (!startThread("BTSSignalling"))
+	if (!startThread("YBTSSignalling"))
 	    break;
-	Debug(this,DebugInfo,"Started on %s [%p]",
-	    transport().local().addr().c_str(),this);
+	Debug(this,DebugInfo,"Started [%p]",this);
 	return true;
     }
     stop();
@@ -652,9 +710,11 @@ void YBTSSignalling::stop()
 {
     stopThread();
     Lock lck(this);
-    if (!m_transport.m_socket)
+    m_waitHandshake = false;
+    m_timeout = 0;
+    if (!m_transport.m_socket.valid())
 	return;
-    m_transport.setTransport();
+    m_transport.resetTransport();
     Debug(this,DebugInfo,"Stopped [%p]",this);
 }
 
@@ -662,22 +722,47 @@ void YBTSSignalling::stop()
 void YBTSSignalling::processLoop()
 {
     while (!Thread::check(false)) {
-	int rd = m_transport.recvFrom();
+	int rd = m_transport.recv();
 	if (rd > 0) {
 	    // TODO: decode data, call handlePDU()
+	    Debug(this,DebugStub,"process recv not implemented");
 	    continue;
 	}
-	if (!rd) {
-	    Thread::idle();
+	if (rd) {
+	    // Socket non retryable error TODO: what ????
+	    m_transport.m_readSocket.detach();
 	    continue;
 	}
-	// TODO: what ????
-	m_transport.m_readSocket.detach();
+	// Check timers
+	if (m_timeout) {
+	    Lock lck(this);
+	    if (m_timeout <= Time::now()) {
+		Alarm(this,"system",DebugWarn,"Timeout while waiting for %s [%p]",
+		    (m_waitHandshake ? "handshake" : "heartbeat"),this);
+		lck.drop();
+		__plugin.stop(0);
+		break;
+	    }
+	}
+	Thread::idle();
+	continue;
     }
 }
 
 void YBTSSignalling::handlePDU(YBTSMessage& msg)
 {
+}
+
+void YBTSSignalling::setTimeout(unsigned int intervalMs, uint64_t timeUs)
+{
+    if (!intervalMs) {
+	if (!m_timeout)
+	    return;
+	m_timeout = 0;
+    }
+    else
+	m_timeout = timeUs + (uint64_t)intervalMs * 1000;
+    XDebug(this,DebugAll,"Timeout set to " YBTST_F " [%p]",YBTST_V(m_timeout),this);
 }
 
 
@@ -761,12 +846,11 @@ bool YBTSMedia::start()
     stop();
     while (true) {
 	Lock lck(this);
-	if (!m_transport.startUdp())
+	if (!m_transport.initTransport(false,s_bufLenMedia))
 	    break;
 	if (!startThread("YBTSMedia"))
 	    break;
-	Debug(this,DebugInfo,"Started on %s [%p]",
-	    transport().local().addr().c_str(),this);
+	Debug(this,DebugInfo,"Started [%p]",this);
 	return true;
     }
     stop();
@@ -778,9 +862,9 @@ void YBTSMedia::stop()
     cleanup(true);
     stopThread();
     Lock lck(this);
-    if (!m_transport.m_socket)
+    if (!m_transport.m_socket.valid())
 	return;
-    m_transport.setTransport();
+    m_transport.resetTransport();
     Debug(this,DebugInfo,"Stopped [%p]",this);
 }
 
@@ -788,17 +872,23 @@ void YBTSMedia::stop()
 void YBTSMedia::processLoop()
 {
     while (!Thread::check(false)) {
-	int rd = m_transport.recvFrom();
+	int rd = m_transport.recv();
 	if (rd > 0) {
-	    forward(m_transport.m_readBuf.data(),rd);
-	    continue;
+	    uint16_t* d = (uint16_t*)m_transport.m_readBuf.data();
+	    YBTSDataSource* src = rd >= 2 ? find(ntohs(*d)) : 0;
+	    if (!src)
+		continue;
+	    DataBlock tmp(d + 1,rd - 2,false);
+	    src->Forward(tmp);
+	    tmp.clear(false);
+	    TelEngine::destruct(src);
 	}
-	if (!rd) {
+	else if (!rd)
 	    Thread::idle();
-	    continue;
+	else {
+	    // Read non retryable error TODO: what ????
+	    m_transport.m_readSocket.detach();
 	}
-	// TODO: what ????
-	m_transport.m_readSocket.detach();
     }
 }
 
@@ -896,6 +986,10 @@ YBTSDriver::YBTSDriver()
     : Driver("ybts","varchans"),
     m_state(Idle),
     m_stateMutex(false,"YBTSState"),
+    m_peerPid(0),
+    m_stop(false),
+    m_stopTime(0),
+    m_log(0),
     m_media(0),
     m_signalling(0),
     m_mm(0),
@@ -908,9 +1002,20 @@ YBTSDriver::YBTSDriver()
 YBTSDriver::~YBTSDriver()
 {
     Output("Unloading module YBTS");
+    TelEngine::destruct(m_log);
     TelEngine::destruct(m_media);
     TelEngine::destruct(m_signalling);
     TelEngine::destruct(m_mm);
+}
+
+void YBTSDriver::stop(unsigned int waitIntervalMs)
+{
+    Lock lck(m_stateMutex);
+    m_stop = true;
+    if (m_stopTime)
+	return;
+    m_stopTime = Time::now() + (uint64_t)waitIntervalMs * 1000;
+    Debug(this,DebugAll,"Stop time set to " YBTST_F,YBTST_V(m_stopTime));
 }
 
 void YBTSDriver::start()
@@ -919,6 +1024,9 @@ void YBTSDriver::start()
     Lock lck(m_stateMutex);
     changeState(Starting);
     while (true) {
+	// Log interface
+	if (!m_log->start())
+	    break;
 	// Signalling interface
 	if (!m_signalling->start())
 	    break;
@@ -927,10 +1035,11 @@ void YBTSDriver::start()
 	    break;
 	// Start control interface
 	// Start status interface
-	// Start BTS application
-	if (!startBTS())
+	// Start peer application
+	if (!startPeer())
 	    break;
 	changeState(WaitHandshake);
+	m_signalling->waitHandshake();
 	return;
     }
     Alarm(this,"system",DebugWarn,"Failed to start");
@@ -941,70 +1050,92 @@ void YBTSDriver::start()
 void YBTSDriver::stop()
 {
     Lock lck(m_stateMutex);
-    if (m_state == Idle)
-	return;
+    m_stop = false;
+    m_stopTime = 0;
     channels().clear();
     m_signalling->stop();
     m_media->stop();
-    stopBTS();
+    stopPeer();
+    m_log->stop();
     changeState(Idle);
 }
 
-static inline void addCmdLineInt(String& buf, const String& param, int value)
-{
-    buf.append("--"," ") << param << "=" << value;
-}
-
-bool YBTSDriver::startBTS()
+bool YBTSDriver::startPeer()
 {
     String cmd;
-    getGlobalStr(cmd,s_btsCmd);
+    getGlobalStr(cmd,s_peerPath);
     if (!cmd) {
-	Alarm(this,"config",DebugConf,"Empty BTS command");
+	Alarm(this,"config",DebugConf,"Empty peer path");
 	return false;
     }
-    String s;
-    addCmdLineInt(s,s_signallingPort,m_signalling->transport().local().port());
-    addCmdLineInt(s,s_mediaPort,m_media->transport().local().port());
-    addCmdLineInt(s,s_controlPort,0);
-    addCmdLineInt(s,s_statusPort,0);
-    Debug(this,DebugAll,"Starting BTS cmd='%s' cmd_line='%s'",cmd.c_str(),s.c_str());
-#if 0
+    Debug(this,DebugAll,"Starting peer");
+    Socket s[YBTS_FILE_COUNT];
+    s[YBTS_LOGFILE_INDEX].attach(m_log->transport().detachRemote());
+    s[YBTS_SIGNALLINGFILE_INDEX].attach(m_signalling->transport().detachRemote());
+    s[YBTS_MEDIAFILE_INDEX].attach(m_media->transport().detachRemote());
     int pid = ::fork();
     if (pid < 0) {
 	String s;
 	Alarm(this,"system",DebugWarn,"Failed to fork(): %s",addLastError(s,errno).c_str());
 	return false;
     }
-    if (!pid) {
-	// In child - terminate all other threads if needed
-	Thread::preExec();
-	// Try to immunize child from ^C and ^backslash 
-	::signal(SIGINT,SIG_IGN);
-	::signal(SIGQUIT,SIG_IGN);
-	// Restore default handlers for other signals
-	::signal(SIGTERM,SIG_DFL);
-	::signal(SIGHUP,SIG_DFL);
-	// Close everything but stdin/out/
-	for (int i = STDERR_FILENO + 1; i < 1024; i++)
-	    ::close(i);
-	// Start
-	::execl(cmd.c_str(),cmd.c_str(),s.c_str(),(char*)NULL);
-	String s;
-	addLastError(s,errno);
-	::fprintf(stderr,"Failed to execute '%s': %s\n",cmd.c_str(),s.c_str());
-	// Shit happened. Die as quick and brutal as possible
-	::_exit(1);
+    if (pid) {
+	Debug(this,DebugInfo,"Started peer pid=%d",pid);
+	m_peerPid = pid;
+	return true;
     }
-//    m_btsPid = pid;
-    return true;
-#endif
-    Debug(this,DebugStub,"BTS start not implemented");
+    // In child - terminate all other threads if needed
+    Thread::preExec();
+    // Try to immunize child from ^C and ^backslash 
+    ::signal(SIGINT,SIG_IGN);
+    ::signal(SIGQUIT,SIG_IGN);
+    // Restore default handlers for other signals
+    ::signal(SIGTERM,SIG_DFL);
+    ::signal(SIGHUP,SIG_DFL);
+    // Attach socket handles
+    int i = STDERR_FILENO + 1;
+    for (int j = 0; j < YBTS_FILE_COUNT; j++, i++)
+	if (::dup2(s[j].handle(),i) == -1) {
+	    ::fprintf(stderr,"Failed to set socket handle at index %d: %d %s\n",
+		j,errno,strerror(errno));
+	    ::close(i);
+	}
+    // Close all other handles
+    for (; i < 1024; i++)
+	::close(i);
+    // Start
+    ::execl(cmd.c_str(),cmd.c_str(),(const char*)NULL);
+    ::fprintf(stderr,"Failed to execute '%s': %d %s\n",
+	cmd.c_str(),errno,strerror(errno));
+    // Shit happened. Die !!!
+    ::_exit(1);
     return false;
 }
 
-void YBTSDriver::stopBTS()
+void YBTSDriver::stopPeer()
 {
+    if (!m_peerPid)
+	return;
+    int w = ::waitpid(m_peerPid,0,WNOHANG);
+    if (w <= 0) {
+	if (w == 0) {
+	    Debug(this,DebugNote,"Peer pid %d has not exited - we'll kill it",m_peerPid);
+	    ::kill(m_peerPid,SIGTERM);
+	    Thread::yield();
+	    w = ::waitpid(m_peerPid,0,WNOHANG);
+	}
+	if (w == 0)
+	    Debug(this,DebugWarn,"Peer pid %d has still not exited yet?",m_peerPid);
+	else if (w < 0 && errno != ECHILD)
+	    Debug(this,DebugMild,"Failed waitpid on peer pid %d: %d %s",
+		m_peerPid,errno,::strerror(errno));
+	else
+	    Debug(this,DebugInfo,"Peer pid %d terminated",m_peerPid);
+    }
+    else
+	Debug(this,DebugInfo,"Peer pid %d already terminated",m_peerPid);
+    ::kill(m_peerPid,SIGKILL);
+    m_peerPid = 0;
 }
 
 static inline const NamedList& safeSect(Configuration& cfg, String name)
@@ -1053,12 +1184,13 @@ void YBTSDriver::initialize()
 	installRelay(Halt);
 	installRelay(Stop,"engine.stop");
 	installRelay(Start,"engine.start");
+        m_log = new YBTSLog;
 	m_media = new YBTSMedia;
 	m_signalling = new YBTSSignalling;
 	m_mm = new YBTSMM(ybts.getIntValue("ue_hash_size",31,5));
     }
     s_globalMutex.lock();
-    s_btsCmd = ybts.getValue("bts_cmd",YBTS_BTS_CMD);
+    s_peerPath = ybts.getValue("peer_path",YBTS_PEER_CMD);
     s_globalMutex.unlock();
     startIdle();
 }
@@ -1069,8 +1201,8 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
 	Debug(this,DebugWarn,"GSM call found but no data channel!");
 	return false;
     }
-    if (m_state != BTSUp) {
-	Debug(this,DebugWarn,"GSM call: BTS is not up!");
+    if (m_state != RadioUp) {
+	Debug(this,DebugWarn,"GSM call: Radio is not up!");
 	msg.setParam(YSTRING("error"),"interworking");
 	return false;
     }
@@ -1093,6 +1225,19 @@ bool YBTSDriver::received(Message& msg, int id)
 	dropAll(msg);
 	stop();
 	return false;
+    }
+    if (id == Timer) {
+	if (m_stop) {
+	    Lock lck(m_stateMutex);
+	    if (m_stop && m_stopTime) {
+		if (m_stopTime <= msg.msgTime()) {
+		    lck.drop();
+		    stop();
+		}
+	    }
+	    else
+		m_stop = false;
+	}
     }
     return Driver::received(msg,id);
 }
