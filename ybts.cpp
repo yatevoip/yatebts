@@ -20,6 +20,7 @@
  */
 
 #include <yatephone.h>
+#include <ybts.h>
 
 #ifdef _WINDOWS
 #error This module is not for Windows
@@ -37,12 +38,10 @@ namespace { // anonymous
 #define YBTST_F FMT64U "." FMT64U
 #define YBTST_V(val) val / 1000000,val % 1000000
 
-#define YBTS_PEER_CMD "path_to_app_to_run"
-
-#define YBTS_LOGFILE_INDEX 0
-#define YBTS_SIGNALLINGFILE_INDEX 1
-#define YBTS_MEDIAFILE_INDEX 2
-#define YBTS_FILE_COUNT 3
+// Restart time
+#define YBTS_RESTART_DEF 120000
+#define YBTS_RESTART_MIN 30000
+#define YBTS_RESTART_MAX 600000
 
 class YBTSConnIdHolder;                  // A connection id holder
 class YBTSThread;
@@ -346,11 +345,13 @@ public:
     };
     YBTSDriver();
     ~YBTSDriver();
+    inline int state() const
+	{ return m_state; }
     inline YBTSMedia* media()
 	{ return m_media; }
     inline YBTSSignalling* signalling()
 	{ return m_signalling; }
-    void stop(unsigned int waitIntervalMs);
+    void restart(unsigned int stopIntervalMs = 0);
     inline bool findChan(uint8_t connId, RefPointer<YBTSChan>& chan) {
 	    Lock lck(this);
 	    chan = findChanConnId(connId);
@@ -374,6 +375,9 @@ protected:
     bool handleEngineStop(Message& msg);
     YBTSChan* findChanConnId(uint8_t connId);
     void changeState(int newStat);
+    void setRestart(int resFlag, bool on = true);
+    void checkStop(const Time& time);
+    void checkRestart(const Time& time);
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
     virtual bool received(Message& msg, int id);
@@ -383,6 +387,8 @@ protected:
     pid_t m_peerPid;                     // Peer PID
     bool m_stop;                         // Stop flag
     uint64_t m_stopTime;                 // Stop time
+    bool m_restart;                      // Restart flag
+    uint64_t m_restartTime;              // Restart time
     YBTSLog* m_log;                      // Log
     YBTSMedia* m_media;                  // Media
     YBTSSignalling* m_signalling;        // Signalling
@@ -394,11 +400,12 @@ protected:
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
 static String s_format = "gsm";          // Format to use
-static String s_peerPath;                // Peer path
+static String s_peerPath = "path_to_app_to_run"; // Peer path
 static unsigned int s_bufLen = 1024;     // Read buffer length
 static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 0;    // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 0;   // Read buffer length for media interface
+static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
 static unsigned int s_handshakeIntervalMs = 60000; // Time (in miliseconds) to wait for handshake
 
 #define YBTS_MAKENAME(x) {#x, x}
@@ -427,6 +434,14 @@ static inline String& addLastError(String& buf, int error, const char* prefix = 
     Thread::errorString(tmp,error);
     buf << prefix << error << " " << tmp;
     return buf;
+}
+
+// Calculate a number of thread idle intervals from a period
+static inline unsigned int threadIdleIntervals(unsigned int intervalMs)
+{
+    intervalMs = (unsigned int)(intervalMs / Thread::idleMsec());
+    // Make sure we wait for at least 1 timeout interval
+    return intervalMs ? intervalMs : 1;
 }
 
 
@@ -653,8 +668,9 @@ void YBTSLog::processLoop()
 	    Thread::idle();
 	    continue;
 	}
-	// TODO: what ????
-	m_transport.m_readSocket.detach();
+	// Socket non retryable error
+	__plugin.restart();
+	break;
     }
 }
 
@@ -729,9 +745,9 @@ void YBTSSignalling::processLoop()
 	    continue;
 	}
 	if (rd) {
-	    // Socket non retryable error TODO: what ????
-	    m_transport.m_readSocket.detach();
-	    continue;
+	    // Socket non retryable error
+	    __plugin.restart();
+	    break;
 	}
 	// Check timers
 	if (m_timeout) {
@@ -740,7 +756,7 @@ void YBTSSignalling::processLoop()
 		Alarm(this,"system",DebugWarn,"Timeout while waiting for %s [%p]",
 		    (m_waitHandshake ? "handshake" : "heartbeat"),this);
 		lck.drop();
-		__plugin.stop(0);
+		__plugin.restart();
 		break;
 	    }
 	}
@@ -886,8 +902,9 @@ void YBTSMedia::processLoop()
 	else if (!rd)
 	    Thread::idle();
 	else {
-	    // Read non retryable error TODO: what ????
-	    m_transport.m_readSocket.detach();
+	    // Socket non retryable error
+	    __plugin.restart();
+	    break;
 	}
     }
 }
@@ -989,6 +1006,8 @@ YBTSDriver::YBTSDriver()
     m_peerPid(0),
     m_stop(false),
     m_stopTime(0),
+    m_restart(false),
+    m_restartTime(0),
     m_log(0),
     m_media(0),
     m_signalling(0),
@@ -1008,13 +1027,19 @@ YBTSDriver::~YBTSDriver()
     TelEngine::destruct(m_mm);
 }
 
-void YBTSDriver::stop(unsigned int waitIntervalMs)
+void YBTSDriver::restart(unsigned int stopIntervalMs)
 {
     Lock lck(m_stateMutex);
+    if (m_restartTime)
+	m_restart = true;
+    else
+	setRestart(1);
+    if (state() == Idle)
+	return;
     m_stop = true;
     if (m_stopTime)
 	return;
-    m_stopTime = Time::now() + (uint64_t)waitIntervalMs * 1000;
+    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
     Debug(this,DebugAll,"Stop time set to " YBTST_F,YBTST_V(m_stopTime));
 }
 
@@ -1040,8 +1065,10 @@ void YBTSDriver::start()
 	    break;
 	changeState(WaitHandshake);
 	m_signalling->waitHandshake();
+	setRestart(0);
 	return;
     }
+    setRestart(1);
     Alarm(this,"system",DebugWarn,"Failed to start");
     lck.drop();
     stop();
@@ -1050,6 +1077,8 @@ void YBTSDriver::start()
 void YBTSDriver::stop()
 {
     Lock lck(m_stateMutex);
+    if (state() != Idle)
+	Debug(this,DebugAll,"Stopping ...");
     m_stop = false;
     m_stopTime = 0;
     channels().clear();
@@ -1069,10 +1098,10 @@ bool YBTSDriver::startPeer()
 	return false;
     }
     Debug(this,DebugAll,"Starting peer");
-    Socket s[YBTS_FILE_COUNT];
-    s[YBTS_LOGFILE_INDEX].attach(m_log->transport().detachRemote());
-    s[YBTS_SIGNALLINGFILE_INDEX].attach(m_signalling->transport().detachRemote());
-    s[YBTS_MEDIAFILE_INDEX].attach(m_media->transport().detachRemote());
+    Socket s[YBTS::FDCount];
+    s[YBTS::FDLog].attach(m_log->transport().detachRemote());
+    s[YBTS::FDSignalling].attach(m_signalling->transport().detachRemote());
+    s[YBTS::FDMedia].attach(m_media->transport().detachRemote());
     int pid = ::fork();
     if (pid < 0) {
 	String s;
@@ -1086,7 +1115,7 @@ bool YBTSDriver::startPeer()
     }
     // In child - terminate all other threads if needed
     Thread::preExec();
-    // Try to immunize child from ^C and ^backslash 
+    // Try to immunize child from ^C and ^backslash
     ::signal(SIGINT,SIG_IGN);
     ::signal(SIGQUIT,SIG_IGN);
     // Restore default handlers for other signals
@@ -1094,7 +1123,7 @@ bool YBTSDriver::startPeer()
     ::signal(SIGHUP,SIG_DFL);
     // Attach socket handles
     int i = STDERR_FILENO + 1;
-    for (int j = 0; j < YBTS_FILE_COUNT; j++, i++)
+    for (int j = 0; j < YBTS::FDCount; j++, i++)
 	if (::dup2(s[j].handle(),i) == -1) {
 	    ::fprintf(stderr,"Failed to set socket handle at index %d: %d %s\n",
 		j,errno,strerror(errno));
@@ -1112,29 +1141,43 @@ bool YBTSDriver::startPeer()
     return false;
 }
 
+static int waitPid(pid_t pid, unsigned int interval)
+{
+    int ret = -1;
+    for (unsigned int i = threadIdleIntervals(interval); i && ret < 0; i--) {
+	Thread::idle();
+	ret = ::waitpid(pid,0,WNOHANG);
+    }
+    return ret;
+}
+
 void YBTSDriver::stopPeer()
 {
     if (!m_peerPid)
 	return;
     int w = ::waitpid(m_peerPid,0,WNOHANG);
-    if (w <= 0) {
-	if (w == 0) {
-	    Debug(this,DebugNote,"Peer pid %d has not exited - we'll kill it",m_peerPid);
-	    ::kill(m_peerPid,SIGTERM);
-	    Thread::yield();
-	    w = ::waitpid(m_peerPid,0,WNOHANG);
-	}
-	if (w == 0)
-	    Debug(this,DebugWarn,"Peer pid %d has still not exited yet?",m_peerPid);
-	else if (w < 0 && errno != ECHILD)
-	    Debug(this,DebugMild,"Failed waitpid on peer pid %d: %d %s",
-		m_peerPid,errno,::strerror(errno));
-	else
-	    Debug(this,DebugInfo,"Peer pid %d terminated",m_peerPid);
-    }
-    else
+    if (w > 0) {
 	Debug(this,DebugInfo,"Peer pid %d already terminated",m_peerPid);
-    ::kill(m_peerPid,SIGKILL);
+	m_peerPid = 0;
+	return;
+    }
+    if (w == 0) {
+	Debug(this,DebugNote,"Peer pid %d has not exited - we'll kill it",m_peerPid);
+	::kill(m_peerPid,SIGTERM);
+	w = waitPid(m_peerPid,100);
+    }
+    if (w == 0) {
+	Debug(this,DebugWarn,"Peer pid %d has still not exited yet?",m_peerPid);
+	::kill(m_peerPid,SIGKILL);
+	w = waitPid(m_peerPid,60);
+	if (w <= 0)
+	    Alarm(this,"system",DebugWarn,"Failed to kill peer pid %d, leaving zombie",m_peerPid);
+    }
+    else if (w < 0 && errno != ECHILD)
+	Debug(this,DebugMild,"Failed waitpid on peer pid %d: %d %s",
+	    m_peerPid,errno,::strerror(errno));
+    else
+	Debug(this,DebugInfo,"Peer pid %d terminated",m_peerPid);
     m_peerPid = 0;
 }
 
@@ -1172,6 +1215,47 @@ void YBTSDriver::changeState(int newStat)
     m_state = newStat;
 }
 
+void YBTSDriver::setRestart(int resFlag, bool on)
+{
+    if (resFlag >= 0)
+	m_restart = (resFlag > 0);
+    if (on)
+	m_restartTime = Time::now() + (uint64_t)s_restartMs * 1000;
+    else if (m_restartTime)
+	m_restartTime = 0;
+    else
+	return;
+    Debug(this,DebugAll,"Restart set to " YBTST_F " [%p]",YBTST_V(m_restartTime),this);
+}
+
+// Check stop conditions
+void YBTSDriver::checkStop(const Time& time)
+{
+    Lock lck(m_stateMutex);
+    if (m_stop && m_stopTime) {
+	if (m_stopTime <= time) {
+	    lck.drop();
+	    stop();
+	}
+    }
+    else
+	m_stop = false;
+}
+
+// Check restart conditions
+void YBTSDriver::checkRestart(const Time& time)
+{
+    Lock lck(m_stateMutex);
+    if (m_restart && m_restartTime) {
+	if (m_restartTime <= time) {
+	    lck.drop();
+	    start();
+	}
+    }
+    else
+	m_restart = false;
+}
+
 void YBTSDriver::initialize()
 {
     static bool s_first = true;
@@ -1190,7 +1274,13 @@ void YBTSDriver::initialize()
 	m_mm = new YBTSMM(ybts.getIntValue("ue_hash_size",31,5));
     }
     s_globalMutex.lock();
-    s_peerPath = ybts.getValue("peer_path",YBTS_PEER_CMD);
+    s_restartMs = ybts.getIntValue("restart_interval",
+	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
+#ifdef DEBUG
+    // Allow changing some data for debug purposes
+    s_peerPath = ybts.getValue("peer_path",s_peerPath);
+    s_handshakeIntervalMs = ybts.getIntValue("handshake_interval",60000,5000,120000);
+#endif
     s_globalMutex.unlock();
     startIdle();
 }
@@ -1227,17 +1317,12 @@ bool YBTSDriver::received(Message& msg, int id)
 	return false;
     }
     if (id == Timer) {
-	if (m_stop) {
-	    Lock lck(m_stateMutex);
-	    if (m_stop && m_stopTime) {
-		if (m_stopTime <= msg.msgTime()) {
-		    lck.drop();
-		    stop();
-		}
-	    }
-	    else
-		m_stop = false;
-	}
+	// Handle stop/restart
+	// Don't handle both in the same tick: wait some time between stop and restart
+	if (m_stop)
+	    checkStop(msg.msgTime());
+	else if (m_restart)
+	    checkRestart(msg.msgTime());
     }
     return Driver::received(msg,id);
 }
