@@ -2,10 +2,16 @@
 # to add a revision tag run rpmbuild --define 'revision value'
 # to create a debug info package run rpmbuild --define 'debuginfo 1'
 # to suppress auto dependencies run rpmbuild --define 'nodeps 1'
+# to disable RAD1 support run rpmbuild --define 'norad1 1'
+# to disable USRP1 support run rpmbuild --define 'nousrp1 1'
+# to disable UHD support run rpmbuild --define 'nouhd 1'
 
 %{!?dist:%define dist %{nil}}
 %{!?revision:%define revision %{nil}}
 %{?nodeps:%define no_auto_deps 1}
+%{?norad1:%define no_rad1 1}
+%{?nousrp1:%define no_usrp1 1}
+%{?nouhd:%define no_uhd 1}
 
 %{!?debuginfo:%define debuginfo %{nil}}
 %if "%{debuginfo}"
@@ -79,6 +85,8 @@ At least one transceiver package must also be installed for interfacing with the
 %config(noreplace) %{_sysconfdir}/yate/*.conf
 
 
+%if "%{no_rad1}" != "1"
+
 %package rad1
 Summary:	RAD1 transceiver support for Yate-BTS
 Group:		Applications/Communications
@@ -93,20 +101,34 @@ RAD1 transceiver executable and support files for Yate-BTS.
 %{moddir}/bts/ezusb.ihx
 %{moddir}/bts/fpga.rbf
 
+%define conf_rad1 --enable-rad1
+%else
+%define conf_rad1 --disable-rad1
+%endif
 
-%package usrp
-Summary:	USRP transceiver support for Yate-BTS
+
+%if "%{no_usrp1}" != "1"
+
+%package usrp1
+Summary:	USRP1 transceiver support for Yate-BTS
 Group:		Applications/Communications
 Provides:	%{name}-transceiver
 Requires:	%{name} = %{version}-%{release}
 
-%description usrp
-USRP transceiver executable and support files for Yate-BTS.
+%description usrp1
+USRP1 transceiver executable and support files for Yate-BTS.
 
-%files usrp
-%{moddir}/bts/transceiver-usrp
+%files usrp1
+%{moddir}/bts/transceiver-usrp1
 %{moddir}/bts/std_inband.rbf
 
+%define conf_usrp1 --enable-usrp1
+%else
+%define conf_usrp1 --disable-usrp1
+%endif
+
+
+%if "%{no_uhd}" != "1"
 
 %package uhd
 Summary:	UHD transceiver support for Yate-BTS
@@ -119,6 +141,11 @@ UHD transceiver executable and support files for Yate-BTS.
 
 %files uhd
 %{moddir}/bts/transceiver-uhd
+
+%define conf_uhd --enable-uhd
+%else
+%define conf_uhd --disable-uhd
+%endif
 
 
 %prep
@@ -148,7 +175,8 @@ chmod +x %{local_find_requires} %{local_find_provides}
 %endif
 
 %build
-./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man
+./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man \
+    %{conf_usrp1} %{conf_uhd} %{conf_rad1}
 make strip
 
 %install

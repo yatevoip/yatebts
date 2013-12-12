@@ -13,12 +13,12 @@ CXX := @CXX@ -Wall
 SED := sed
 DEFS :=
 INCLUDES := -I@top_srcdir@
-CCFLAGS:= -O2 @YATE_INC@
+CCFLAGS:= -O2 @YATE_DEF@
 CFLAGS := $(subst -fno-check-new,,$(CCFLAGS))
 LDFLAGS:= @YATE_LIB@
 MODSTRIP:= @YATE_STR@
 
-PROGS := gsmbts.yate ybts.yate
+PROGS := ybts.yate
 LIBS  :=
 OEXE  :=
 OTRAN :=
@@ -60,6 +60,9 @@ ndebug:
 .PHONY: clean distclean cvsclean clean-config-files
 clean:
 	@-$(RM) $(CLEANS) 2>/dev/null
+	@for i in sources/*; do \
+	    test ! -f "$$i/Makefile" || $(MAKE) -C "$$i" clean ; \
+	done
 
 check-topdir:
 	@test -f configure || (echo "Must make this target in the top source directory"; exit 1)
@@ -146,8 +149,6 @@ rpm: tarball
 %.yate: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
 	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS)
 
-gsmbts.yate: gsmbts.cpp
-
 ybts.yate: ybts.cpp
 
 @srcdir@/configure: @srcdir@/configure.in
@@ -157,7 +158,7 @@ $(MKDEPS): @srcdir@/configure
 	$(MKDEPS) --recheck
 
 Makefile: $(MKDEPS) @srcdir@/Makefile.in
-	$(MKDEPS) --file=$@
+	$(MKDEPS)
 
 .PHONY: help
 help:
