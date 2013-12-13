@@ -35,9 +35,10 @@
 using namespace TelEngine;
 namespace { // anonymous
 
-#define YBTST_F FMT64U "." FMT64U
-#define YBTST_V(val) val / 1000000,val % 1000000
-
+// Handshake interval (timeout)
+#define YBTS_HK_INTERVAL_DEF 60000
+// Heartbeat interval
+#define YBTS_HB_INTERVAL_DEF 60000
 // Restart time
 #define YBTS_RESTART_DEF 120000
 #define YBTS_RESTART_MIN 30000
@@ -223,10 +224,30 @@ class YBTSSignalling : public GenObject, public DebugEnabler, public Mutex,
     public YBTSThreadOwner
 {
 public:
+    enum State {
+	Idle,
+	Started,
+	WaitHandshake,
+	Running,
+	Closing
+    };
+    enum Result {
+	Ok = 0,
+	Error = 1,
+	FatalError = 2
+    };
     YBTSSignalling();
+    inline int state() const
+	{ return m_state; }
     inline YBTSTransport& transport()
 	{ return m_transport; }
-    void waitHandshake();
+    inline void waitHandshake() {
+	    Lock lck(this);
+	    changeState(WaitHandshake);
+	}
+    inline bool shouldCheckTimers()
+	{ return m_state == Running || m_state == WaitHandshake; }
+    int checkTimers(const Time& time = Time());
     // Send a message
     bool send(YBTSMessage& msg);
     bool start();
@@ -236,17 +257,39 @@ public:
     void init(Configuration& cfg);
 
 protected:
-    bool handlePDU(YBTSMessage& msg);
-    bool handleHandshake(YBTSMessage& msg);
+    void changeState(int newStat);
+    int handlePDU(YBTSMessage& msg);
+    int handleHandshake(YBTSMessage& msg);
     void printMsg(YBTSMessage& msg, bool recv);
-    void setTimeout(unsigned int intervalMs, uint64_t timeUs = Time::now());
+    void setTimer(uint64_t& dest, const char* name, unsigned int intervalMs,
+	uint64_t timeUs = Time::now()) {
+	     if (intervalMs) {
+		dest = timeUs + (uint64_t)intervalMs * 1000;
+		XDebug(this,DebugAll,"%s scheduled in %ums [%p]",name,intervalMs,this);
+	    }
+	    else if (dest) {
+		dest = 0;
+		XDebug(this,DebugAll,"%s reset [%p]",name,this);
+	    }
+	}
+    inline void setToutHandshake(uint64_t timeUs = Time::now())
+	{ setTimer(m_timeout,"Timeout",m_hkIntervalMs,timeUs); }
+    inline void setToutHeartbeat(uint64_t timeUs = Time::now())
+	{ setTimer(m_timeout,"Timeout",m_hbIntervalMs,timeUs); }
+    inline void setHeartbeatTime(uint64_t timeUs = Time::now())
+	{ setTimer(m_hbTime,"Heartbeat",m_hbIntervalMs,timeUs); }
+    inline void resetHeartbeatTime()
+	{ setTimer(m_hbTime,"Heartbeat",0,0); }
 
     String m_name;
+    int m_state;
     bool m_printMsg;
     int m_printMsgData;
     YBTSTransport m_transport;
-    bool m_waitHandshake;
     uint64_t m_timeout;
+    uint64_t m_hbTime;
+    unsigned int m_hkIntervalMs;         // Time (in miliseconds) to wait for handshake
+    unsigned int m_hbIntervalMs;         // Heartbeat interval in miliseconds
 };
 
 class YBTSMedia : public GenObject, public DebugEnabler, public Mutex,
@@ -412,7 +455,7 @@ protected:
 	    if (m_stopTime)
 		return;
 	    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
-	    Debug(this,DebugAll,"Stop time set to " YBTST_F,YBTST_V(m_stopTime));
+	    Debug(this,DebugAll,"Stop scheduled in %ums",stopIntervalMs);
 	}
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
@@ -442,8 +485,6 @@ static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
-static unsigned int s_handshakeIntervalMs = 60000; // Time (in miliseconds) to wait for handshake
-static unsigned int s_sigIdleIntervalMs = 60000; // Idle sig interface interval in miliseconds
 
 
 #define YBTS_MAKENAME(x) {#x, x}
@@ -784,10 +825,13 @@ void YBTSLog::processLoop()
 //
 YBTSSignalling::YBTSSignalling()
     : Mutex(false,"YBTSSignalling"),
+    m_state(Idle),
     m_printMsg(true),
     m_printMsgData(1),
-    m_waitHandshake(false),
-    m_timeout(0)
+    m_timeout(0),
+    m_hbTime(0),
+    m_hkIntervalMs(YBTS_HK_INTERVAL_DEF),
+    m_hbIntervalMs(YBTS_HB_INTERVAL_DEF)
 {
     m_name = "ybts-signalling";
     debugName(m_name);
@@ -797,11 +841,32 @@ YBTSSignalling::YBTSSignalling()
     m_transport.setDebugPtr(this,this);
 }
 
-void YBTSSignalling::waitHandshake()
+int YBTSSignalling::checkTimers(const Time& time)
 {
+    // Check timers
     Lock lck(this);
-    m_waitHandshake = true;
-    setTimeout(s_handshakeIntervalMs);
+    if (m_state == Closing || m_state == Idle)
+	return Ok;
+    if (m_timeout && m_timeout <= time) {
+	Alarm(this,"system",DebugWarn,"Timeout while waiting for %s [%p]",
+	    (m_state != WaitHandshake  ? "heartbeat" : "handshake"),this);
+	changeState(Closing);
+	return Error;
+    }
+    if (m_hbTime && m_hbTime <= time) {
+	static uint8_t buf[2] = {YBTS::SigHeartbeat,0};
+	Debug(this,DebugAll,"Sending heartbeat [%p]",this);
+	lck.drop();
+	bool ok = m_transport.send(buf,2);
+	lck.acquire(this);
+	if (ok)
+	    setToutHeartbeat(time);
+	else if (m_state == Running) {
+	    changeState(Closing);
+	    return Error;
+	}
+    }
+    return Ok;
 }
 
 // Send a message
@@ -822,6 +887,7 @@ bool YBTSSignalling::start()
 	    break;
 	if (!startThread("YBTSSignalling"))
 	    break;
+	changeState(Started);
 	Debug(this,DebugInfo,"Started [%p]",this);
 	return true;
     }
@@ -833,8 +899,7 @@ void YBTSSignalling::stop()
 {
     stopThread();
     Lock lck(this);
-    m_waitHandshake = false;
-    m_timeout = 0;
+    changeState(Idle);
     if (!m_transport.m_socket.valid())
 	return;
     m_transport.resetTransport();
@@ -847,14 +912,25 @@ void YBTSSignalling::processLoop()
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
 	if (rd > 0) {
-	    setTimeout(s_sigIdleIntervalMs);
+	    lock();
+	    setToutHeartbeat();
+	    unlock();
 	    uint8_t* buf = (uint8_t*)m_transport.readBuf().data();
 	    YBTSMessage* m = YBTSMessage::parse(this,buf,rd);
 	    if (m) {
-		bool stop = handlePDU(*m);
+		int res = Ok;
+		if (m->primitive() != YBTS::SigHeartbeat)
+		    res = handlePDU(*m);
+		else
+		    XDebug(this,DebugAll,"Received heartbeat [%p]",this);
 		TelEngine::destruct(m);
-		if (stop)
+		if (res) {
+		    if (res == FatalError)
+			__plugin.stopNoRestart();
+		    else
+			__plugin.restart();
 		    break;
+		}
 	    }
 	    continue;
 	}
@@ -862,17 +938,6 @@ void YBTSSignalling::processLoop()
 	    // Socket non retryable error
 	    __plugin.restart();
 	    break;
-	}
-	// Check timers
-	if (m_timeout) {
-	    Lock lck(this);
-	    if (m_timeout <= Time::now()) {
-		Alarm(this,"system",DebugWarn,"Timeout while waiting for %s [%p]",
-		    (m_waitHandshake ? "handshake" : "heartbeat"),this);
-		lck.drop();
-		__plugin.restart();
-		break;
-	    }
 	}
 	Thread::idle();
 	continue;
@@ -889,50 +954,78 @@ void YBTSSignalling::init(Configuration& cfg)
     else
 	m_printMsgData = md.toBoolean() ? -1 : 0;
 #ifdef DEBUG
+    // Allow changing some data for debug purposes
+    m_hkIntervalMs = sect.getIntValue("handshake_timeout",60000,5000,120000);
+
     String s;
     s << "\r\nprint_msg=" << String::boolText(m_printMsg);
     s << "\r\nprint_msg_data=" <<
 	(m_printMsgData > 0 ? "verbose" : String::boolText(m_printMsgData < 0));
+    s << "\r\nhandshake_timeout=" << m_hkIntervalMs;
+    s << "\r\nheartbeat_interval=" << m_hbIntervalMs;
+
     Debug(this,DebugAll,"Initialized [%p]\r\n-----%s\r\n-----",this,s.c_str());
 #endif
 }
 
-bool YBTSSignalling::handlePDU(YBTSMessage& msg)
+void YBTSSignalling::changeState(int newStat)
+{
+    if (m_state == newStat)
+	return;
+    DDebug(this,DebugInfo,"State changed %d -> %d [%p]",m_state,newStat,this);
+    m_state = newStat;
+    switch (m_state) {
+	case Idle:
+	case Closing:
+	    setTimer(m_timeout,"Timeout",0,0);
+	    resetHeartbeatTime();
+	    break;
+	case WaitHandshake:
+	    setToutHandshake();
+	    resetHeartbeatTime();
+	    break;
+	case Running:
+	case Started:
+	    break;
+    }
+}
+
+int YBTSSignalling::handlePDU(YBTSMessage& msg)
 {
     if (m_printMsg && debugAt(DebugInfo))
 	printMsg(msg,true);
     switch (msg.primitive()) {
 	case YBTS::SigHandshake: return handleHandshake(msg);
-	case YBTS::SigHeartbeat:
-	    return true;
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
-    return true;
+    return Ok;
 }
 
-bool YBTSSignalling::handleHandshake(YBTSMessage& msg)
+int YBTSSignalling::handleHandshake(YBTSMessage& msg)
 {
-    if (!m_waitHandshake) {
+    Lock lck(this);
+    if (state() != WaitHandshake) {
 	Debug(this,DebugNote,"Unexpected handshake [%p]",this);
-	return true;
+	return Ok;
     }
+    lck.drop();
     if (!msg.info()) {
-	YBTSMessage m(YBTS::SigHandshake);
-	if (send(m)) {
-	    if (__plugin.handshakeDone()) {
-		m_waitHandshake = false;
-		return true;
-	    }
+	if (__plugin.handshakeDone()) {
+	    lck.acquire(this);
+	    if (state() != WaitHandshake)
+		return Ok;
+	    changeState(Running);
+	    YBTSMessage m(YBTS::SigHandshake);
+	    if (send(m))
+		return Ok;
 	}
-	else
-	    __plugin.restart();
     }
     else {
 	Alarm(this,"system",DebugWarn,"Unknown version %u in handshake [%p]",
 	    msg.info(),this);
-	__plugin.stopNoRestart();
+	return FatalError;
     }
-    return false;
+    return Error;
 }
 
 void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
@@ -953,18 +1046,6 @@ void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
     }
     s << "\r\n-----";
     Debug(this,DebugInfo,"%s [%p]%s",recv ? "Received" : "Sending",this,s.safe());
-}
-
-void YBTSSignalling::setTimeout(unsigned int intervalMs, uint64_t timeUs)
-{
-    if (!intervalMs) {
-	if (!m_timeout)
-	    return;
-	m_timeout = 0;
-    }
-    else
-	m_timeout = timeUs + (uint64_t)intervalMs * 1000;
-    XDebug(this,DebugAll,"Timeout set to " YBTST_F " [%p]",YBTST_V(m_timeout),this);
 }
 
 
@@ -1424,13 +1505,14 @@ void YBTSDriver::setRestart(int resFlag, bool on)
 {
     if (resFlag >= 0)
 	m_restart = (resFlag > 0);
-    if (on)
+    if (on) {
 	m_restartTime = Time::now() + (uint64_t)s_restartMs * 1000;
-    else if (m_restartTime)
+	Debug(this,DebugAll,"Restart scheduled in %ums [%p]",s_restartMs,this);
+    }
+    else if (m_restartTime) {
 	m_restartTime = 0;
-    else
-	return;
-    Debug(this,DebugAll,"Restart set to " YBTST_F " [%p]",YBTST_V(m_restartTime),this);
+	Debug(this,DebugAll,"Restart timer reset [%p]",this);
+    }
 }
 
 // Check stop conditions
@@ -1484,7 +1566,6 @@ void YBTSDriver::initialize()
 #ifdef DEBUG
     // Allow changing some data for debug purposes
     s_peerPath = ybts.getValue("peer_path",s_peerPath);
-    s_handshakeIntervalMs = ybts.getIntValue("handshake_interval",60000,5000,120000);
 #endif
     s_globalMutex.unlock();
     m_signalling->init(cfg);
@@ -1529,6 +1610,15 @@ bool YBTSDriver::received(Message& msg, int id)
 	    checkStop(msg.msgTime());
 	else if (m_restart)
 	    checkRestart(msg.msgTime());
+	if (m_signalling->shouldCheckTimers()) {
+	    int res = m_signalling->checkTimers(msg.msgTime());
+	    if (res) {
+		if (res == YBTSSignalling::FatalError)
+		    stopNoRestart();
+		else
+		    restart();
+	    }
+	}
     }
     return Driver::received(msg,id);
 }
