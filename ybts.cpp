@@ -67,6 +67,8 @@ public:
 	{}
     inline uint16_t connId() const
 	{ return m_connId; }
+    inline void setConnId(uint16_t cid)
+	{ m_connId = cid; }
 protected:
     uint16_t m_connId;
 };
@@ -116,16 +118,32 @@ protected:
     Mutex* m_mutex;
 };
 
-class YBTSMessage : public YBTSConnIdHolder
+class YBTSMessage : public GenObject, public YBTSConnIdHolder
 {
 public:
-    enum Primitive {
-	L3Message,
-    };
+    inline YBTSMessage(uint8_t pri = 0, uint8_t info = 0, uint16_t cid = 0)
+        : YBTSConnIdHolder(cid),
+        m_primitive(pri), m_info(info), m_xml(0)
+	{}
+    ~YBTSMessage()
+	{ TelEngine::destruct(m_xml); }
+    inline const char* name() const
+	{ return lookup(m_primitive,s_priName); }
     inline uint16_t primitive() const
 	{ return m_primitive; }
+    inline uint16_t info() const
+	{ return m_info; }
+    inline bool hasConnId() const
+	{ return 0 == (m_primitive & 0x80); }
+    // Parse message. Return 0 on failure
+    static YBTSMessage* parse(YBTSSignalling* receiver, uint8_t* data, unsigned int len);
+
+    static const TokenDict s_priName[];
+
 protected:
-    uint16_t m_primitive;
+    uint8_t m_primitive;
+    uint8_t m_info;
+    GenObject* m_xml;
 };
 
 class YBTSDataSource : public DataSource, public YBTSConnIdHolder
@@ -158,6 +176,7 @@ class YBTSTransport : public GenObject, public YBTSDebug
     friend class YBTSMedia;
 public:
     inline YBTSTransport()
+	: m_maxRead(0)
 	{}
     ~YBTSTransport()
 	{ resetTransport(); }
@@ -172,7 +191,7 @@ protected:
 	{ return send(data.data(),data.length()); }
     // Read socket data. Return 0: nothing read, >1: read data, negative: fatal error
     int recv();
-    bool initTransport(bool stream, unsigned int buflen = 0);
+    bool initTransport(bool stream, unsigned int buflen, bool reserveNull);
     void resetTransport();
 
     Socket m_socket;
@@ -180,6 +199,7 @@ protected:
     Socket m_writeSocket;
     Socket m_remoteSocket;
     DataBlock m_readBuf;
+    unsigned int m_maxRead;
 };
 
 class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
@@ -211,15 +231,19 @@ public:
     bool send(YBTSMessage& msg);
     bool start();
     void stop();
-    // Read socket
+    // Read socket. Parse and handle received data
     virtual void processLoop();
+    void init(Configuration& cfg);
 
 protected:
-    void handlePDU(YBTSMessage& msg);
+    bool handlePDU(YBTSMessage& msg);
+    bool handleHandshake(YBTSMessage& msg);
+    void printMsg(YBTSMessage& msg, bool recv);
     void setTimeout(unsigned int intervalMs, uint64_t timeUs = Time::now());
 
     String m_name;
-    int m_printMsg;
+    bool m_printMsg;
+    int m_printMsgData;
     YBTSTransport m_transport;
     bool m_waitHandshake;
     uint64_t m_timeout;
@@ -347,11 +371,16 @@ public:
     ~YBTSDriver();
     inline int state() const
 	{ return m_state; }
+    inline const char* stateName() const
+	{ return lookup(m_state,s_stateName); }
     inline YBTSMedia* media()
 	{ return m_media; }
     inline YBTSSignalling* signalling()
 	{ return m_signalling; }
+    // Handshake done notification. Return false if state is invalid
+    bool handshakeDone();
     void restart(unsigned int stopIntervalMs = 0);
+    void stopNoRestart();
     inline bool findChan(uint8_t connId, RefPointer<YBTSChan>& chan) {
 	    Lock lck(this);
 	    chan = findChanConnId(connId);
@@ -378,6 +407,13 @@ protected:
     void setRestart(int resFlag, bool on = true);
     void checkStop(const Time& time);
     void checkRestart(const Time& time);
+    inline void setStop(unsigned int stopIntervalMs) {
+	    m_stop = true;
+	    if (m_stopTime)
+		return;
+	    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
+	    Debug(this,DebugAll,"Stop time set to " YBTST_F,YBTST_V(m_stopTime));
+	}
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
     virtual bool received(Message& msg, int id);
@@ -385,6 +421,7 @@ protected:
     int m_state;
     Mutex m_stateMutex;
     pid_t m_peerPid;                     // Peer PID
+    bool m_error;                        // Error flag, ignore restart
     bool m_stop;                         // Stop flag
     uint64_t m_stopTime;                 // Stop time
     bool m_restart;                      // Restart flag
@@ -401,14 +438,22 @@ INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
 static String s_format = "gsm";          // Format to use
 static String s_peerPath = "path_to_app_to_run"; // Peer path
-static unsigned int s_bufLen = 1024;     // Read buffer length
 static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
-static unsigned int s_bufLenSign = 0;    // Read buffer length for signalling interface
-static unsigned int s_bufLenMedia = 0;   // Read buffer length for media interface
+static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
+static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
 static unsigned int s_handshakeIntervalMs = 60000; // Time (in miliseconds) to wait for handshake
+static unsigned int s_sigIdleIntervalMs = 60000; // Idle sig interface interval in miliseconds
+
 
 #define YBTS_MAKENAME(x) {#x, x}
+
+const TokenDict YBTSMessage::s_priName[] =
+{
+    {"Handshake",            YBTS::SigHandshake},
+    {"Heartbeat",            YBTS::SigHeartbeat},
+    {0,0}
+};
 
 const TokenDict YBTSDriver::s_stateName[] =
 {
@@ -437,11 +482,17 @@ static inline String& addLastError(String& buf, int error, const char* prefix = 
 }
 
 // Calculate a number of thread idle intervals from a period
+// Return a non 0 value
 static inline unsigned int threadIdleIntervals(unsigned int intervalMs)
 {
     intervalMs = (unsigned int)(intervalMs / Thread::idleMsec());
-    // Make sure we wait for at least 1 timeout interval
     return intervalMs ? intervalMs : 1;
+}
+
+static inline const NamedList& safeSect(Configuration& cfg, const String& name)
+{
+    const NamedList* sect = cfg.getSection(name);
+    return sect ? *sect : NamedList::empty();
 }
 
 
@@ -516,6 +567,55 @@ void YBTSThreadOwner::threadTerminated(YBTSThread* th)
 
 
 //
+// YBTSMessage
+//
+// Parse message. Return 0 on failure
+YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned int len)
+{
+    if (!len)
+	return 0;
+    if (len < 2) {
+	Debug(recv,DebugNote,"Received short message length %u [%p]",len,recv);
+	return 0;
+    }
+#ifdef XDEBUG
+    String tmp;
+    tmp.hexify(data,len,' ');
+    Debug(recv,DebugAll,"Parse data: %s [%p]",tmp.c_str(),recv);
+#endif
+    YBTSMessage* m = new YBTSMessage;
+    m->m_primitive = *data++;
+    m->m_info = *data++;
+    len -= 2;
+    if (m->hasConnId()) {
+	if (len < 2) {
+	    Debug(recv,DebugNote,
+		"Received message %u (%s) with missing connection id [%p]",
+		m->primitive(),m->name(),recv);
+	    TelEngine::destruct(m);
+	    return 0;
+	}
+	m->setConnId(ntohs(*(uint16_t*)data));
+	data += 2;
+	len -= 2;
+    }
+    switch (m->primitive()) {
+	case YBTS::SigHandshake:
+	case YBTS::SigHeartbeat:
+	    break;
+	default:
+	    len = 0;
+	    Debug(recv,DebugNote,"Unhandled data decode for message %u (%s) [%p]",
+	        m->primitive(),m->name(),recv);
+    }
+    if (len)
+	Debug(recv,DebugInfo,"Got %u garbage bytes at message %u (%s) end [%p]",
+	    len,m->primitive(),m->name(),recv);
+    return m;
+}
+
+
+//
 // YBTSDataSource
 //
 void YBTSDataSource::destroyed()
@@ -564,9 +664,12 @@ int YBTSTransport::recv()
 {
     if (!m_readSocket.valid())
 	return 0;
-    int rd = m_readSocket.recv((void*)m_readBuf.data(),m_readBuf.length());
-    if (rd >= 0)
+    int rd = m_readSocket.recv((void*)m_readBuf.data(),m_maxRead);
+    if (rd >= 0) {
+	if (m_maxRead < m_readBuf.length())
+	    ((uint8_t*)m_readBuf.data())[rd] = 0;
 	return rd;
+    }
     if (m_readSocket.canRetry())
 	return 0;
     String tmp;
@@ -576,7 +679,7 @@ int YBTSTransport::recv()
     return -1;
 }
 
-bool YBTSTransport::initTransport(bool stream, unsigned int buflen)
+bool YBTSTransport::initTransport(bool stream, unsigned int buflen, bool reserveNull)
 {
     resetTransport();
     String error;
@@ -588,7 +691,8 @@ bool YBTSTransport::initTransport(bool stream, unsigned int buflen)
 	if (m_socket.setBlocking(false)) {
 	    m_readSocket.attach(m_socket.handle());
 	    m_writeSocket.attach(m_socket.handle());
-	    m_readBuf.assign(0,buflen ? buflen : s_bufLen);
+	    m_readBuf.assign(0,reserveNull ? buflen + 1 : buflen);
+	    m_maxRead = reserveNull ? m_readBuf.length() - 1 : m_readBuf.length();
 	    return true;
 	}
 	error << "Failed to set non blocking mode";
@@ -633,7 +737,7 @@ bool YBTSLog::start()
     stop();
     while (true) {
 	Lock lck(this);
-	if (!m_transport.initTransport(false,s_bufLenLog))
+	if (!m_transport.initTransport(false,s_bufLenLog,true))
 	    break;
 	if (!startThread("YBTSLog"))
 	    break;
@@ -680,7 +784,8 @@ void YBTSLog::processLoop()
 //
 YBTSSignalling::YBTSSignalling()
     : Mutex(false,"YBTSSignalling"),
-    m_printMsg(0),
+    m_printMsg(true),
+    m_printMsgData(1),
     m_waitHandshake(false),
     m_timeout(0)
 {
@@ -702,6 +807,8 @@ void YBTSSignalling::waitHandshake()
 // Send a message
 bool YBTSSignalling::send(YBTSMessage& msg)
 {
+    if (m_printMsg && debugAt(DebugInfo))
+	printMsg(msg,false);
     Debug(this,DebugStub,"send() not implemented [%p]",this);
     return false;
 }
@@ -711,7 +818,7 @@ bool YBTSSignalling::start()
     stop();
     while (true) {
 	Lock lck(this);
-	if (!m_transport.initTransport(false,s_bufLenSign))
+	if (!m_transport.initTransport(false,s_bufLenSign,false))
 	    break;
 	if (!startThread("YBTSSignalling"))
 	    break;
@@ -734,14 +841,21 @@ void YBTSSignalling::stop()
     Debug(this,DebugInfo,"Stopped [%p]",this);
 }
 
-// Read socket
+// Read socket. Parse and handle received data
 void YBTSSignalling::processLoop()
 {
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
 	if (rd > 0) {
-	    // TODO: decode data, call handlePDU()
-	    Debug(this,DebugStub,"process recv not implemented");
+	    setTimeout(s_sigIdleIntervalMs);
+	    uint8_t* buf = (uint8_t*)m_transport.readBuf().data();
+	    YBTSMessage* m = YBTSMessage::parse(this,buf,rd);
+	    if (m) {
+		bool stop = handlePDU(*m);
+		TelEngine::destruct(m);
+		if (stop)
+		    break;
+	    }
 	    continue;
 	}
 	if (rd) {
@@ -765,8 +879,80 @@ void YBTSSignalling::processLoop()
     }
 }
 
-void YBTSSignalling::handlePDU(YBTSMessage& msg)
+void YBTSSignalling::init(Configuration& cfg)
 {
+    const NamedList& sect = safeSect(cfg,"signalling");
+    m_printMsg = sect.getBoolValue(YSTRING("print_msg"),true);
+    const String& md = sect[YSTRING("print_msg_data")];
+    if (!md.isBoolean())
+	m_printMsgData = 1;
+    else
+	m_printMsgData = md.toBoolean() ? -1 : 0;
+#ifdef DEBUG
+    String s;
+    s << "\r\nprint_msg=" << String::boolText(m_printMsg);
+    s << "\r\nprint_msg_data=" <<
+	(m_printMsgData > 0 ? "verbose" : String::boolText(m_printMsgData < 0));
+    Debug(this,DebugAll,"Initialized [%p]\r\n-----%s\r\n-----",this,s.c_str());
+#endif
+}
+
+bool YBTSSignalling::handlePDU(YBTSMessage& msg)
+{
+    if (m_printMsg && debugAt(DebugInfo))
+	printMsg(msg,true);
+    switch (msg.primitive()) {
+	case YBTS::SigHandshake: return handleHandshake(msg);
+	case YBTS::SigHeartbeat:
+	    return true;
+    }
+    Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
+    return true;
+}
+
+bool YBTSSignalling::handleHandshake(YBTSMessage& msg)
+{
+    if (!m_waitHandshake) {
+	Debug(this,DebugNote,"Unexpected handshake [%p]",this);
+	return true;
+    }
+    if (!msg.info()) {
+	YBTSMessage m(YBTS::SigHandshake);
+	if (send(m)) {
+	    if (__plugin.handshakeDone()) {
+		m_waitHandshake = false;
+		return true;
+	    }
+	}
+	else
+	    __plugin.restart();
+    }
+    else {
+	Alarm(this,"system",DebugWarn,"Unknown version %u in handshake [%p]",
+	    msg.info(),this);
+	__plugin.stopNoRestart();
+    }
+    return false;
+}
+
+void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
+{
+    String s;
+    s << "\r\n-----";
+    const char* tmp = msg.name();
+    s << "\r\nPrimitive: ";
+    if (tmp)
+	s << tmp;
+    else
+	s << msg.primitive();
+    s << "\r\nInfo: " << msg.info();
+    if (msg.hasConnId())
+	s << "\r\nConnection: " << msg.connId();
+    if (m_printMsgData) {
+	// TODO: print packet data
+    }
+    s << "\r\n-----";
+    Debug(this,DebugInfo,"%s [%p]%s",recv ? "Received" : "Sending",this,s.safe());
 }
 
 void YBTSSignalling::setTimeout(unsigned int intervalMs, uint64_t timeUs)
@@ -862,7 +1048,7 @@ bool YBTSMedia::start()
     stop();
     while (true) {
 	Lock lck(this);
-	if (!m_transport.initTransport(false,s_bufLenMedia))
+	if (!m_transport.initTransport(false,s_bufLenMedia,false))
 	    break;
 	if (!startThread("YBTSMedia"))
 	    break;
@@ -887,6 +1073,8 @@ void YBTSMedia::stop()
 // Read socket
 void YBTSMedia::processLoop()
 {
+    while (__plugin.state() == YBTSDriver::WaitHandshake && !Thread::check())
+	Thread::idle();
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
 	if (rd > 0) {
@@ -1027,20 +1215,42 @@ YBTSDriver::~YBTSDriver()
     TelEngine::destruct(m_mm);
 }
 
+// Handshake done notification. Return false if state is invalid
+bool YBTSDriver::handshakeDone()
+{
+    Lock lck(m_stateMutex);
+    if (state() != WaitHandshake) {
+	if (state() != Idle) {
+	    Debug(this,DebugNote,"Handshake done in %s state !!!",stateName());
+	    lck.drop();
+	    restart();
+	}
+	return false;
+    }
+    changeState(Running);
+    return true;
+}
+
 void YBTSDriver::restart(unsigned int stopIntervalMs)
 {
     Lock lck(m_stateMutex);
+    if (m_error)
+	return;
     if (m_restartTime)
 	m_restart = true;
     else
 	setRestart(1);
-    if (state() == Idle)
-	return;
-    m_stop = true;
-    if (m_stopTime)
-	return;
-    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
-    Debug(this,DebugAll,"Stop time set to " YBTST_F,YBTST_V(m_stopTime));
+    if (state() != Idle)
+	setStop(stopIntervalMs);
+}
+
+void YBTSDriver::stopNoRestart()
+{
+    Lock lck(m_stateMutex);
+    setStop(0);
+    m_restart = false;
+    m_restartTime = 0;
+    m_error = true;
 }
 
 void YBTSDriver::start()
@@ -1081,6 +1291,7 @@ void YBTSDriver::stop()
 	Debug(this,DebugAll,"Stopping ...");
     m_stop = false;
     m_stopTime = 0;
+    m_error = false;
     channels().clear();
     m_signalling->stop();
     m_media->stop();
@@ -1181,12 +1392,6 @@ void YBTSDriver::stopPeer()
     m_peerPid = 0;
 }
 
-static inline const NamedList& safeSect(Configuration& cfg, String name)
-{
-    const NamedList* sect = cfg.getSection(name);
-    return sect ? *sect : NamedList::empty();
-}
-
 bool YBTSDriver::handleEngineStop(Message& msg)
 {
     m_engineStop++;
@@ -1211,7 +1416,7 @@ void YBTSDriver::changeState(int newStat)
     if (m_state == newStat)
 	return;
     Debug(this,DebugNote,"State changed %s -> %s",
-	lookup(m_state,s_stateName),lookup(newStat,s_stateName));
+	stateName(),lookup(newStat,s_stateName));
     m_state = newStat;
 }
 
@@ -1282,6 +1487,7 @@ void YBTSDriver::initialize()
     s_handshakeIntervalMs = ybts.getIntValue("handshake_interval",60000,5000,120000);
 #endif
     s_globalMutex.unlock();
+    m_signalling->init(cfg);
     startIdle();
 }
 

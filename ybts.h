@@ -36,6 +36,17 @@ enum YBTSFileDesc
     FDCount                          // Number of file descriptors
 };
 
+
+/*
+ * Signalling interface protocol
+ *
+ */
+// TODO: set the values
+enum YBTSSigPrimitive {
+    SigHandshake,
+    SigHeartbeat,
+};
+
 }; // namespace YBTS
 
 #endif // __YBTS_H
