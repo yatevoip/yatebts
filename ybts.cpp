@@ -20,7 +20,8 @@
  */
 
 #include <yatephone.h>
-#include <ybts.h>
+#include <yategsm.h>
+#include "ybts.h"
 
 #ifdef _WINDOWS
 #error This module is not for Windows
@@ -136,15 +137,19 @@ public:
 	{ return m_info; }
     inline bool hasConnId() const
 	{ return 0 == (m_primitive & 0x80); }
+    inline const XmlElement* xml() const
+	{ return m_xml; }
     // Parse message. Return 0 on failure
     static YBTSMessage* parse(YBTSSignalling* receiver, uint8_t* data, unsigned int len);
+    // Build a message
+    static void build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg);
 
     static const TokenDict s_priName[];
 
 protected:
     uint8_t m_primitive;
     uint8_t m_info;
-    GenObject* m_xml;
+    XmlElement* m_xml;
 };
 
 class YBTSDataSource : public DataSource, public YBTSConnIdHolder
@@ -241,6 +246,8 @@ public:
 	{ return m_state; }
     inline YBTSTransport& transport()
 	{ return m_transport; }
+    inline GSML3Codec& codec()
+	{ return m_codec; }
     inline void waitHandshake() {
 	    Lock lck(this);
 	    changeState(WaitHandshake);
@@ -249,7 +256,10 @@ public:
 	{ return m_state == Running || m_state == WaitHandshake; }
     int checkTimers(const Time& time = Time());
     // Send a message
-    bool send(YBTSMessage& msg);
+    inline bool send(YBTSMessage& msg) {
+	    Lock lck(this);
+	    return sendInternal(msg);
+	}
     bool start();
     void stop();
     // Read socket. Parse and handle received data
@@ -257,6 +267,7 @@ public:
     void init(Configuration& cfg);
 
 protected:
+    bool sendInternal(YBTSMessage& msg);
     void changeState(int newStat);
     int handlePDU(YBTSMessage& msg);
     int handleHandshake(YBTSMessage& msg);
@@ -286,6 +297,7 @@ protected:
     bool m_printMsg;
     int m_printMsgData;
     YBTSTransport m_transport;
+    GSML3Codec m_codec;
     uint64_t m_timeout;
     uint64_t m_hbTime;
     unsigned int m_hkIntervalMs;         // Time (in miliseconds) to wait for handshake
@@ -359,7 +371,7 @@ public:
     void handlePDU(YBTSMessage& msg);
 
 protected:
-    void handleLocationUpdate(YBTSMessage& msg);
+    void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml);
 
     String m_name;
     ObjList m_ue;                        // List of UEs
@@ -420,6 +432,8 @@ public:
 	{ return m_media; }
     inline YBTSSignalling* signalling()
 	{ return m_signalling; }
+    inline YBTSMM* mm()
+	{ return m_mm; }
     // Handshake done notification. Return false if state is invalid
     bool handshakeDone();
     void restart(unsigned int stopIntervalMs = 0);
@@ -455,7 +469,7 @@ protected:
 	    if (m_stopTime)
 		return;
 	    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
-	    Debug(this,DebugAll,"Stop scheduled in %ums",stopIntervalMs);
+	    Debug(this,DebugAll,"Scheduled stop in %ums",stopIntervalMs);
 	}
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
@@ -491,6 +505,7 @@ static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to 
 
 const TokenDict YBTSMessage::s_priName[] =
 {
+    {"L3Message",            YBTS::SigL3Message},
     {"Handshake",            YBTS::SigHandshake},
     {"Heartbeat",            YBTS::SigHeartbeat},
     {0,0}
@@ -655,6 +670,27 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
     return m;
 }
 
+// Build a message
+void YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg)
+{
+    uint8_t b[4] = {msg.primitive(),msg.info()};
+    if (msg.hasConnId()) {
+	uint8_t* p = b;
+	*(uint16_t*)(p + 2) = htons(msg.connId());
+	buf.append(b,4);
+    }
+    else
+	buf.append(b,2);
+    switch (msg.primitive()) {
+	case YBTS::SigHandshake:
+	case YBTS::SigHeartbeat:
+	    break;
+	default:
+	    Debug(sender,DebugNote,"Unhandled data encode for message %u (%s) [%p]",
+	        msg.primitive(),msg.name(),sender);
+    }
+}
+
 
 //
 // YBTSDataSource
@@ -707,8 +743,11 @@ int YBTSTransport::recv()
 	return 0;
     int rd = m_readSocket.recv((void*)m_readBuf.data(),m_maxRead);
     if (rd >= 0) {
-	if (m_maxRead < m_readBuf.length())
-	    ((uint8_t*)m_readBuf.data())[rd] = 0;
+	if (rd) {
+	    if (m_maxRead < m_readBuf.length())
+		((uint8_t*)m_readBuf.data())[rd] = 0;
+	    XDebug(m_enabler,DebugAll,"Read %d bytes [%p]",rd,m_ptr);
+	}
 	return rd;
     }
     if (m_readSocket.canRetry())
@@ -828,6 +867,7 @@ YBTSSignalling::YBTSSignalling()
     m_state(Idle),
     m_printMsg(true),
     m_printMsgData(1),
+    m_codec(0),
     m_timeout(0),
     m_hbTime(0),
     m_hkIntervalMs(YBTS_HK_INTERVAL_DEF),
@@ -839,6 +879,7 @@ YBTSSignalling::YBTSSignalling()
     YBTSThreadOwner::initThreadOwner(this);
     YBTSThreadOwner::setDebugPtr(this,this);
     m_transport.setDebugPtr(this,this);
+    m_codec.setCodecDebug(this,this);
 }
 
 int YBTSSignalling::checkTimers(const Time& time)
@@ -867,15 +908,6 @@ int YBTSSignalling::checkTimers(const Time& time)
 	}
     }
     return Ok;
-}
-
-// Send a message
-bool YBTSSignalling::send(YBTSMessage& msg)
-{
-    if (m_printMsg && debugAt(DebugInfo))
-	printMsg(msg,false);
-    Debug(this,DebugStub,"send() not implemented [%p]",this);
-    return false;
 }
 
 bool YBTSSignalling::start()
@@ -968,6 +1000,19 @@ void YBTSSignalling::init(Configuration& cfg)
 #endif
 }
 
+// Send a message
+bool YBTSSignalling::sendInternal(YBTSMessage& msg)
+{
+    if (m_printMsg && debugAt(DebugInfo))
+	printMsg(msg,false);
+    DataBlock tmp;
+    YBTSMessage::build(this,tmp,msg);
+    if (!m_transport.send(tmp))
+	return false;
+    setHeartbeatTime();
+    return true;
+}
+
 void YBTSSignalling::changeState(int newStat)
 {
     if (m_state == newStat)
@@ -995,6 +1040,19 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
     if (m_printMsg && debugAt(DebugInfo))
 	printMsg(msg,true);
     switch (msg.primitive()) {
+	case YBTS::SigL3Message:
+	    if (msg.xml()) {
+		const String& proto = msg.xml()->getTag();
+		if (proto == YSTRING("MM"))
+		    __plugin.mm()->handlePDU(msg);
+		else
+		    Debug(this,DebugNote,"Unknown '%s' protocol in %s [%p]",
+			proto.c_str(),msg.name(),this);
+	    }
+	    else {
+		// TODO: put some error
+	    }
+	    return Ok;
 	case YBTS::SigHandshake: return handleHandshake(msg);
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
@@ -1016,7 +1074,7 @@ int YBTSSignalling::handleHandshake(YBTSMessage& msg)
 		return Ok;
 	    changeState(Running);
 	    YBTSMessage m(YBTS::SigHandshake);
-	    if (send(m))
+	    if (sendInternal(m))
 		return Ok;
 	}
     }
@@ -1042,7 +1100,17 @@ void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
     if (msg.hasConnId())
 	s << "\r\nConnection: " << msg.connId();
     if (m_printMsgData) {
-	// TODO: print packet data
+	String data;
+	if (msg.xml()) {
+	    String indent;
+	    String origindent;
+	    if (m_printMsgData > 0) {
+		indent << "\r\n";
+		origindent << "  ";
+	    }
+	    msg.xml()->toString(data,false,indent,origindent);
+	}
+	s.append(data,"\r\n");
     }
     s << "\r\n-----";
     Debug(this,DebugInfo,"%s [%p]%s",recv ? "Received" : "Sending",this,s.safe());
@@ -1206,13 +1274,23 @@ YBTSMM::YBTSMM(unsigned int hashLen)
     debugChain(&__plugin);
 }
 
-void YBTSMM::handlePDU(YBTSMessage& msg)
+void YBTSMM::handlePDU(YBTSMessage& m)
 {
-    Debug(&__plugin,DebugStub,"YBTSMM::handlePDU() not implemented");
+    XmlElement* ch = m.xml() ? m.xml()->findFirstChild() : 0;
+    if (!ch) {
+	Debug(this,DebugNote,"Empty xml in %s [%p]",m.name(),this);
+	return;
+    }
+    const String& s = ch->getTag();
+    if (s == YSTRING("LocationUpdatingRequest"))
+	handleLocationUpdate(m,*ch);
+    else
+	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",s.c_str(),m.name(),this);
 }
 
-void YBTSMM::handleLocationUpdate(YBTSMessage& msg)
+void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml)
 {
+    
     Debug(&__plugin,DebugStub,"YBTSMM::handleLocationUpdate() not implemented");
 }
 

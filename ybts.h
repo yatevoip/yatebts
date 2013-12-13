@@ -33,7 +33,7 @@ enum YBTSFileDesc
     FDStatus,
     FDSignalling,
     FDMedia,
-    FDCount                          // Number of file descriptors
+    FDCount                              // Number of file descriptors
 };
 
 
@@ -41,10 +41,10 @@ enum YBTSFileDesc
  * Signalling interface protocol
  *
  */
-// TODO: set the values
 enum YBTSSigPrimitive {
-    SigHandshake,
-    SigHeartbeat,
+    SigL3Message = 0,                    // Connection related L3 message
+    SigHandshake = 128,                  // Handshake
+    SigHeartbeat = 255,                  // Heartbeat
 };
 
 }; // namespace YBTS

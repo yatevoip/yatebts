@@ -150,6 +150,7 @@ rpm: tarball
 	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS)
 
 ybts.yate: ybts.cpp
+ybts.yate: LOCALLIBS = -lyategsm
 
 @srcdir@/configure: @srcdir@/configure.in
 	cd @srcdir@ && autoconf
