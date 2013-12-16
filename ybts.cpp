@@ -50,6 +50,7 @@ class YBTSThread;
 class YBTSThreadOwner;
 class YBTSMessage;                       // YBTS <-> BTS PDU
 class YBTSTransport;
+class YBTSLAI;                           // Holds local area id
 class YBTSLog;                           // Log interface
 class YBTSSignalling;                    // Signalling interface
 class YBTSMedia;                         // Media interface
@@ -123,9 +124,10 @@ protected:
 class YBTSMessage : public GenObject, public YBTSConnIdHolder
 {
 public:
-    inline YBTSMessage(uint8_t pri = 0, uint8_t info = 0, uint16_t cid = 0)
+    inline YBTSMessage(uint8_t pri = 0, uint8_t info = 0, uint16_t cid = 0,
+	XmlElement* xml = 0)
         : YBTSConnIdHolder(cid),
-        m_primitive(pri), m_info(info), m_xml(0)
+        m_primitive(pri), m_info(info), m_xml(xml), m_error(false)
 	{}
     ~YBTSMessage()
 	{ TelEngine::destruct(m_xml); }
@@ -139,10 +141,12 @@ public:
 	{ return 0 == (m_primitive & 0x80); }
     inline const XmlElement* xml() const
 	{ return m_xml; }
+    inline bool error() const
+	{ return m_error; }
     // Parse message. Return 0 on failure
     static YBTSMessage* parse(YBTSSignalling* receiver, uint8_t* data, unsigned int len);
     // Build a message
-    static void build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg);
+    static bool build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg);
 
     static const TokenDict s_priName[];
 
@@ -150,6 +154,7 @@ protected:
     uint8_t m_primitive;
     uint8_t m_info;
     XmlElement* m_xml;
+    bool m_error;                        // Encode/decode error flag
 };
 
 class YBTSDataSource : public DataSource, public YBTSConnIdHolder
@@ -208,6 +213,46 @@ protected:
     unsigned int m_maxRead;
 };
 
+// Holds local area id
+class YBTSLAI
+{
+public:
+    inline YBTSLAI(const char* lai = 0)
+	: m_lai(lai)
+	{}
+    YBTSLAI(const XmlElement& xml);
+    inline YBTSLAI(const YBTSLAI& other)
+	{ *this = other; }
+    inline const String& lai() const
+	{ return m_lai; }
+    inline void set(const char* mnc, const char* mcc, const char* lac) {
+	    reset();
+	    m_mnc_mcc << mnc << mcc;
+	    m_lac = lac;
+	    m_lai << m_mnc_mcc << "_" << m_lac;
+	}
+    inline void reset() {
+	    m_mnc_mcc.clear();
+	    m_lac.clear();
+	    m_lai.clear();
+	}
+    XmlElement* build() const;
+    inline bool operator==(const YBTSLAI& other)
+	{ return m_lai == other.m_lai; }
+    inline bool operator!=(const YBTSLAI& other)
+	{ return m_lai != other.m_lai; }
+    inline const YBTSLAI& operator=(const YBTSLAI& other) {
+	    m_mnc_mcc = other.m_mnc_mcc;
+	    m_lac = other.m_lac;
+	    m_lai = other.m_lai;
+	    return *this;
+	}
+protected:
+    String m_mnc_mcc;                    // Concatenated MNC + MCC
+    String m_lac;                        // LAC
+    String m_lai;                        // Concatenated mnc_mcc_lac
+};
+
 class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
     public YBTSThreadOwner
 {
@@ -248,6 +293,8 @@ public:
 	{ return m_transport; }
     inline GSML3Codec& codec()
 	{ return m_codec; }
+    inline const YBTSLAI& lai() const
+	{ return m_lai; }
     inline void waitHandshake() {
 	    Lock lck(this);
 	    changeState(WaitHandshake);
@@ -259,6 +306,11 @@ public:
     inline bool send(YBTSMessage& msg) {
 	    Lock lck(this);
 	    return sendInternal(msg);
+	}
+    // Send an L3 connection related message
+    inline bool sendL3Conn(uint16_t connId, XmlElement* xml, uint8_t sapi = 0) {
+	    YBTSMessage m(YBTS::SigL3Message,sapi,connId,xml);
+	    return send(m);
 	}
     bool start();
     void stop();
@@ -298,6 +350,7 @@ protected:
     int m_printMsgData;
     YBTSTransport m_transport;
     GSML3Codec m_codec;
+    YBTSLAI m_lai;
     uint64_t m_timeout;
     uint64_t m_hbTime;
     unsigned int m_hkIntervalMs;         // Time (in miliseconds) to wait for handshake
@@ -344,38 +397,53 @@ class YBTSUE : public RefObject, public Mutex, public YBTSConnIdHolder
 {
     friend class YBTSMM;
 public:
-    enum LocationUpdStatus {
-	Idle,
-	Incoming,                        // Start updating
-	ReqIMSI,                         // Requested IMSI
-	Updating,                        // Sent to registrar
-    };
-    YBTSUE();
     inline const String& imsi() const
 	{ return m_imsi; }
-    // This method is not thread safe
     inline const String& tmsi() const
-	{ return m_imsi; }
+	{ return m_tmsi; }
 
 protected:
+    inline YBTSUE(const char* imsi, const char* tmsi)
+	: Mutex(false,"YBTSUE"),
+	m_registered(false), m_imsi(imsi), m_tmsi(tmsi)
+	{}
     bool m_registered;
     String m_imsi;
     String m_tmsi;
-    int m_locUpdStatus;
 };
 
 class YBTSMM : public GenObject, public DebugEnabler, public Mutex
 {
 public:
     YBTSMM(unsigned int hashLen);
+    ~YBTSMM();
+    inline XmlElement* buildMM()
+	{ return new XmlElement("MM"); }
+    inline XmlElement* buildMM(XmlElement*& ch, const char* tag) {
+	    XmlElement* mm = buildMM();
+	    ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(tag)));
+	    return mm;
+	}
     void handlePDU(YBTSMessage& msg);
 
 protected:
     void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml);
+    void sendLocationUpdateReject(uint16_t connId, uint8_t cause, uint8_t info);
+    inline void sendLocationUpdateReject(YBTSMessage& req, uint8_t cause)
+	{ sendLocationUpdateReject(req.connId(),cause,req.info()); }
+    // Find UE by TMSI
+    void findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi);
+    // Find UE by IMSI. Create it if not found
+    void getUEByIMSISafe(RefPointer<YBTSUE>& ue, const String& imsi);
+    inline unsigned int hashList(const String& str)
+	{ return str.hash() % m_ueHashLen; }
 
     String m_name;
-    ObjList m_ue;                        // List of UEs
-    HashList m_ueTMSI;                   // List of UEs grouped by TMSI
+    Mutex m_ueMutex;
+    uint16_t m_tmsiIndex;                // Index used to generate TMSI
+    ObjList* m_ueIMSI;                   // List of UEs grouped by IMSI
+    ObjList* m_ueTMSI;                   // List of UEs grouped by TMSI
+    unsigned int m_ueHashLen;            // Length of UE lists
 };
 
 class YBTSChan : public Channel, public YBTSConnIdHolder
@@ -493,15 +561,38 @@ protected:
 
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
+static YBTSLAI s_lai;
 static String s_format = "gsm";          // Format to use
 static String s_peerPath = "path_to_app_to_run"; // Peer path
 static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
+// Strings
+static const String s_locAreaIdent = "LAI";
+static const String s_MNC_MCC = "MNC_MCC";
+static const String s_LAC = "LAC";
+static const String s_mobileIdent = "MobileIdentity";
+static const String s_imsi = "IMSI";
+static const String s_tmsi = "TMSI";
 
 
 #define YBTS_MAKENAME(x) {#x, x}
+#define YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag,ptr) \
+    if (x->getTag() == tag) { \
+	ptr = x; \
+	continue; \
+    }
+#define YBTS_XML_GETCHILDTEXT_CHOICE_RETURN(x,tag,ptr) \
+    if (x->getTag() == tag) { \
+	ptr = &x->getText(); \
+	return; \
+    }
+#define YBTS_XML_GETCHILDTEXT_CHOICE_CONTINUE(x,tag,ptr) \
+    if (x->getTag() == tag) { \
+	ptr = &x->getText(); \
+	continue; \
+    }
 
 const TokenDict YBTSMessage::s_priName[] =
 {
@@ -549,6 +640,69 @@ static inline const NamedList& safeSect(Configuration& cfg, const String& name)
 {
     const NamedList* sect = cfg.getSection(name);
     return sect ? *sect : NamedList::empty();
+}
+
+// Check if a string is composed of digits in interval 0..9
+static inline bool isDigits09(const String& str)
+{
+    if (!str)
+	return false;
+    for (const char* s = str.c_str(); *s; s++)
+	if (*s < '0' || *s > '9')
+	    return false;
+    return true;
+}
+
+// Retrieve XML children
+static inline void findXmlChildren(const XmlElement& xml,
+    XmlElement*& ptr1, const String& tag1,
+    XmlElement*& ptr2, const String& tag2)
+{
+    for (const ObjList* o = xml.getChildren().skipNull(); o; o = o->skipNext()) {
+	XmlElement* x = static_cast<XmlChild*>(o->get())->xmlElement();
+	if (!x)
+	    continue;
+	YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag1,ptr1);
+	YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag2,ptr2);
+    }
+}
+
+// Retrieve the text of an xml child
+// Use this function for choice XML
+static inline void getXmlChildTextChoice(const XmlElement& xml,
+    const String*& ptr1, const String& tag1,
+    const String*& ptr2, const String& tag2)
+{
+    for (const ObjList* o = xml.getChildren().skipNull(); o; o = o->skipNext()) {
+	XmlElement* x = static_cast<XmlChild*>(o->get())->xmlElement();
+	if (!x)
+	    continue;
+	YBTS_XML_GETCHILDTEXT_CHOICE_RETURN(x,tag1,ptr1);
+	YBTS_XML_GETCHILDTEXT_CHOICE_RETURN(x,tag2,ptr2);
+    }
+}
+
+// Retrieve the text of a requested xml children
+static inline void getXmlChildTextAll(const XmlElement& xml,
+    const String*& ptr1, const String& tag1,
+    const String*& ptr2, const String& tag2)
+{
+    for (const ObjList* o = xml.getChildren().skipNull(); o; o = o->skipNext()) {
+	XmlElement* x = static_cast<XmlChild*>(o->get())->xmlElement();
+	if (!x)
+	    continue;
+	YBTS_XML_GETCHILDTEXT_CHOICE_CONTINUE(x,tag1,ptr1);
+	YBTS_XML_GETCHILDTEXT_CHOICE_CONTINUE(x,tag2,ptr2);
+    }
+}
+
+// Build an xml element with a child
+static inline XmlElement* buildXmlWithChild(const String& tag, const String& childTag,
+    const char* childText = 0)
+{
+    XmlElement* xml = new XmlElement(tag);
+    xml->addChildSafe(new XmlElement(childTag,childText));
+    return xml;
 }
 
 
@@ -625,6 +779,15 @@ void YBTSThreadOwner::threadTerminated(YBTSThread* th)
 //
 // YBTSMessage
 //
+// Utility used in YBTSMessage::parse()
+static inline void decodeMsg(GSML3Codec& codec, uint8_t* data, unsigned int len,
+    XmlElement*& xml, String& reason)
+{
+    unsigned int e = codec.decode(data,len,xml);
+    if (e)
+	reason << "Codec error " << e;
+}
+
 // Parse message. Return 0 on failure
 YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned int len)
 {
@@ -634,11 +797,6 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	Debug(recv,DebugNote,"Received short message length %u [%p]",len,recv);
 	return 0;
     }
-#ifdef XDEBUG
-    String tmp;
-    tmp.hexify(data,len,' ');
-    Debug(recv,DebugAll,"Parse data: %s [%p]",tmp.c_str(),recv);
-#endif
     YBTSMessage* m = new YBTSMessage;
     m->m_primitive = *data++;
     m->m_info = *data++;
@@ -655,23 +813,42 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	data += 2;
 	len -= 2;
     }
+    String reason;
     switch (m->primitive()) {
+	case YBTS::SigL3Message:
+	    decodeMsg(recv->codec(),data,len,m->m_xml,reason);
+	    break;
 	case YBTS::SigHandshake:
 	case YBTS::SigHeartbeat:
 	    break;
 	default:
-	    len = 0;
-	    Debug(recv,DebugNote,"Unhandled data decode for message %u (%s) [%p]",
-	        m->primitive(),m->name(),recv);
+	    reason = "No decoder";
     }
-    if (len)
-	Debug(recv,DebugInfo,"Got %u garbage bytes at message %u (%s) end [%p]",
-	    len,m->primitive(),m->name(),recv);
+    if (reason) {
+	Debug(recv,DebugNote,"Failed to parse %u (%s): %s [%p]",
+	    m->primitive(),m->name(),reason.c_str(),recv);
+	m->m_error = true;
+    }
     return m;
 }
 
+// Utility used in YBTSMessage::parse()
+static inline bool encodeMsg(GSML3Codec& codec, const YBTSMessage& msg, DataBlock& buf,
+    String& reason)
+{
+    if (msg.xml()) {
+	unsigned int e = codec.encode((XmlElement*)msg.xml(),buf);
+	if (!e)
+	    return true;
+	reason << "Codec error " << e;
+    }
+    else
+	reason = "Empty XML";
+    return false;
+}
+
 // Build a message
-void YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg)
+bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg)
 {
     uint8_t b[4] = {msg.primitive(),msg.info()};
     if (msg.hasConnId()) {
@@ -681,14 +858,21 @@ void YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
     }
     else
 	buf.append(b,2);
+    String reason;
     switch (msg.primitive()) {
+	case YBTS::SigL3Message:
+	    if (encodeMsg(sender->codec(),msg,buf,reason))
+		return true;
+	    break;
 	case YBTS::SigHandshake:
 	case YBTS::SigHeartbeat:
-	    break;
+	    return true;
 	default:
-	    Debug(sender,DebugNote,"Unhandled data encode for message %u (%s) [%p]",
-	        msg.primitive(),msg.name(),sender);
+	    reason = "No encoder";
     }
+    Debug(sender,DebugNote,"Failed to build %s (%u): %s [%p]",
+	msg.name(),msg.primitive(),reason.c_str(),sender);
+    return false;
 }
 
 
@@ -741,12 +925,17 @@ int YBTSTransport::recv()
 {
     if (!m_readSocket.valid())
 	return 0;
-    int rd = m_readSocket.recv((void*)m_readBuf.data(),m_maxRead);
+    uint8_t* buf = (uint8_t*)m_readBuf.data();
+    int rd = m_readSocket.recv(buf,m_maxRead);
     if (rd >= 0) {
 	if (rd) {
 	    if (m_maxRead < m_readBuf.length())
-		((uint8_t*)m_readBuf.data())[rd] = 0;
-	    XDebug(m_enabler,DebugAll,"Read %d bytes [%p]",rd,m_ptr);
+		buf[rd] = 0;
+#ifdef XDEBUG
+	    String tmp;
+	    tmp.hexify(buf,rd,' ');
+	    Debug(m_enabler,DebugAll,"Read %d bytes: %s [%p]",rd,tmp.c_str(),m_ptr);
+#endif
 	}
 	return rd;
     }
@@ -795,6 +984,30 @@ void YBTSTransport::resetTransport()
     m_readSocket.detach();
     m_writeSocket.detach();
     m_remoteSocket.terminate();
+}
+
+
+//
+// YBTSLog
+//
+YBTSLAI::YBTSLAI(const XmlElement& xml)
+{
+    const String* mnc_mcc = &String::empty();
+    const String* lac = &String::empty();
+    getXmlChildTextAll(xml,mnc_mcc,s_MNC_MCC,lac,s_LAC);
+    m_mnc_mcc = *mnc_mcc;
+    m_lac = *lac;
+    m_lai << m_mnc_mcc << "_" << m_lac;
+}
+
+XmlElement* YBTSLAI::build() const
+{
+    XmlElement* xml = new XmlElement(s_locAreaIdent);
+    if (m_mnc_mcc)
+	xml->addChildSafe(new XmlElement(s_MNC_MCC,m_mnc_mcc));
+    if (m_lac)
+	xml->addChildSafe(new XmlElement(s_LAC,m_lac));
+    return xml;
 }
 
 
@@ -914,8 +1127,15 @@ bool YBTSSignalling::start()
 {
     stop();
     while (true) {
+	s_globalMutex.lock();
+	m_lai = s_lai;
+	s_globalMutex.unlock();
+	if (!m_lai.lai()) {
+	    Debug(this,DebugNote,"Failed to start: invalid LAI [%p]",this);
+	    break;
+	}
 	Lock lck(this);
-	if (!m_transport.initTransport(false,s_bufLenSign,false))
+	if (!m_transport.initTransport(false,s_bufLenSign,true))
 	    break;
 	if (!startThread("YBTSSignalling"))
 	    break;
@@ -944,12 +1164,12 @@ void YBTSSignalling::processLoop()
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
 	if (rd > 0) {
-	    lock();
-	    setToutHeartbeat();
-	    unlock();
 	    uint8_t* buf = (uint8_t*)m_transport.readBuf().data();
 	    YBTSMessage* m = YBTSMessage::parse(this,buf,rd);
 	    if (m) {
+		lock();
+		setToutHeartbeat();
+		unlock();
 		int res = Ok;
 		if (m->primitive() != YBTS::SigHeartbeat)
 		    res = handlePDU(*m);
@@ -1049,11 +1269,15 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		    Debug(this,DebugNote,"Unknown '%s' protocol in %s [%p]",
 			proto.c_str(),msg.name(),this);
 	    }
+	    else if (msg.error()) {
+		// TODO: close message connection ?
+	    }
 	    else {
 		// TODO: put some error
 	    }
 	    return Ok;
-	case YBTS::SigHandshake: return handleHandshake(msg);
+	case YBTS::SigHandshake:
+	    return handleHandshake(msg);
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
     return Ok;
@@ -1267,11 +1491,23 @@ YBTSDataSource* YBTSMedia::find(unsigned int connId)
 //
 YBTSMM::YBTSMM(unsigned int hashLen)
     : Mutex(false,"YBTSMM"),
-    m_ueTMSI(hashLen)
+    m_ueMutex(false,"YBTSMMUEList"),
+    m_tmsiIndex(0),
+    m_ueIMSI(0),
+    m_ueTMSI(0),
+    m_ueHashLen(hashLen ? hashLen : 17)
 {
     m_name = "ybts-mm";
     debugName(m_name);
     debugChain(&__plugin);
+    m_ueIMSI = new ObjList[m_ueHashLen];
+    m_ueTMSI = new ObjList[m_ueHashLen];
+}
+
+YBTSMM::~YBTSMM()
+{
+    delete[] m_ueIMSI;
+    delete[] m_ueTMSI;
 }
 
 void YBTSMM::handlePDU(YBTSMessage& m)
@@ -1288,10 +1524,144 @@ void YBTSMM::handlePDU(YBTSMessage& m)
 	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",s.c_str(),m.name(),this);
 }
 
+// Handle location updating requests
+// See TS 100.940 Section 8.5 / Section 10.5.3.6 / Annex G reject cause:
+//  - 32: Service option not implemented
+//  - 96: invalid mandatory information, missing IE
+//  - 111: Protocol error
 void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml)
 {
-    
-    Debug(&__plugin,DebugStub,"YBTSMM::handleLocationUpdate() not implemented");
+    XmlElement* laiXml = 0;
+    XmlElement* identity = 0;
+    findXmlChildren(xml,laiXml,s_locAreaIdent,identity,s_mobileIdent);
+    if (!(laiXml && identity)) {
+	Debug(this,DebugNote,
+	    "Rejecting %s conn=%u: missing LAI or mobile identity [%p]",
+	    xml.tag(),m.connId(),this);
+	sendLocationUpdateReject(m,96);
+	return;
+    }
+    const String* imsiRecv = 0;
+    const String* tmsiRecv = 0;
+    getXmlChildTextChoice(*identity,imsiRecv,s_imsi,tmsiRecv,s_tmsi);
+    if (!(imsiRecv || tmsiRecv)) {
+	// We don't handle location update using other identity then IMSI/TMSI
+	// TODO: Request identity type IMSI
+	sendLocationUpdateReject(m,111);
+	return;
+    }
+    bool haveTMSI = TelEngine::null(imsiRecv);
+    const String* ident = haveTMSI ? tmsiRecv : imsiRecv;
+    if (TelEngine::null(ident)) {
+	Debug(this,DebugNote,"Rejecting %s conn=%u: empty IMSI/TMSI [%p]",
+	    xml.tag(),m.connId(),this);
+	sendLocationUpdateReject(m,96);
+	return;
+    }
+    YBTSLAI lai(*laiXml);
+    bool haveLAI = (lai == __plugin.signalling()->lai());
+    Debug(this,DebugAll,"Handling %s: ident=%s/%s LAI=%s [%p]",
+	xml.tag(),haveTMSI ? "TMSI" : "IMSI",ident->c_str(),lai.lai().c_str(),this);
+    // TODO: handle concurrent requests, check if we have a pending location updating
+    // This should never happen, but we should handle it
+    RefPointer<YBTSUE> ue;
+    if (haveTMSI) {
+	// Got TMSI
+	// Same LAI: check if we know the IMSI, request it if unknown
+	// Different LAI: request IMSI
+	if (haveLAI)
+	    findUEByTMSISafe(ue,*ident);
+	else
+	    lai = __plugin.signalling()->lai();
+	if (!ue) {
+	    Debug(this,DebugNote,"Rejecting %s: IMSI request not implemented [%p]",
+		xml.tag(),this);
+	    sendLocationUpdateReject(m,32);
+	    return;
+	}
+    }
+    else {
+	// Got IMSI: Create/retrieve TMSI
+	getUEByIMSISafe(ue,*ident);
+	if (!haveLAI)
+	    lai = __plugin.signalling()->lai();
+    }
+    if (!ue) {
+	Debug(this,DebugGoOn,"Rejecting %s: no UE object [%p]",xml.tag(),this);
+	sendLocationUpdateReject(m,32);
+	return;
+    }
+    Lock lckUE(ue);
+    ue->m_registered = true;
+    // Accept all for now
+    XmlElement* ch = 0;
+    XmlElement* mm = buildMM(ch,"LocationUpdatingAccept");
+    if (ch) {
+	ch->addChildSafe(lai.build());
+	ch->addChildSafe(buildXmlWithChild(s_mobileIdent,s_tmsi,ue->tmsi()));
+    }
+    lckUE.drop();
+    __plugin.signalling()->sendL3Conn(m.connId(),mm,m.info());
+}
+
+void YBTSMM::sendLocationUpdateReject(uint16_t connId, uint8_t cause, uint8_t info)
+{
+    XmlElement* ch = 0;
+    XmlElement* mm = buildMM(ch,"LocationUpdatingReject");
+    if (ch) {
+	// TODO: Use a proper dictionary to retrieve the value
+	String tmp(cause);
+	const char* reason = tmp;
+	ch->addChildSafe(new XmlElement("RejectCause",reason));
+    }
+    __plugin.signalling()->sendL3Conn(connId,mm,info);
+}
+
+// Find UE by TMSI
+void YBTSMM::findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi)
+{
+    if (!tmsi)
+	return;
+    Lock lck(m_ueMutex);
+    YBTSUE* tmpUE = 0;
+    ObjList& list = m_ueTMSI[hashList(tmsi)];
+    for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
+	YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	if (tmsi == u->tmsi()) {
+	    tmpUE = u;
+	    break;
+	}
+    }
+    XDebug(this,DebugAll,"findUEByTMSISafe(%s) found (%p) [%p]",
+	tmsi.c_str(),tmpUE,this);
+    ue = tmpUE;
+}
+
+// Find UE by IMSI. Create it if not found
+void YBTSMM::getUEByIMSISafe(RefPointer<YBTSUE>& ue, const String& imsi)
+{
+    if (!imsi)
+	return;
+    Lock lck(m_ueMutex);
+    YBTSUE* tmpUE = 0;
+    ObjList& list = m_ueIMSI[hashList(imsi)];
+    for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
+	YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	if (imsi == u->imsi()) {
+	    tmpUE = u;
+	    break;
+	}
+    }
+    if (!tmpUE) {
+	// TODO: find a better way to allocate TMSI
+	String tmsi(++m_tmsiIndex);
+	tmpUE = new YBTSUE(imsi,tmsi);
+	list.append(tmpUE);
+	m_ueTMSI[hashList(tmsi)].append(tmpUE)->setDelete(false);
+	Debug(this,DebugInfo,"Added UE imsi=%s tmsi=%s [%p]",
+	    tmpUE->imsi().c_str(),tmpUE->tmsi().c_str(),this);
+    }
+    ue = tmpUE;
 }
 
 
@@ -1621,11 +1991,37 @@ void YBTSDriver::checkRestart(const Time& time)
 	m_restart = false;
 }
 
+
+static void parseLAI(YBTSLAI& dest, const String& lai)
+{
+    String l = lai;
+    l.trimBlanks();
+    if (!l)
+	return;
+    ObjList* list = l.split(',');
+    if (list->count() == 3) {
+	ObjList* o = list->skipNull();
+	// MNC: 3 digits
+	String* mnc = static_cast<String*>(o->get());
+	String* mcc = static_cast<String*>((o = o->skipNext())->get());
+	String* lac = static_cast<String*>((o = o->skipNext())->get());
+	if (mnc->length() == 3 && isDigits09(*mnc) &&
+	    ((mcc->length() == 3 || mcc->length() == 2) && isDigits09(*mcc))) {
+	    // LAC: 16 bits long
+	    int tmp = lac->toInteger(-1);
+	    if (tmp >= 0 && tmp < 0xffff)
+		dest.set(*mnc,*mcc,*lac);
+	}
+    }
+    TelEngine::destruct(list);
+}
+
 void YBTSDriver::initialize()
 {
     static bool s_first = true;
     Output("Initializing module YBTS");
     Configuration cfg(Engine::configFile("bts"));
+    const NamedList& general = safeSect(cfg,"general");
     const NamedList& ybts = safeSect(cfg,"ybts");
     if (s_first) {
 	s_first = false;
@@ -1639,6 +2035,17 @@ void YBTSDriver::initialize()
 	m_mm = new YBTSMM(ybts.getIntValue("ue_hash_size",31,5));
     }
     s_globalMutex.lock();
+    YBTSLAI lai;
+    const String& laiStr = general[YSTRING("lai")];
+    parseLAI(lai,laiStr);
+    if (lai != s_lai || !s_lai.lai()) {
+	if (lai.lai())
+	    Debug(this,DebugInfo,"LAI changed %s -> %s",
+		s_lai.lai().c_str(),lai.lai().c_str());
+	else
+	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
+	s_lai = lai;
+    }
     s_restartMs = ybts.getIntValue("restart_interval",
 	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
 #ifdef DEBUG
