@@ -344,7 +344,11 @@ public:
     bool start();
     void stop();
     // Drop a connection
-    void dropConn(YBTSConn* conn, bool notifyPeer);
+    void dropConn(uint16_t connId, bool notifyPeer);
+    inline void dropConn(YBTSConn* conn, bool notifyPeer) {
+	    if (conn)
+		dropConn(conn->connId(),notifyPeer);
+	}
     // Read socket. Parse and handle received data
     virtual void processLoop();
     void init(Configuration& cfg);
@@ -642,6 +646,7 @@ static const String s_cmMOCall = "mocall";
 const TokenDict YBTSMessage::s_priName[] =
 {
     {"L3Message",            YBTS::SigL3Message},
+    {"ConnRelease",          YBTS::SigConnRelease},
     {"Handshake",            YBTS::SigHandshake},
     {"Heartbeat",            YBTS::SigHeartbeat},
     {0,0}
@@ -924,8 +929,9 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    if (encodeMsg(sender->codec(),msg,buf,reason))
 		return true;
 	    break;
-	case YBTS::SigHandshake:
 	case YBTS::SigHeartbeat:
+	case YBTS::SigConnRelease:
+	case YBTS::SigHandshake:
 	    return true;
 	default:
 	    reason = "No encoder";
@@ -970,7 +976,7 @@ bool YBTSTransport::send(const void* buf, unsigned int len)
     if (wr == (int)len)
 	return true;
     if (wr >= 0)
-	Debug(m_enabler,DebugAll,"Sent %d/%u [%p]",wr,len,m_ptr);
+	Debug(m_enabler,DebugNote,"Sent %d/%u [%p]",wr,len,m_ptr);
     else if (!m_writeSocket.canRetry()) {
 	String tmp;
 	addLastError(tmp,m_writeSocket.error());
@@ -1261,9 +1267,28 @@ void YBTSSignalling::stop()
 }
 
 // Drop a connection
-void YBTSSignalling::dropConn(YBTSConn* conn, bool notifyPeer)
+void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 {
-    Debug(this,DebugStub,"dropConn() not implemented");
+    bool found = false;
+    Lock lck(m_connsMutex);
+    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
+	YBTSConn* c = static_cast<YBTSConn*>(o->get());
+	if (c->connId() != connId)
+	    continue;
+	found = true;
+	Debug(this,DebugAll,"Removing connection (%p,%u) [%p]",c,connId,this);
+	o->remove();
+	break;
+    }
+    lck.drop();
+    if (notifyPeer && found) {
+	YBTSMessage m(YBTS::SigConnRelease,0,connId);
+	send(m);
+    }
+    // TODO:
+    // Drop chan
+    // Drop pending location update
+    Debug(this,DebugStub,"dropConn() incomplete");
 }
 
 // Read socket. Parse and handle received data
@@ -1657,6 +1682,8 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
 	handleLocationUpdate(m,*ch,conn);
     else if (s == YSTRING("CMServiceRequest"))
 	handleCMServiceRequest(m,*ch,conn);
+    else if (s == YSTRING("CMServiceAbort"))
+	__plugin.signalling()->dropConn(conn,true);
     else
 	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",s.c_str(),m.name(),this);
 }
