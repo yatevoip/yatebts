@@ -60,6 +60,7 @@ class YBTSLocationUpd;                   // Pending location update from UE
 class YBTSMM;                            // Mobility management entity
 class YBTSDataSource;
 class YBTSDataConsumer;
+class YBTSCallDesc;
 class YBTSChan;
 class YBTSDriver;
 
@@ -494,25 +495,113 @@ protected:
     unsigned int m_ueHashLen;            // Length of UE lists
 };
 
+class YBTSCallDesc : public String, public YBTSConnIdHolder
+{
+public:
+    // Call state
+    // ETSI TS 100 940, Section 5.1.2.2
+    // Section 10.5.4.6: call state IE
+    enum State {
+	Null = 0,
+	CallInitiated = 1,               // N1: Call initiated
+	ConnPending = 2,                 // N0.1: MT call, waiting for MM connection
+	CallProceeding = 3,              // N3: MO call proceeding
+	CallDelivered = 4,               // N4: Call delivered
+	CallPresent = 5,                 // N6: Call present
+	CallReceived = 6,                // N7: Call received
+	ConnectReq = 8,                  // N8: Connect request
+	CallConfirmed = 9,               // N9: MT call confirmed
+	Active = 10,                     // N10: Active (answered)
+	Disconnect = 12,                 // N12: Disconnect indication
+	Release = 19,                    // N19: Release request
+	Connect = 28,                    // N28: Connect indication
+    };
+    // Incoming
+    YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular);
+    inline const char* stateName() const
+	{ return stateName(m_state); }
+    inline const char* reason()
+	{ return m_reason.safe("normal"); }
+    void proceeding();
+    void connect();
+    void hangup();
+    void sendStatus(const char* cause);
+    inline void sendWrongState()
+	{ sendStatus("wrong-state-message"); }
+    inline void release() {
+	    changeState(Release);
+	    m_relSent++;
+	    sendGSMRel(true,*this,reason(),connId());
+	}
+    inline void releaseComplete() {
+	    changeState(Null);
+	    sendGSMRel(false,*this,reason(),connId());
+	}
+    void changeState(int newState);
+    inline void setTimeout(unsigned int intervalMs, const Time& time = Time())
+	{ m_timeout = time + (uint64_t)intervalMs * 1000; }
+    // Send CC REL or RLC
+    static void sendGSMRel(bool rel, const String& callRef, const char* reason,
+	uint16_t connId);
+    static inline const char* stateName(int stat)
+	{ return lookup(stat,s_stateName); }
+    static const TokenDict s_stateName[];
+
+    int m_state;
+    bool m_incoming;
+    bool m_regular;
+    uint64_t m_timeout;
+    uint8_t m_relSent;
+    YBTSChan* m_chan;
+    String m_reason;
+    String m_called;
+};
+
 class YBTSChan : public Channel, public YBTSConnIdHolder
 {
 public:
     // Incoming
-    YBTSChan(YBTSMessage& msg, YBTSUE* ue = 0);
-    inline bool startRouter() {
-	    Message* m = m_route;
-	    m_route = 0;
-	    return Channel::startRouter(m);
-	}
+    YBTSChan(YBTSConn* conn);
+    inline YBTSConn* conn() const
+	{ return m_conn; }
+    // Init incoming chan. Return false to destruct the channel
+    bool initIncoming(const XmlElement& xml, bool regular);
+    // Handle CC messages
+    bool handleCC(const XmlElement& xml);
+    // Connection released notification
+    void connReleased();
+    // BTS stopping notification
+    inline void stop()
+	{ hangup("interworking"); }
 
 protected:
+    inline YBTSCallDesc* firstCall() {
+	    ObjList* o = m_calls.skipNull();
+	    return o ? static_cast<YBTSCallDesc*>(o->get()) : 0;
+	}
+    void handleSetup(const XmlElement& xml, bool regular);
+    void hangup(const char* reason = 0, bool final = false);
+    inline void setReason(const char* reason, Mutex* mtx = 0) {
+	    if (!reason)
+		return;
+	    Lock lck(mtx);
+	    m_reason = reason;
+	}
+    inline void setTout(uint64_t tout) {
+	    if (tout && (!m_tout || m_tout > tout)) {
+		m_tout = tout;
+		m_haveTout = true;
+	    }
+	}
+    virtual void disconnected(bool final, const char *reason);
+    virtual bool callRouted(Message& msg);
     virtual void callAccept(Message& msg);
     virtual void callRejected(const char* error, const char* reason, const Message* msg);
+    virtual bool msgAnswered(Message& msg);
+    virtual void checkTimers(Message& msg, const Time& tmr);
 #if 0
-    virtual void disconnected(bool final, const char *reason);
     virtual bool msgProgress(Message& msg);
     virtual bool msgRinging(Message& msg);
-    virtual bool msgAnswered(Message& msg);
     virtual bool msgTone(Message& msg, const char* tone);
     virtual bool msgText(Message& msg, const char* text);
     virtual bool msgDrop(Message& msg, const char* reason);
@@ -521,7 +610,12 @@ protected:
     virtual void destroyed();
 
     Mutex m_mutex;
-    Message* m_route;
+    RefPointer<YBTSConn> m_conn;
+    ObjList m_calls;
+    String m_reason;
+    bool m_hungup;
+    bool m_haveTout;
+    uint64_t m_tout;
 };
 
 class YBTSDriver : public Driver
@@ -550,11 +644,22 @@ public:
 	{ return m_signalling; }
     inline YBTSMM* mm()
 	{ return m_mm; }
+    inline XmlElement* buildCC()
+	{ return new XmlElement("CC"); }
+    XmlElement* buildCC(XmlElement*& ch, const char* tag, const char* callRef);
+    // Handle call control messages
+    void handleCC(YBTSMessage& m, YBTSConn* conn);
+    // Add a pending (wait termination) call
+    void addTerminatedCall(YBTSCallDesc* call);
+    // Check terminated calls timeout
+    void checkTerminatedCalls(const Time& time = Time());
+    // Clear terminated calls for a given connection
+    void removeTerminatedCall(uint16_t connId);
     // Handshake done notification. Return false if state is invalid
     bool handshakeDone();
     void restart(unsigned int stopIntervalMs = 0);
     void stopNoRestart();
-    inline bool findChan(uint8_t connId, RefPointer<YBTSChan>& chan) {
+    inline bool findChan(uint16_t connId, RefPointer<YBTSChan>& chan) {
 	    Lock lck(this);
 	    chan = findChanConnId(connId);
 	    return chan != 0;
@@ -575,7 +680,7 @@ protected:
     bool startPeer();
     void stopPeer();
     bool handleEngineStop(Message& msg);
-    YBTSChan* findChanConnId(uint8_t connId);
+    YBTSChan* findChanConnId(uint16_t connId);
     void changeState(int newStat);
     void setRestart(int resFlag, bool on = true);
     void checkStop(const Time& time);
@@ -603,6 +708,8 @@ protected:
     YBTSMedia* m_media;                  // Media
     YBTSSignalling* m_signalling;        // Signalling
     YBTSMM* m_mm;                        // Mobility management
+    ObjList m_terminatedCalls;           // Terminated calls list
+    bool m_haveCalls;                    // Empty terminated calls list flag
     bool m_engineStart;
     unsigned int m_engineStop;
 };
@@ -616,6 +723,13 @@ static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
+// Call Control Timers (in milliseconds)
+// ETSI TS 100 940 Section 11.3
+static unsigned int s_t305 = 30000;      // DISC sent, no inband tone available
+                                         // Stop when recv REL/DISC, send REL on expire
+static unsigned int s_t308 = 5000;       // REL sent (operator specific, no default in spec)
+                                         // First expire: re-send REL, second expire: release call
+static unsigned int s_t313 = 5000;       // Send Connect, expect Connect Ack, clear call on expire
 // Strings
 static const String s_locAreaIdent = "LAI";
 static const String s_MNC_MCC = "MNC_MCC";
@@ -623,8 +737,22 @@ static const String s_LAC = "LAC";
 static const String s_mobileIdent = "MobileIdentity";
 static const String s_imsi = "IMSI";
 static const String s_tmsi = "TMSI";
+static const String s_cause = "Cause";
 static const String s_cmServType = "CMServiceType";
 static const String s_cmMOCall = "mocall";
+static const String s_ccSetup = "Setup";
+static const String s_ccEmergency = "EmergencySetup";
+static const String s_ccProceeding = "CallProceeding";
+static const String s_ccConnect = "Connect";
+static const String s_ccConnectAck = "ConnectAck";
+static const String s_ccDisc = "Disconnect";
+static const String s_ccRel = "Release";
+static const String s_ccRlc = "ReleaseComplete";
+static const String s_ccStatusEnq = "StatusEnquiry";
+static const String s_ccStatus = "Status";
+static const String s_ccCallRef = "TransactionIdentifier";
+static const String s_ccCalled = "CalledPartyBCDNumber";
+static const String s_ccCallState = "CallState";
 
 #define YBTS_MAKENAME(x) {#x, x}
 #define YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag,ptr) \
@@ -652,6 +780,24 @@ const TokenDict YBTSMessage::s_priName[] =
     {0,0}
 };
 
+const TokenDict YBTSCallDesc::s_stateName[] =
+{
+    YBTS_MAKENAME(Null),
+    YBTS_MAKENAME(CallInitiated),
+    YBTS_MAKENAME(ConnPending),
+    YBTS_MAKENAME(CallProceeding),
+    YBTS_MAKENAME(CallDelivered),
+    YBTS_MAKENAME(CallPresent),
+    YBTS_MAKENAME(CallReceived),
+    YBTS_MAKENAME(ConnectReq),
+    YBTS_MAKENAME(CallConfirmed),
+    YBTS_MAKENAME(Active),
+    YBTS_MAKENAME(Disconnect),
+    YBTS_MAKENAME(Release),
+    YBTS_MAKENAME(Connect),
+    {0,0}
+};
+
 const TokenDict YBTSDriver::s_stateName[] =
 {
     YBTS_MAKENAME(Idle),
@@ -660,6 +806,63 @@ const TokenDict YBTSDriver::s_stateName[] =
     YBTS_MAKENAME(Running),
     YBTS_MAKENAME(RadioUp),
     {0,0}
+};
+
+// Call termination cause
+// ETSI TS 100 940, Section 10.5.4.11
+static const TokenDict s_ccErrorDict[] = {
+  {"unallocated",                     1}, // Unallocated (unassigned) number
+  {"noroute",                         3}, // No route to destination
+  {"channel-unacceptable",            6}, // Channel unacceptable
+  {"forbidden",                       8}, // Operator determined barring
+  {"normal-clearing",                16}, // Normal Clearing
+  {"busy",                           17}, // User busy
+  {"noresponse",                     18}, // No user responding
+  {"noanswer",                       19}, // No answer from user (user alerted)
+  {"rejected",                       21}, // Call Rejected
+  {"moved",                          22}, // Number changed
+  {"preemption",                     25}, // Preemption
+  {"answered",                       26}, // Non-selected user clearing (answered elsewhere)
+  {"out-of-order",                   27}, // Destination out of order
+  {"invalid-number",                 28}, // Invalid number format
+  {"facility-rejected",              29}, // Facility rejected
+  {"status-enquiry-rsp",             30}, // Response to STATUS ENQUIRY
+  {"normal",                         31}, // Normal, unspecified
+  {"congestion",                     34}, // No circuit/channel available
+  {"net-out-of-order",               38}, // Network out of order
+  {"noconn",                         41},
+  {"temporary-failure",              41}, // Temporary failure
+  {"congestion",                     42}, // Switching equipment congestion
+  {"switch-congestion",              42},
+  {"access-info-discarded",          43}, // Access information discarded
+  {"channel-unavailable",            44}, // Requested channel not available
+  {"noresource",                     47}, // Resource unavailable, unspecified
+  {"qos-unavailable",                49}, // Quality of service unavailable
+  {"facility-not-subscribed",        50}, // Requested facility not subscribed
+  {"forbidden-in",                   55}, // Incoming call barred within CUG
+  {"bearer-cap-not-auth",            57}, // Bearer capability not authorized
+  {"bearer-cap-not-available",       58}, // Bearer capability not presently available
+  {"nomedia",                        58},
+  {"service-unavailable",            63}, // Service or option not available
+  {"bearer-cap-not-implemented",     65}, // Bearer capability not implemented
+//TODO: {"",     68}, // ACM equal to or greater then ACMmax
+  {"restrict-bearer-cap-avail",      70}, // Only restricted digital information bearer capability is available
+  {"service-not-implemented",        79}, // Service or option not implemented, unspecified
+  {"invalid-callref",                81}, // Invalid transaction identifier value
+  {"not-subscribed",                 87}, // User not member of CUG
+  {"incompatible-dest",              88}, // Incompatible destination
+  {"invalid-transit-net",            91}, // Invalid transit network selection
+  {"invalid-message",                95}, // Invalid message, unspecified
+  {"invalid-ie",                     96}, // Invalid information element contents
+  {"unknown-message",                97}, // Message type non-existent or not implemented
+  {"wrong-state-message",            98}, // Message not compatible with call state
+  {"unknown-ie",                     99}, // Information element non-existent or not implemented
+  {"conditional-ie",                100}, // Conditional IE error
+  {"wrong-proto-message",           101}, // Message not compatible with protocol state
+  {"timeout",                       102}, // Recovery on timer expiry
+  {"protocol-error",                111}, // Protocol error, unspecified
+  {"interworking",                  127}, // Interworking, unspecified
+  {0,0}
 };
 
 // safely retrieve a global string
@@ -768,6 +971,32 @@ static inline const String* getIdentTIMSI(const XmlElement& xml, bool& isTMSI, b
     if (tmsi)
 	return *tmsi ? tmsi : 0;
     return *imsi ? imsi : 0;
+}
+
+static inline void getCCCause(String& dest, const XmlElement& xml)
+{
+    // TODO: check it when codec will be implemented
+    dest = xml.childText(s_cause);
+}
+
+static inline XmlElement* buildCCCause(const char* cause)
+{
+    // TODO: check it when codec will be implemented
+    if (TelEngine::null(cause))
+	cause = "normal";
+    return new XmlElement(s_cause,cause);
+}
+
+static inline void getCCCallState(String& dest, const XmlElement& xml)
+{
+    // TODO: check it when codec will be implemented
+    dest = xml.childText(s_ccCallState);
+}
+
+static inline XmlElement* buildCCCallState(int stat)
+{
+    // TODO: check it when codec will be implemented
+    return new XmlElement(s_ccCallState,String(stat));
 }
 
 
@@ -1285,8 +1514,14 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 	YBTSMessage m(YBTS::SigConnRelease,0,connId);
 	send(m);
     }
+    RefPointer<YBTSChan> chan;
+    __plugin.findChan(connId,chan);
+    if (chan) {
+	chan->connReleased();
+	chan = 0;
+    }
+    __plugin.removeTerminatedCall(connId);
     // TODO:
-    // Drop chan
     // Drop pending location update
     Debug(this,DebugStub,"dropConn() incomplete");
 }
@@ -1424,6 +1659,10 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		if (proto == YSTRING("MM")) {
 		    findConn(conn,msg.connId(),true);
 		    __plugin.mm()->handlePDU(msg,conn);
+		}
+		else if (proto == YSTRING("CC")) {
+		    findConn(conn,msg.connId(),false);
+		    __plugin.handleCC(msg,conn);
 		}
 		else
 		    Debug(this,DebugNote,"Unknown '%s' protocol in %s [%p]",
@@ -1685,6 +1924,7 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
     else if (s == YSTRING("CMServiceAbort"))
 	__plugin.signalling()->dropConn(conn,true);
     else
+	// TODO: send MM status
 	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",s.c_str(),m.name(),this);
 }
 
@@ -1940,29 +2180,290 @@ uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
 
 
 //
+// YBTSCallDesc
+//
+// Incoming
+YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular)
+    : YBTSConnIdHolder(chan->connId()),
+    m_state(Null),
+    m_incoming(true),
+    m_regular(regular),
+    m_timeout(0),
+    m_relSent(0),
+    m_chan(chan)
+{
+    for (const ObjList* o = xml.getChildren().skipNull(); o; o = o->skipNext()) {
+	XmlElement* x = static_cast<XmlChild*>(o->get())->xmlElement();
+	if (!x)
+	    continue;
+	const String& s = x->getTag();
+	if (s == s_ccCallRef)
+	    assign(x->getText());
+	else if (s == s_ccCalled)
+	    m_called = x->getText();
+    }
+}
+
+void YBTSCallDesc::proceeding()
+{
+    changeState(CallProceeding);
+    XmlElement* ch = 0;
+    XmlElement* cc = __plugin.buildCC(ch,s_ccProceeding,*this);
+    __plugin.signalling()->sendL3Conn(connId(),cc);
+}
+
+void YBTSCallDesc::connect()
+{
+    changeState(ConnectReq);
+    XmlElement* ch = 0;
+    XmlElement* cc = __plugin.buildCC(ch,s_ccConnect,*this);
+    __plugin.signalling()->sendL3Conn(connId(),cc);
+}
+
+void YBTSCallDesc::hangup()
+{
+    changeState(Disconnect);
+    XmlElement* ch = 0;
+    XmlElement* cc = __plugin.buildCC(ch,s_ccDisc,*this);
+    if (ch)
+	ch->addChildSafe(buildCCCause(reason()));
+    __plugin.signalling()->sendL3Conn(connId(),cc);
+}
+
+void YBTSCallDesc::sendStatus(const char* cause)
+{
+    XmlElement* ch = 0;
+    XmlElement* cc = __plugin.buildCC(ch,s_ccStatus,*this);
+    if (ch) {
+	ch->addChildSafe(buildCCCause(cause));
+	ch->addChildSafe(buildCCCallState(m_state));
+    }
+    __plugin.signalling()->sendL3Conn(connId(),cc);
+}
+
+void YBTSCallDesc::changeState(int newState)
+{
+    if (m_state == newState)
+	return;
+    if (m_chan)
+	Debug(m_chan,DebugInfo,"Call '%s' changed state %s -> %s [%p]",
+	    c_str(),stateName(),stateName(newState),m_chan);
+    else
+	Debug(&__plugin,DebugInfo,"Call '%s' changed state %s -> %s",
+	    c_str(),stateName(),stateName(newState));
+    m_state = newState;
+}
+
+// Send CC REL or RLC
+void YBTSCallDesc::sendGSMRel(bool rel, const String& callRef, const char* reason,
+    uint16_t connId)
+{
+    XmlElement* ch = 0;
+    XmlElement* cc = __plugin.buildCC(ch,rel ? s_ccRel : s_ccRlc,callRef);
+    if (ch)
+	ch->addChildSafe(buildCCCause(reason));
+    __plugin.signalling()->sendL3Conn(connId,cc);
+}
+
+
+//
 // YBTSChan
 //
 // Incoming
-YBTSChan::YBTSChan(YBTSMessage& msg, YBTSUE* ue)
+YBTSChan::YBTSChan(YBTSConn* conn)
     : Channel(__plugin),
-    YBTSConnIdHolder(msg.connId()),
+    YBTSConnIdHolder(conn->connId()),
     m_mutex(false,"YBTSChan"),
-    m_route(0)
+    m_conn(conn),
+    m_hungup(false),
+    m_haveTout(false),
+    m_tout(0)
 {
-    String imsi;
-    String called;
-    if (ue) {
-	imsi = ue->imsi();
-    }
-    Debug(this,DebugCall,"Incoming %s -> %s [%p]",imsi.c_str(),called.c_str(),this);
-    m_address = imsi;
-    m_route = message("call.preroute");
-    m_route->addParam("caller",imsi,false);
-    m_route->addParam("called",called,false);
+    if (!m_conn)
+	return;
+    m_address = m_conn->ue()->imsi();
+    Debug(this,DebugCall,"Incoming imsi=%s conn=%u [%p]",
+	m_address.c_str(),connId(),this);
+}
+
+// Init incoming chan. Return false to destruct the channel
+bool YBTSChan::initIncoming(const XmlElement& xml, bool regular)
+{
+    if (!m_conn)
+	return false;
+    Lock lck(driver());
+    handleSetup(xml,regular);
+    YBTSCallDesc* call = firstCall();
+    if (!call)
+	return false;
+    Message* r = message("call.preroute");
+    r->addParam("caller",m_conn->ue()->imsi(),false);
+    r->addParam("called",call->m_called,false);
+    if (!call->m_regular)
+	r->addParam("emergency",String::boolText(true));
     Message* s = message("chan.startup");
-    s->addParam("caller",imsi,false);
-    s->addParam("called",called,false);
+    s->addParam("caller",m_conn->ue()->imsi(),false);
+    s->addParam("called",call->m_called,false);
+    lck.drop();
     Engine::enqueue(s);
+    initChan();
+    startRouter(r);
+    return true;
+}
+
+// Handle CC messages
+bool YBTSChan::handleCC(const XmlElement& xml)
+{
+    const String* callRef = xml.childText(s_ccCallRef);
+    if (TelEngine::null(callRef)) {
+	Debug(this,DebugNote,"%s with empty transaction identifier [%p]",
+	    xml.tag(),this);
+	return true;
+    }
+    const String& tag = xml.getTag();
+    bool regular = (tag == s_ccSetup);
+    bool emergency = !regular && (tag == s_ccEmergency);
+    Lock lck(m_mutex);
+    ObjList* o = m_calls.find(*callRef);
+    if (!o) {
+	lck.drop();
+	if (regular || emergency) {
+	    handleSetup(xml,regular);
+	    return true;
+	}
+	return false;
+    }
+    YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
+    if (regular || emergency)
+	call->sendWrongState();
+    else if (tag == s_ccRel || tag == s_ccRlc || tag == s_ccDisc) {
+	Debug(this,DebugInfo,"Removing call '%s' [%p]",call->c_str(),this);
+	getCCCause(call->m_reason,xml);
+	String reason = call->m_reason;
+	bool final = (tag != s_ccDisc);
+	if (final) {
+	    if (tag == s_ccRel)
+		call->releaseComplete();
+	    else
+		call->changeState(YBTSCallDesc::Null);
+	}
+	else {
+	    call->release();
+	    call->setTimeout(s_t308);
+	}
+	call = static_cast<YBTSCallDesc*>(o->remove(final));
+	bool disc = (m_calls.skipNull() == 0);
+	lck.drop();
+	if (call)
+	    __plugin.addTerminatedCall(call);
+	if (disc)
+	    hangup(reason);
+    }
+    else if (tag == s_ccConnectAck) {
+	if (call->m_state == YBTSCallDesc::ConnectReq) {
+	    call->changeState(YBTSCallDesc::Active);
+	    call->m_timeout = 0;
+	}
+	else
+	    call->sendWrongState();
+    }
+    else if (tag == s_ccStatusEnq)
+	call->sendStatus("status-enquiry-rsp");
+    else if (tag == s_ccStatus) {
+	String cause, cs;
+	getCCCause(cause,xml);
+	getCCCallState(cs,xml);
+	Debug(this,(cause != "status-enquiry-rsp") ? DebugWarn : DebugAll,
+	    "Received status cause='%s' call_state='%s' [%p]",
+	    cause.c_str(),cs.c_str(),this);
+    }
+    else
+	call->sendStatus("unknown-message");
+    return true;
+}
+
+// Connection released notification
+void YBTSChan::connReleased()
+{
+    Debug(this,DebugInfo,"Connection released [%p]",this);
+    Lock lck(m_mutex);
+    m_calls.clear();
+    setReason("net-out-of-order");
+    lck.drop();
+    hangup();
+}
+
+void YBTSChan::handleSetup(const XmlElement& xml, bool regular)
+{
+    Lock lck(m_mutex);
+    YBTSCallDesc* call = new YBTSCallDesc(this,xml,regular);
+    if (call->null()) {
+	TelEngine::destruct(call);
+	Debug(this,DebugNote,"%s with empty call ref [%p]",xml.tag(),this);
+	return;
+    }
+    if (!m_calls.skipNull()) {
+	call->proceeding();
+	m_calls.append(call);
+	Debug(this,DebugInfo,"Added call '%s' [%p]",call->c_str(),this);
+	return;
+    }
+    lck.drop();
+    Debug(this,DebugNote,"Refusing subsequent call '%s' [%p]",call->c_str(),this);
+    call->releaseComplete();
+    TelEngine::destruct(call);
+}
+
+void YBTSChan::hangup(const char* reason, bool final)
+{
+    ObjList calls;
+    Lock lck(m_mutex);
+    setReason(reason);
+    for (ObjList* o = m_calls.skipNull(); o; o = o->skipNull())
+	calls.append(o->remove(false));
+    bool done = m_hungup;
+    m_hungup = true;
+    String res = m_reason;
+    lck.drop();
+    for (ObjList* o = calls.skipNull(); o; o = o->skipNull()) {
+	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->remove(false));
+	call->m_reason = res;
+	if (call->m_state == YBTSCallDesc::Active) {
+	    call->hangup();
+	    call->setTimeout(s_t305);
+	}
+	else {
+	    call->release();
+	    call->setTimeout(s_t308);
+	}
+	__plugin.addTerminatedCall(call);
+    }
+    if (done)
+	return;
+    Debug(this,DebugCall,"Hangup reason='%s' [%p]",res.c_str(),this);
+    Message* m = message("chan.hangup");
+    if (res)
+	m->setParam("reason",res);
+    Engine::enqueue(m);
+    if (!final)
+	disconnect(res,parameters());
+}
+
+void YBTSChan::disconnected(bool final, const char *reason)
+{
+    Debug(this,DebugAll,"Disconnected '%s' [%p]",reason,this);
+    setReason(reason,&m_mutex);
+    Channel::disconnected(final,reason);
+}
+
+bool YBTSChan::callRouted(Message& msg)
+{
+    if (!Channel::callRouted(msg))
+	return false;
+    Lock lck(m_mutex);
+    if (!m_conn)
+	return false;
+    return true;
 }
 
 void YBTSChan::callAccept(Message& msg)
@@ -1977,12 +2478,61 @@ void YBTSChan::callAccept(Message& msg)
 void YBTSChan::callRejected(const char* error, const char* reason, const Message* msg)
 {
     Channel::callRejected(error,reason,msg);
-    // TODO: hangup
+    setReason(error,&m_mutex);
+}
+
+bool YBTSChan::msgAnswered(Message& msg)
+{
+    Channel::msgAnswered(msg);
+    Lock lck(m_mutex);
+    if (m_hungup)
+	return false;
+    YBTSCallDesc* call = firstCall();
+    if (!call)
+	return false;
+    call->connect();
+    call->setTimeout(s_t313);
+    setTout(call->m_timeout);
+    return true;
+}
+
+void YBTSChan::checkTimers(Message& msg, const Time& tmr)
+{
+    if (!m_haveTout)
+	return;
+    Lock lck(m_mutex);
+    if (!m_tout) {
+	m_haveTout = false;
+	return;
+    }
+    if (m_tout >= tmr)
+	return;
+    m_tout = 0;
+    m_haveTout = false;
+    YBTSCallDesc* call = firstCall();
+    if (call) {
+	 if (call->m_state == YBTSCallDesc::ConnectReq) {
+	    if (call->m_timeout <= tmr) {
+		Debug(this,DebugNote,"Call '%s' expired in state %s [%p]",
+		    call->c_str(),call->stateName(),this);
+		call->m_reason = "timeout";
+		call->releaseComplete();
+		m_calls.remove(call);
+		if (!m_calls.skipNull()) {
+		    lck.drop();
+		    hangup("timeout");
+		    return;
+		}
+	    }
+	}
+	setTout(call->m_timeout);
+    }
 }
 
 void YBTSChan::destroyed()
 {
-    TelEngine::destruct(m_route);
+    hangup(0,true);
+    Debug(this,DebugCall,"Destroyed [%p]",this);
     Channel::destroyed();
 }
 
@@ -2003,6 +2553,7 @@ YBTSDriver::YBTSDriver()
     m_media(0),
     m_signalling(0),
     m_mm(0),
+    m_haveCalls(false),
     m_engineStart(false),
     m_engineStop(0)
 {
@@ -2016,6 +2567,153 @@ YBTSDriver::~YBTSDriver()
     TelEngine::destruct(m_media);
     TelEngine::destruct(m_signalling);
     TelEngine::destruct(m_mm);
+}
+
+XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* tag, const char* callRef)
+{
+    XmlElement* mm = buildCC();
+    ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(tag)));
+    if (ch)
+	ch->addChildSafe(new XmlElement(s_ccCallRef,callRef));
+    return mm;
+}
+
+// Handle call control messages
+void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
+{
+    XmlElement* xml = m.xml() ? m.xml()->findFirstChild() : 0;
+    if (!xml) {
+	Debug(this,DebugNote,"%s with empty xml [%p]",m.name(),this);
+	return;
+    }
+    if (conn) {
+	RefPointer<YBTSChan> chan;
+	findChan(conn->connId(),chan);
+	if (chan && chan->handleCC(*xml))
+	    return;
+    }
+    bool regular = (xml->getTag() == s_ccSetup);
+    bool emergency = !regular && (xml->getTag() == s_ccEmergency);
+    if (regular || emergency) {
+	if (conn && conn->ue()) {
+	    if (canAccept()) {
+		YBTSChan* chan = new YBTSChan(conn);
+		if (!chan->initIncoming(*xml,regular))
+		    TelEngine::destruct(chan);
+		return;
+	    }
+	    Debug(this,DebugNote,"Refusing new GSM call, full or exiting");
+	}
+	else if (!conn)
+	    Debug(this,DebugNote,"Refusing new GSM call, no connection");
+	else
+	    Debug(this,DebugNote,
+		"Refusing new GSM call, no user associated with connection %u",
+		conn->connId());
+	const String* callRef = xml->childText(s_ccCallRef);
+	if (!TelEngine::null(callRef))
+	    YBTSCallDesc::sendGSMRel(false,*callRef,"noconn",m.connId());
+	return;
+    }
+    const String* callRef = xml->childText(s_ccCallRef);
+    if (TelEngine::null(callRef))
+	return;
+    bool rlc = (xml->getTag() == s_ccRlc);
+    Lock lck(this);
+    // Handle pending calls
+    for (ObjList* o = m_terminatedCalls.skipNull(); o; o = o->skipNext()) {
+	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
+	if (*callRef != *call || call->connId() != m.connId())
+	    continue;
+	if (rlc || xml->getTag() == s_ccRel || xml->getTag() == s_ccDisc) {
+	    Debug(this,DebugNote,"Removing terminated call '%s' conn=%u",
+		call->c_str(),call->connId());
+	    if (!rlc) {
+		if (xml->getTag() == s_ccDisc &&
+		    call->m_state == YBTSCallDesc::Disconnect) {
+		    call->release();
+		    call->setTimeout(s_t308);
+		    return;
+		}
+		call->releaseComplete();
+	    }
+	    o->remove();
+	    m_haveCalls = (0 != m_terminatedCalls.skipNull());
+	}
+	else if (xml->getTag() == s_ccStatusEnq)
+	    call->sendStatus("status-enquiry-rsp");
+	else if (xml->getTag() != s_ccStatus)
+	    call->sendWrongState();
+	return;
+    }
+    if (rlc)
+	return;
+    lck.drop();
+    DDebug(this,DebugInfo,"Unhandled CC %s for callref=%s conn=%p",
+	xml->tag(),TelEngine::c_safe(callRef),conn);
+    YBTSCallDesc::sendGSMRel(false,*callRef,"invalid-callref",m.connId());
+}
+
+// Add a pending (wait termination) call
+// Send release if it must
+void YBTSDriver::addTerminatedCall(YBTSCallDesc* call)
+{
+    if (!call)
+	return;
+    call->m_chan = 0;
+    if (!call->m_timeout) {
+	Debug(this,DebugNote,"Setting terminated call '%s' conn=%u timeout to %ums",
+	    call->c_str(),call->connId(),s_t305);
+	call->setTimeout(s_t305);
+    }
+    call->m_timeout = Time::now() + 1000000;
+    m_terminatedCalls.append(call);
+    m_haveCalls = true;
+}
+
+// Check terminated calls timeout
+void YBTSDriver::checkTerminatedCalls(const Time& time)
+{
+    Lock lck(this);
+    for (ObjList* o = m_terminatedCalls.skipNull(); o;) {
+	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
+	if (call->m_timeout > time) {
+	    o = o->skipNext();
+	    continue;
+	}
+	// Disconnect: send release, start T308
+	// Release: check for resend, restart T308
+	if (call->m_state == YBTSCallDesc::Disconnect ||
+	    (call->m_state == YBTSCallDesc::Release && call->m_relSent == 1)) {
+	    call->release();
+	    call->setTimeout(s_t308);
+	    o = o->skipNext();
+	    continue;
+	}
+	Debug(this,DebugNote,"Terminated call '%s' conn=%u timed out",
+	    call->c_str(),call->connId());
+	o->remove();
+	o = o->skipNull();
+    }
+    m_haveCalls = (0 != m_terminatedCalls.skipNull());
+}
+
+// Clear terminated calls for a given connection
+void YBTSDriver::removeTerminatedCall(uint16_t connId)
+{
+    Lock lck(this);
+    for (ObjList* o = m_terminatedCalls.skipNull(); o;) {
+	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
+	if (call->connId() != connId) {
+	    o = o->skipNext();
+	    continue;
+	}
+	Debug(this,DebugInfo,"Removing terminated call '%s' conn=%u: connection released",
+	    call->c_str(),call->connId());
+	o->remove();
+	o = o->skipNull();
+    }
+    m_haveCalls = (0 != m_terminatedCalls.skipNull());
 }
 
 // Handshake done notification. Return false if state is invalid
@@ -2089,18 +2787,36 @@ void YBTSDriver::start()
 
 void YBTSDriver::stop()
 {
+    lock();
+    ListIterator iter(channels());
+    while (true) {
+	GenObject* gen = iter.get();
+	if (!gen)
+	    break;
+	RefPointer<YBTSChan> chan = static_cast<YBTSChan*>(gen);
+	if (!chan)
+	    continue;
+	unlock();
+	chan->stop();
+	chan = 0;
+	lock();
+    }
+    m_terminatedCalls.clear();
+    m_haveCalls = false;
+    unlock();
     Lock lck(m_stateMutex);
     if (state() != Idle)
 	Debug(this,DebugAll,"Stopping ...");
     m_stop = false;
     m_stopTime = 0;
     m_error = false;
-    channels().clear();
     m_signalling->stop();
     m_media->stop();
     stopPeer();
     m_log->stop();
     changeState(Idle);
+    lck.drop();
+    channels().clear();
 }
 
 bool YBTSDriver::startPeer()
@@ -2204,7 +2920,7 @@ bool YBTSDriver::handleEngineStop(Message& msg)
     return false;
 }
 
-YBTSChan* YBTSDriver::findChanConnId(uint8_t connId)
+YBTSChan* YBTSDriver::findChanConnId(uint16_t connId)
 {
     for (ObjList* o = channels().skipNull(); o ; o = o->skipNext()) {
 	YBTSChan* ch = static_cast<YBTSChan*>(o->get());
@@ -2308,6 +3024,11 @@ void YBTSDriver::initialize()
 	m_signalling = new YBTSSignalling;
 	m_mm = new YBTSMM(ybts.getIntValue("ue_hash_size",31,5));
     }
+    s_restartMs = ybts.getIntValue("restart_interval",
+	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
+    s_t305 = general.getIntValue("t305",30000,20000,60000);
+    s_t308 = general.getIntValue("t308",5000,4000,20000);
+    s_t313 = general.getIntValue("t313",5000,4000,20000);
     s_globalMutex.lock();
     YBTSLAI lai;
     const String& laiStr = general[YSTRING("lai")];
@@ -2320,8 +3041,6 @@ void YBTSDriver::initialize()
 	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
 	s_lai = lai;
     }
-    s_restartMs = ybts.getIntValue("restart_interval",
-	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
 #ifdef DEBUG
     // Allow changing some data for debug purposes
     s_peerPath = ybts.getValue("peer_path",s_peerPath);
@@ -2378,6 +3097,8 @@ bool YBTSDriver::received(Message& msg, int id)
 		    restart();
 	    }
 	}
+	if (m_haveCalls)
+	    checkTerminatedCalls(msg.msgTime());
     }
     return Driver::received(msg,id);
 }
