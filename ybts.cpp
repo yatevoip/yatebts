@@ -523,7 +523,9 @@ public:
     inline const char* reason()
 	{ return m_reason.safe("normal"); }
     void proceeding();
-    void connect();
+    void progressing(XmlElement* indicator);
+    void alert(XmlElement* indicator);
+    void connect(XmlElement* indicator);
     void hangup();
     void sendStatus(const char* cause);
     inline void sendWrongState()
@@ -537,6 +539,7 @@ public:
 	    changeState(Null);
 	    sendGSMRel(false,*this,reason(),connId());
 	}
+    void sendCC(const String& tag, XmlElement* c1 = 0, XmlElement* c2 = 0);
     void changeState(int newState);
     inline void setTimeout(unsigned int intervalMs, const Time& time = Time())
 	{ m_timeout = time + (uint64_t)intervalMs * 1000; }
@@ -597,11 +600,11 @@ protected:
     virtual bool callRouted(Message& msg);
     virtual void callAccept(Message& msg);
     virtual void callRejected(const char* error, const char* reason, const Message* msg);
+    virtual bool msgProgress(Message& msg);
+    virtual bool msgRinging(Message& msg);
     virtual bool msgAnswered(Message& msg);
     virtual void checkTimers(Message& msg, const Time& tmr);
 #if 0
-    virtual bool msgProgress(Message& msg);
-    virtual bool msgRinging(Message& msg);
     virtual bool msgTone(Message& msg, const char* tone);
     virtual bool msgText(Message& msg, const char* text);
     virtual bool msgDrop(Message& msg, const char* reason);
@@ -743,6 +746,8 @@ static const String s_cmMOCall = "mocall";
 static const String s_ccSetup = "Setup";
 static const String s_ccEmergency = "EmergencySetup";
 static const String s_ccProceeding = "CallProceeding";
+static const String s_ccProgress = "Progress";
+static const String s_ccAlerting = "Alerting";
 static const String s_ccConnect = "Connect";
 static const String s_ccConnectAck = "ConnectAck";
 static const String s_ccDisc = "Disconnect";
@@ -753,6 +758,9 @@ static const String s_ccStatus = "Status";
 static const String s_ccCallRef = "TransactionIdentifier";
 static const String s_ccCalled = "CalledPartyBCDNumber";
 static const String s_ccCallState = "CallState";
+//static const String s_ccFacility = "Facility";
+static const String s_ccProgressInd = "ProgressIndicator";
+//static const String s_ccUserUser = "UserUser";
 
 #define YBTS_MAKENAME(x) {#x, x}
 #define YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag,ptr) \
@@ -997,6 +1005,18 @@ static inline XmlElement* buildCCCallState(int stat)
 {
     // TODO: check it when codec will be implemented
     return new XmlElement(s_ccCallState,String(stat));
+}
+
+// Build Progress Indicator IE
+static inline XmlElement* buildProgressIndicator(const Message& msg,
+    bool earlyMedia = true)
+{
+    const String& s = msg[YSTRING("progress.indicator")];
+    if (s)
+	return new XmlElement(s_ccProgressInd,s);
+    if (earlyMedia && msg.getBoolValue("earlymedia"))
+	return new XmlElement(s_ccProgressInd,"inband");
+    return 0;
 }
 
 
@@ -2207,36 +2227,48 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular)
 void YBTSCallDesc::proceeding()
 {
     changeState(CallProceeding);
-    XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,s_ccProceeding,*this);
-    __plugin.signalling()->sendL3Conn(connId(),cc);
+    sendCC(s_ccProceeding);
 }
 
-void YBTSCallDesc::connect()
+void YBTSCallDesc::progressing(XmlElement* indicator)
+{
+    sendCC(s_ccProgress,indicator);
+}
+
+void YBTSCallDesc::alert(XmlElement* indicator)
+{
+    changeState(CallDelivered);
+    sendCC(s_ccAlerting,indicator);
+}
+
+void YBTSCallDesc::connect(XmlElement* indicator)
 {
     changeState(ConnectReq);
-    XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,s_ccConnect,*this);
-    __plugin.signalling()->sendL3Conn(connId(),cc);
+    sendCC(s_ccConnect,indicator);
 }
 
 void YBTSCallDesc::hangup()
 {
     changeState(Disconnect);
-    XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,s_ccDisc,*this);
-    if (ch)
-	ch->addChildSafe(buildCCCause(reason()));
-    __plugin.signalling()->sendL3Conn(connId(),cc);
+    sendCC(s_ccDisc,buildCCCause(reason()));
 }
 
 void YBTSCallDesc::sendStatus(const char* cause)
 {
+    sendCC(s_ccStatus,buildCCCause(cause),buildCCCallState(m_state));
+}
+
+void YBTSCallDesc::sendCC(const String& tag, XmlElement* c1, XmlElement* c2)
+{
     XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,s_ccStatus,*this);
+    XmlElement* cc = __plugin.buildCC(ch,tag,*this);
     if (ch) {
-	ch->addChildSafe(buildCCCause(cause));
-	ch->addChildSafe(buildCCCallState(m_state));
+	ch->addChildSafe(c1);
+	ch->addChildSafe(c2);
+    }
+    else {
+	TelEngine::destruct(c1);
+	TelEngine::destruct(c2);
     }
     __plugin.signalling()->sendL3Conn(connId(),cc);
 }
@@ -2481,6 +2513,34 @@ void YBTSChan::callRejected(const char* error, const char* reason, const Message
     setReason(error,&m_mutex);
 }
 
+bool YBTSChan::msgProgress(Message& msg)
+{
+    Channel::msgProgress(msg);
+    Lock lck(m_mutex);
+    if (m_hungup)
+	return false;
+    YBTSCallDesc* call = firstCall();
+    if (!call)
+	return false;
+    if (call->m_incoming)
+	call->progressing(buildProgressIndicator(msg));
+    return true;
+}
+
+bool YBTSChan::msgRinging(Message& msg)
+{
+    Channel::msgRinging(msg);
+    Lock lck(m_mutex);
+    if (m_hungup)
+	return false;
+    YBTSCallDesc* call = firstCall();
+    if (!call)
+	return false;
+    if (call->m_incoming && call->m_state == YBTSCallDesc::CallProceeding)
+	call->alert(buildProgressIndicator(msg));
+    return true;
+}
+
 bool YBTSChan::msgAnswered(Message& msg)
 {
     Channel::msgAnswered(msg);
@@ -2490,7 +2550,7 @@ bool YBTSChan::msgAnswered(Message& msg)
     YBTSCallDesc* call = firstCall();
     if (!call)
 	return false;
-    call->connect();
+    call->connect(buildProgressIndicator(msg,false));
     call->setTimeout(s_t313);
     setTout(call->m_timeout);
     return true;
