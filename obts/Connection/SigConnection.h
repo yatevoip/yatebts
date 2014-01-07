@@ -22,11 +22,11 @@
 #ifndef SIGCONNECTION_H
 #define SIGCONNECTION_H
 
-#include <sys/types.h>
+#include "GenConnection.h"
 
 namespace Connection {
 
-class SigConnection
+class SigConnection : public GenConnection
 {
 public:
     enum Primitive {
@@ -36,18 +36,18 @@ public:
 	SigHandshake      = 128, // Initial handshake
 	SigHeartbeat      = 255  // Idle heartbeat message
     };
-    static bool initialize(int fileDesc, unsigned char ident = 0);
-    static bool start();
-    static bool send(Primitive prim, unsigned char info = 0);
-    static bool send(Primitive prim, unsigned char info, unsigned int id);
-    static bool send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len);
+    inline SigConnection(int fileDesc = -1)
+	: GenConnection(fileDesc)
+	{ }
+    bool send(Primitive prim, unsigned char info = 0) const;
+    bool send(Primitive prim, unsigned char info, unsigned int id) const;
+    bool send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len) const;
 private:
-    static bool send(const void* buffer, size_t len);
-    static void process(Primitive prim, unsigned char info);
-    static void process(Primitive prim, unsigned char info, const unsigned char* data, size_t len);
-    static void process(Primitive prim, unsigned char info, unsigned int id);
-    static void process(Primitive prim, unsigned char info, unsigned int id, const unsigned char* data, size_t len);
-    static void* run(void*);
+    virtual void process(const unsigned char* data, size_t len);
+    void process(Primitive prim, unsigned char info);
+    void process(Primitive prim, unsigned char info, const unsigned char* data, size_t len);
+    void process(Primitive prim, unsigned char info, unsigned int id);
+    void process(Primitive prim, unsigned char info, unsigned int id, const unsigned char* data, size_t len);
 };
 
 }; // namespace Connection

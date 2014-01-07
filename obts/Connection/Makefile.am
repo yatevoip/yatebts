@@ -25,13 +25,15 @@ AM_CXXFLAGS = -Wall
 
 noinst_LTLIBRARIES = libconnection.la
 
-libconn_la_SOURCES = \
+libconnection_la_SOURCES = \
+	GenConnection.cpp \
 	SigConnection.cpp \
 	MediaConnection.cpp \
 	ConnectionMap.cpp
 
 
 noinst_HEADERS = \
+	GenConnection.h \
 	SigConnection.h \
 	MediaConnection.h \
 	ConnectionMap.h
