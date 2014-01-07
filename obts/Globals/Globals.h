@@ -32,6 +32,9 @@
 #include <SubscriberRegistry.h>
 #include <TRXManager.h>
 #include <Reporting.h>
+#include <SigConnection.h>
+#include <MediaConnection.h>
+#include <ConnectionMap.h>
 
 
 /** Date-and-time string, defined in OpenBTS.cpp. */
@@ -68,6 +71,11 @@ extern TransceiverManager gTRX;
 void gResetWatchdog();
 size_t gWatchdogRemaining();
 bool gWatchdogExpired();
+
+/** Connections to YBTS */
+extern Connection::SigConnection gSigConn;
+extern Connection::MediaConnection gMediaConn;
+extern Connection::ConnectionMap gConnMap;
 
 extern ReportingTable gReports;
 #endif

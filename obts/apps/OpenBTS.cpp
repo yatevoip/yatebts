@@ -112,6 +112,10 @@ Peering::PeerInterface gPeerInterface;
 /** The global neighbor table. */
 Peering::NeighborTable gNeighborTable;
 
+/** Connections to YBTS */
+Connection::SigConnection gSigConn(STDERR_FILENO + 5);
+Connection::MediaConnection gMediaConn(STDERR_FILENO + 6);
+Connection::ConnectionMap gConnMap;
 
 /** Define a function to call any time the configuration database changes. */
 void purgeConfig(void*,int,char const*, char const*, sqlite3_int64)

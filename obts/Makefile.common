@@ -22,6 +22,7 @@ AM_CPPFLAGS = $(STD_DEFINES_AND_INCLUDES) $(USB_INCLUDES) $(WITH_INCLUDES) $(OPE
 AM_CXXFLAGS = -Wall -pthread -ldl $(OPENBTS_CXXFLAGS)
 
 COMMON_INCLUDEDIR = $(top_srcdir)/CommonLibs
+CONN_INCLUDEDIR = $(top_srcdir)/Connection
 CONTROL_INCLUDEDIR = $(top_srcdir)/Control
 GSM_INCLUDEDIR = $(top_srcdir)/GSM
 GPRS_INCLUDEDIR = $(top_srcdir)/GPRS
@@ -41,6 +42,7 @@ STD_DEFINES_AND_INCLUDES = \
 	$(SVNDEV) \
 	$(ACTIVEFEATURES) \
 	-I$(COMMON_INCLUDEDIR) \
+	-I$(CONN_INCLUDEDIR) \
 	-I$(CONTROL_INCLUDEDIR) \
 	-I$(GSM_INCLUDEDIR) \
 	-I$(GPRS_INCLUDEDIR) \
@@ -56,6 +58,7 @@ STD_DEFINES_AND_INCLUDES = \
 
 # These macros are referenced in apps/Makefile.am, which must be changed in sync with these.
 COMMON_LA = $(top_builddir)/CommonLibs/libcommon.la
+CONN_LA = $(top_builddir)/Connection/libconnection.la
 GSM_LA = $(top_builddir)/GSM/libGSM.la
 GPRS_LA = $(top_builddir)/GPRS/libGPRS.la
 SGSNGGSN_LA = $(top_builddir)/SGSNGGSN/libSGSNGGSN.la

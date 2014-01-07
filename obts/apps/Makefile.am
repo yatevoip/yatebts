@@ -44,6 +44,7 @@ ourlibs = \
 	$(TRX_LA) \
 	$(GLOBALS_LA) \
 	$(CONTROL_LA) \
+	$(CONN_LA) \
 	$(SR_LA) \
 	$(COMMON_LA) \
 	$(SQLITE_LA) \
