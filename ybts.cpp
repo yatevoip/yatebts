@@ -43,7 +43,9 @@ namespace { // anonymous
 // Handshake interval (timeout)
 #define YBTS_HK_INTERVAL_DEF 60000
 // Heartbeat interval
-#define YBTS_HB_INTERVAL_DEF 60000
+#define YBTS_HB_INTERVAL_DEF 30000
+// Heartbeat timeout
+#define YBTS_HB_TIMEOUT_DEF 60000
 // Restart time
 #define YBTS_RESTART_DEF 120000
 #define YBTS_RESTART_MIN 30000
@@ -381,11 +383,11 @@ protected:
 	    }
 	}
     inline void setToutHandshake(uint64_t timeUs = Time::now())
-	{ setTimer(m_timeout,"Timeout",m_hkIntervalMs,timeUs); }
+	{ setTimer(m_timeout,"Timeout handshake",m_hkIntervalMs,timeUs); }
     inline void setToutHeartbeat(uint64_t timeUs = Time::now())
-	{ setTimer(m_timeout,"Timeout",m_hbIntervalMs,timeUs); }
+	{ setTimer(m_timeout,"Timeout heartbeart",m_hbTimeoutMs,timeUs); }
     inline void setHeartbeatTime(uint64_t timeUs = Time::now())
-	{ setTimer(m_hbTime,"Heartbeat",m_hbIntervalMs,timeUs); }
+	{ setTimer(m_hbTime,"Heartbeat interval",m_hbIntervalMs,timeUs); }
     inline void resetHeartbeatTime()
 	{ setTimer(m_hbTime,"Heartbeat",0,0); }
 
@@ -402,6 +404,7 @@ protected:
     uint64_t m_hbTime;
     unsigned int m_hkIntervalMs;         // Time (in miliseconds) to wait for handshake
     unsigned int m_hbIntervalMs;         // Heartbeat interval in miliseconds
+    unsigned int m_hbTimeoutMs;          // Heartbeat timeout in miliseconds
 };
 
 class YBTSMedia : public GenObject, public DebugEnabler, public Mutex,
@@ -1444,7 +1447,8 @@ YBTSSignalling::YBTSSignalling()
     m_timeout(0),
     m_hbTime(0),
     m_hkIntervalMs(YBTS_HK_INTERVAL_DEF),
-    m_hbIntervalMs(YBTS_HB_INTERVAL_DEF)
+    m_hbIntervalMs(YBTS_HB_INTERVAL_DEF),
+    m_hbTimeoutMs(YBTS_HB_TIMEOUT_DEF)
 {
     m_name = "ybts-signalling";
     debugName(m_name);
@@ -1469,12 +1473,12 @@ int YBTSSignalling::checkTimers(const Time& time)
     }
     if (m_hbTime && m_hbTime <= time) {
 	static uint8_t buf[2] = {YBTS::SigHeartbeat,0};
-	Debug(this,DebugAll,"Sending heartbeat [%p]",this);
+	DDebug(this,DebugAll,"Sending heartbeat [%p]",this);
 	lck.drop();
 	bool ok = m_transport.send(buf,2);
 	lck.acquire(this);
 	if (ok)
-	    setToutHeartbeat(time);
+	    setHeartbeatTime(time);
 	else if (m_state == Running) {
 	    changeState(Closing);
 	    return Error;
@@ -1568,7 +1572,7 @@ void YBTSSignalling::processLoop()
 		if (m->primitive() != YBTS::SigHeartbeat)
 		    res = handlePDU(*m);
 		else
-		    XDebug(this,DebugAll,"Received heartbeat [%p]",this);
+		    DDebug(this,DebugAll,"Received heartbeat [%p]",this);
 		TelEngine::destruct(m);
 		if (res) {
 		    if (res == FatalError)
@@ -1608,6 +1612,7 @@ void YBTSSignalling::init(Configuration& cfg)
     s << "\r\nprint_msg_data=" <<
 	(m_printMsgData > 0 ? "verbose" : String::boolText(m_printMsgData < 0));
     s << "\r\nhandshake_timeout=" << m_hkIntervalMs;
+    s << "\r\nheartbeat_timeout=" << m_hbTimeoutMs;
     s << "\r\nheartbeat_interval=" << m_hbIntervalMs;
 
     Debug(this,DebugAll,"Initialized [%p]\r\n-----%s\r\n-----",this,s.c_str());
