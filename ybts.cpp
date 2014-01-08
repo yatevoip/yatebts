@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
 
@@ -721,7 +722,9 @@ INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
 static YBTSLAI s_lai;
 static String s_format = "gsm";          // Format to use
-static String s_peerPath = "path_to_app_to_run"; // Peer path
+static String s_peerCmd;                 // Peer program command path
+static String s_peerArg;                 // Peer program argument
+static String s_peerDir;                 // Peer program working directory
 static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
@@ -2840,7 +2843,7 @@ void YBTSDriver::start()
 	return;
     }
     setRestart(1);
-    Alarm(this,"system",DebugWarn,"Failed to start");
+    Alarm(this,"system",DebugWarn,"Failed to start the BTS");
     lck.drop();
     stop();
 }
@@ -2881,13 +2884,15 @@ void YBTSDriver::stop()
 
 bool YBTSDriver::startPeer()
 {
-    String cmd;
-    getGlobalStr(cmd,s_peerPath);
+    String cmd,arg,dir;
+    getGlobalStr(cmd,s_peerCmd);
+    getGlobalStr(arg,s_peerArg);
+    getGlobalStr(dir,s_peerDir);
     if (!cmd) {
 	Alarm(this,"config",DebugConf,"Empty peer path");
 	return false;
     }
-    Debug(this,DebugAll,"Starting peer");
+    Debug(this,DebugAll,"Starting peer '%s' '%s'",cmd.c_str(),arg.c_str());
     Socket s[YBTS::FDCount];
     s[YBTS::FDLog].attach(m_log->transport().detachRemote());
     s[YBTS::FDSignalling].attach(m_signalling->transport().detachRemote());
@@ -2913,17 +2918,27 @@ bool YBTSDriver::startPeer()
     ::signal(SIGHUP,SIG_DFL);
     // Attach socket handles
     int i = STDERR_FILENO + 1;
-    for (int j = 0; j < YBTS::FDCount; j++, i++)
-	if (::dup2(s[j].handle(),i) == -1) {
+    for (int j = 0; j < YBTS::FDCount; j++, i++) {
+	int h = s[j].handle();
+	if (h < 0)
+	    ::fprintf(stderr,"Socket handle at index %d not used, weird...\n",j);
+	else if (h < i)
+	    ::fprintf(stderr,"Oops! Overlapped socket handle old=%d new=%d\n",h,i);
+	else if ((h != i) && ::dup2(h,i) == -1) {
 	    ::fprintf(stderr,"Failed to set socket handle at index %d: %d %s\n",
 		j,errno,strerror(errno));
 	    ::close(i);
 	}
+    }
     // Close all other handles
     for (; i < 1024; i++)
 	::close(i);
+    // Change directory if asked
+    if (dir && ::chdir(dir))
+    ::fprintf(stderr,"Failed to change directory to '%s': %d %s\n",
+	dir.c_str(),errno,strerror(errno));
     // Start
-    ::execl(cmd.c_str(),cmd.c_str(),(const char*)NULL);
+    ::execl(cmd.c_str(),cmd.c_str(),arg.c_str(),(const char*)0);
     ::fprintf(stderr,"Failed to execute '%s': %d %s\n",
 	cmd.c_str(),errno,strerror(errno));
     // Shit happened. Die !!!
@@ -3070,7 +3085,7 @@ void YBTSDriver::initialize()
 {
     static bool s_first = true;
     Output("Initializing module YBTS");
-    Configuration cfg(Engine::configFile("bts"));
+    Configuration cfg(Engine::configFile("ybts"));
     const NamedList& general = safeSect(cfg,"general");
     const NamedList& ybts = safeSect(cfg,"ybts");
     if (s_first) {
@@ -3101,10 +3116,12 @@ void YBTSDriver::initialize()
 	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
 	s_lai = lai;
     }
-#ifdef DEBUG
-    // Allow changing some data for debug purposes
-    s_peerPath = ybts.getValue("peer_path",s_peerPath);
-#endif
+    s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/bts/obts");
+    s_peerArg = ybts.getValue("peer_arg");
+    s_peerDir = ybts.getValue("peer_dir");
+    Engine::runParams().replaceParams(s_peerCmd);
+    Engine::runParams().replaceParams(s_peerArg);
+    Engine::runParams().replaceParams(s_peerDir);
     s_globalMutex.unlock();
     m_signalling->init(cfg);
     startIdle();
