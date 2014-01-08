@@ -22,10 +22,26 @@
 #ifndef CONNECTIONMAP_H
 #define CONNECTIONMAP_H
 
+#include <Threads.h>
+
+namespace GSM {
+    class LogicalChannel;
+};
+
 namespace Connection {
 
-class ConnectionMap
+class ConnectionMap : public Mutex
 {
+public:
+    ConnectionMap();
+    int map(GSM::LogicalChannel* chan);
+    void unmap(unsigned int id);
+    void unmap(const GSM::LogicalChannel* chan);
+    int find(const GSM::LogicalChannel* chan);
+    GSM::LogicalChannel* find(unsigned int id);
+private:
+    unsigned int mIndex;
+    GSM::LogicalChannel* mMap[65536];
 };
 
 }; // namespace Connection

@@ -25,6 +25,7 @@
 #include "GenConnection.h"
 
 #include <Timeval.h>
+#include <GSMTransfer.h>
 
 namespace Connection {
 
@@ -44,6 +45,7 @@ public:
     bool send(Primitive prim, unsigned char info = 0);
     bool send(Primitive prim, unsigned char info, unsigned int id);
     bool send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len);
+    bool send(unsigned char sapi, unsigned int id, const GSM::L3Frame* frame);
 protected:
     virtual bool send(const void* buffer, size_t len);
     virtual void process(const unsigned char* data, size_t len);

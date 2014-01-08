@@ -20,12 +20,17 @@
  */
 
 #include "SigConnection.h"
+#include "ConnectionMap.h"
 
 #include <Logger.h>
+#include <Globals.h>
+#include <GSMLogicalChannel.h>
+#include <GSMTransfer.h>
 #include <assert.h>
 #include <string.h>
 
 using namespace Connection;
+using namespace GSM;
 
 #define PROTO_VER 1
 #define HB_MAXTIME 30000
@@ -67,6 +72,17 @@ bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id, co
     buf[3] = (unsigned char)id;
     ::memcpy(buf + 4,data,len);
     return send(buf,len + 4);
+}
+
+bool SigConnection::send(unsigned char sapi, unsigned int id, const GSM::L3Frame* frame)
+{
+    assert(frame);
+    if (!valid())
+	return false;
+    unsigned int len = frame->length();
+    unsigned char buf[len];
+    frame->pack(buf);
+    return send(SigL3Message,sapi,id,buf,len);
 }
 
 bool SigConnection::send(const void* buffer, size_t len)
@@ -112,7 +128,15 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id,
 {
     switch (prim) {
 	case SigL3Message:
-	    // TODO
+	    {
+		LogicalChannel* ch = gConnMap.find(id);
+		if (ch) {
+		    L3Frame frame((const char*)data,len);
+		    ch->send(frame,info & 0x07);
+		}
+		else
+		    LOG(ERR) << "received L3 frame for unmapped id " << id;
+	    }
 	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id << " and data";

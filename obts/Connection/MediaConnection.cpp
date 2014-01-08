@@ -20,10 +20,14 @@
  */
 
 #include "MediaConnection.h"
+#include "ConnectionMap.h"
 
 #include <Logger.h>
+#include <Globals.h>
+#include <GSMLogicalChannel.h>
 
 using namespace Connection;
+using namespace GSM;
 
 bool MediaConnection::send(unsigned int id, const void* data, size_t len)
 {
@@ -49,7 +53,15 @@ void MediaConnection::process(const unsigned char* data, size_t len)
 
 void MediaConnection::process(unsigned int id, const unsigned char* data, size_t len)
 {
-    // TODO
+    LogicalChannel* ch = gConnMap.find(id);
+    if (ch) {
+	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(ch);
+	// TODO: check frame size and blocking operation
+	if (tch)
+	    tch->sendTCH(data);
+    }
+    else
+	LOG(ERR) << "received media frame for unmapped id " << id;
 }
 
 /* vi: set ts=8 sw=4 sts=4 noet: */

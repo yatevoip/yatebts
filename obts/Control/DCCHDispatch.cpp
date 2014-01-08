@@ -38,6 +38,7 @@
 using namespace std;
 using namespace GSM;
 using namespace Control;
+using namespace Connection;
 
 
 
@@ -113,6 +114,57 @@ void DCCHDispatchMessage(const L3Message* msg, LogicalChannel* DCCH)
 
 
 
+static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
+{
+	LOG(INFO) << "starting dispatch loop for connection " << id;
+	unsigned timeout_ms = chan->N200() * T200ms;
+	while (gSigConn.valid() && (gConnMap.find(id) == chan)) {
+		L3Frame* frame = chan->recv(timeout_ms,0); // What about different SAPI?
+		if (!frame)
+			continue;
+		gSigConn.send(0,id,frame);
+		delete frame;
+	}
+	LOG(INFO) << "ending dispatch loop for connection " << id;
+}
+
+static bool connDispatchEstablish(LogicalChannel* chan)
+{
+	if (!gSigConn.valid())
+		return false;
+	unsigned timeout_ms = chan->N200() * T200ms;
+	L3Frame* frame = chan->recv(timeout_ms,0); // What about different SAPI?
+	if (frame) {
+		LOG(DEBUG) << "received " << *frame;
+		Primitive primitive = frame->primitive();
+		if (primitive != DATA) {
+			LOG(ERR) << "unexpected primitive " << primitive;
+			delete frame;
+			throw UnexpectedPrimitive();
+		}
+		if (frame->PD() == GSM::L3RadioResourcePD) {
+			L3RRMessage* req = GSM::parseL3RR(*frame);
+			delete frame;
+			LOG(INFO) << *chan << " received RR establishing message " << *req;
+			DCCHDispatchRR(req,chan);
+			delete req;
+		}
+		else {
+			int id = gConnMap.map(chan);
+			if (id >= 0) {
+				if (gSigConn.send(0,id,frame))
+					connDispatchLoop(chan,id);
+				gConnMap.unmap(id);
+			}
+			delete frame;
+		}
+	}
+	else
+		LOG(NOTICE) << "L3 read timeout";
+
+	return true;
+}
+
 
 
 /** Example of a closed-loop, persistent-thread control function for the DCCH. */
@@ -133,6 +185,8 @@ void Control::DCCHDispatcher(LogicalChannel *DCCH)
 				case ESTABLISH: {
 					// Pull the first message and dispatch a new transaction.
 					gReports.incr("OpenBTS.GSM.RR.ChannelSiezed");
+					if (connDispatchEstablish(DCCH))
+						break;
 					const L3Message *message = getMessage(DCCH);
 					LOG(INFO) << *DCCH << " received establishing messaage " << *message;
 					DCCHDispatchMessage(message,DCCH);
