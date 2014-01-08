@@ -37,6 +37,9 @@
 using namespace TelEngine;
 namespace { // anonymous
 
+#define BTS_DIR "bts"
+#define BTS_CMD "obts"
+
 // Handshake interval (timeout)
 #define YBTS_HK_INTERVAL_DEF 60000
 // Heartbeat interval
@@ -2921,14 +2924,17 @@ bool YBTSDriver::startPeer()
     for (int j = 0; j < YBTS::FDCount; j++, i++) {
 	int h = s[j].handle();
 	if (h < 0)
-	    ::fprintf(stderr,"Socket handle at index %d not used, weird...\n",j);
+	    ::fprintf(stderr,"Socket handle at index %d (fd=%d) not used, weird...\n",j,i);
 	else if (h < i)
 	    ::fprintf(stderr,"Oops! Overlapped socket handle old=%d new=%d\n",h,i);
-	else if ((h != i) && ::dup2(h,i) == -1) {
+	else if (h == i)
+	    continue;
+	else if (::dup2(h,i) < 0)
 	    ::fprintf(stderr,"Failed to set socket handle at index %d: %d %s\n",
 		j,errno,strerror(errno));
-	    ::close(i);
-	}
+	else
+	    continue;
+	::close(i);
     }
     // Close all other handles
     for (; i < 1024; i++)
@@ -3116,9 +3122,9 @@ void YBTSDriver::initialize()
 	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
 	s_lai = lai;
     }
-    s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/bts/obts");
+    s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
     s_peerArg = ybts.getValue("peer_arg");
-    s_peerDir = ybts.getValue("peer_dir");
+    s_peerDir = ybts.getValue("peer_dir","${modulepath}/" BTS_DIR);
     Engine::runParams().replaceParams(s_peerCmd);
     Engine::runParams().replaceParams(s_peerArg);
     Engine::runParams().replaceParams(s_peerDir);
