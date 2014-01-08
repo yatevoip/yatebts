@@ -37,6 +37,11 @@ using namespace Connection;
 
 GenConnection::~GenConnection()
 {
+    clear();
+}
+
+void GenConnection::clear()
+{
     int fd = mSockFd;
     mSockFd = -1;
     if (fd >= 0)
@@ -65,14 +70,13 @@ bool GenConnection::start()
 	}
     };
 
-    if (mSockFd < 0)
+    if (!valid())
 	return false;
     mRecvThread.start(Local::runFunc,this);
-    mRecvThread.join();
     return true;
 }
 
-bool GenConnection::send(const void* buffer, size_t len) const
+bool GenConnection::send(const void* buffer, size_t len)
 {
     int fd = mSockFd;
     return (fd >= 0) && (::send(fd,buffer,len,0) == (int)len);
@@ -85,7 +89,8 @@ void GenConnection::run()
     fd_set fSet;
     FD_ZERO(&fSet);
     LOG(INFO) << "starting thread loop";
-    while (mSockFd >= 0) {
+    started();
+    while (valid()) {
 	pthread_testcancel();
 	int fd = mSockFd;
 	if (fd < 0)
@@ -93,9 +98,11 @@ void GenConnection::run()
 	tOut.tv_sec = 0;
 	tOut.tv_usec = SLEEP_US;
 	FD_SET(fd,&fSet);
-	if (::select(fd + 1,&fSet,0,0,&tOut)) {
-	    if (errno != EAGAIN && errno != EINTR)
+	if (::select(fd + 1,&fSet,0,0,&tOut) < 0) {
+	    if (errno != EAGAIN && errno != EINTR) {
+		LOG(ERR) << "select() error " << errno << ": " << strerror(errno);
 		break;
+	    }
 	    ::usleep(SLEEP_US);
 	    idle();
 	    continue;
@@ -105,14 +112,22 @@ void GenConnection::run()
 	    continue;
 	}
 	ssize_t len = ::recv(fd,buf,BUF_LEN,MSG_DONTWAIT);
-	if (!len)
+	if (!len) {
+	    LOG(DEBUG) << "received EOF on socket";
 	    break;
+	}
 	if (len > 0)
 	    process(buf,len);
-	else if (errno != EAGAIN && errno != EINTR)
+	else if (errno != EAGAIN && errno != EINTR) {
+	    LOG(ERR) << "recv() error " << errno << ": " << strerror(errno);
 	    break;
+	}
     }
     LOG(INFO) << "exited thread loop";
+}
+
+void GenConnection::started()
+{
 }
 
 void GenConnection::idle()

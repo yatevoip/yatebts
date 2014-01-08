@@ -24,6 +24,8 @@
 
 #include "GenConnection.h"
 
+#include <Timeval.h>
+
 namespace Connection {
 
 class SigConnection : public GenConnection
@@ -37,17 +39,23 @@ public:
 	SigHeartbeat      = 255  // Idle heartbeat message
     };
     inline SigConnection(int fileDesc = -1)
-	: GenConnection(fileDesc)
+	: GenConnection(fileDesc), mHbRecv(0,0), mHbSend(0,0)
 	{ }
-    bool send(Primitive prim, unsigned char info = 0) const;
-    bool send(Primitive prim, unsigned char info, unsigned int id) const;
-    bool send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len) const;
-private:
+    bool send(Primitive prim, unsigned char info = 0);
+    bool send(Primitive prim, unsigned char info, unsigned int id);
+    bool send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len);
+protected:
+    virtual bool send(const void* buffer, size_t len);
     virtual void process(const unsigned char* data, size_t len);
+    virtual void started();
+    virtual void idle();
+private:
     void process(Primitive prim, unsigned char info);
     void process(Primitive prim, unsigned char info, const unsigned char* data, size_t len);
     void process(Primitive prim, unsigned char info, unsigned int id);
     void process(Primitive prim, unsigned char info, unsigned int id, const unsigned char* data, size_t len);
+    Timeval mHbRecv;
+    Timeval mHbSend;
 };
 
 }; // namespace Connection

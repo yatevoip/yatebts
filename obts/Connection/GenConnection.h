@@ -34,14 +34,16 @@ public:
     inline bool valid() const
 	{ return mSockFd >= 0; }
     bool start();
+    void clear();
 protected:
     inline GenConnection(int fileDesc = -1)
 	: mSockFd(-1)
 	{ initialize(fileDesc); }
     virtual ~GenConnection();
     bool initialize(int fileDesc);
-    bool send(const void* buffer, size_t len) const;
+    virtual bool send(const void* buffer, size_t len);
     virtual void process(const unsigned char* data, size_t len) = 0;
+    virtual void started();
     virtual void idle();
     virtual void run();
     int mSockFd;

@@ -25,7 +25,7 @@
 
 using namespace Connection;
 
-bool MediaConnection::send(unsigned int id, const void* data, size_t len) const
+bool MediaConnection::send(unsigned int id, const void* data, size_t len)
 {
     if (!valid())
 	return false;
@@ -43,6 +43,7 @@ void MediaConnection::process(const unsigned char* data, size_t len)
 	return;
     }
     unsigned int id = (((unsigned int)data[0]) << 8) | data[1];
+    LOG(DEBUG) << "received message id " << id << " length " << len;
     process(id,data + 2,len - 2);
 }
 

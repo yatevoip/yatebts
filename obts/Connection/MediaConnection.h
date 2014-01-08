@@ -32,7 +32,7 @@ public:
     inline MediaConnection(int fileDesc = -1)
 	: GenConnection(fileDesc)
 	{ }
-    bool send(unsigned int id, const void* data, size_t len) const;
+    bool send(unsigned int id, const void* data, size_t len);
 private:
     virtual void process(const unsigned char* data, size_t len);
     void process(unsigned int id, const unsigned char* data, size_t len);

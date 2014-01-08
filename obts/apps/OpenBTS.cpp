@@ -113,8 +113,8 @@ Peering::PeerInterface gPeerInterface;
 Peering::NeighborTable gNeighborTable;
 
 /** Connections to YBTS */
-Connection::SigConnection gSigConn(STDERR_FILENO + 5);
-Connection::MediaConnection gMediaConn(STDERR_FILENO + 6);
+Connection::SigConnection gSigConn(STDERR_FILENO + 4);
+Connection::MediaConnection gMediaConn(STDERR_FILENO + 5);
 Connection::ConnectionMap gConnMap;
 
 /** Define a function to call any time the configuration database changes. */
@@ -385,6 +385,17 @@ int main(int argc, char *argv[])
 	gBTS.init();
 	gSubscriberRegistry.init();
 	gParser.addCommands();
+
+	if (gSigConn.valid() && gMediaConn.valid()) {
+		COUT("\nConnected to YBTS\n");
+		gSigConn.start();
+		gMediaConn.start();
+	}
+	else {
+		COUT("\nNot started by YBTS\n");
+		gSigConn.clear();
+		gMediaConn.clear();
+	}
 
 	COUT("\nStarting the system...");
 

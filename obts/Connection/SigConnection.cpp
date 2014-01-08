@@ -28,8 +28,10 @@
 using namespace Connection;
 
 #define PROTO_VER 1
+#define HB_MAXTIME 30000
+#define HB_TIMEOUT 60000
 
-bool SigConnection::send(Primitive prim, unsigned char info) const
+bool SigConnection::send(Primitive prim, unsigned char info)
 {
     assert((prim & 0x80) != 0);
     if (!valid())
@@ -37,10 +39,10 @@ bool SigConnection::send(Primitive prim, unsigned char info) const
     unsigned char buf[2];
     buf[0] = (unsigned char)prim;
     buf[1] = info;
-    return GenConnection::send(buf,2);
+    return send(buf,2);
 }
 
-bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id) const
+bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id)
 {
     assert((prim & 0x80) == 0);
     if (!valid())
@@ -50,10 +52,10 @@ bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id) co
     buf[1] = info;
     buf[2] = (unsigned char)(id >> 8);
     buf[3] = (unsigned char)id;
-    return GenConnection::send(buf,4);
+    return send(buf,4);
 }
 
-bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len) const
+bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len)
 {
     assert((prim & 0x80) == 0);
     if (!valid())
@@ -64,7 +66,16 @@ bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id, co
     buf[2] = (unsigned char)(id >> 8);
     buf[3] = (unsigned char)id;
     ::memcpy(buf + 4,data,len);
-    return GenConnection::send(buf,len + 4);
+    return send(buf,len + 4);
+}
+
+bool SigConnection::send(const void* buffer, size_t len)
+{
+    if (!GenConnection::send(buffer,len))
+	return false;
+    LOG(DEBUG) << "sent message primitive " << (unsigned int)((const unsigned char*)buffer)[0] << " length " << len;
+    mHbSend.future(HB_MAXTIME);
+    return true;
 }
 
 void SigConnection::process(Primitive prim, unsigned char info)
@@ -114,6 +125,8 @@ void SigConnection::process(const unsigned char* data, size_t len)
 	LOG(ERR) << "received short message of length " << len;
 	return;
     }
+    LOG(DEBUG) << "received message primitive " << (unsigned int)data[0] << " length " << len;
+    mHbRecv.future(HB_TIMEOUT);
     if (data[0] & 0x80) {
 	len -= 2;
 	if (len)
@@ -133,6 +146,24 @@ void SigConnection::process(const unsigned char* data, size_t len)
 	else
 	    process((Primitive)data[0],data[1],id);
     }
+}
+
+void SigConnection::started()
+{
+    mHbRecv.future(HB_TIMEOUT);
+    mHbSend.future(HB_MAXTIME);
+    send(SigHandshake);
+}
+
+void SigConnection::idle()
+{
+    if (mHbRecv.passed()) {
+	LOG(ALERT) << "heartbeat timed out!";
+	clear();
+	// TODO abort
+    }
+    if (mHbSend.passed() && !send(SigHeartbeat))
+	mHbSend.future(HB_MAXTIME);
 }
 
 /* vi: set ts=8 sw=4 sts=4 noet: */
