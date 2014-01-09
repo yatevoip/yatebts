@@ -133,13 +133,25 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 		L3Frame* frame = chan->recv(tOut,0); // What about different SAPI?
 		if (!frame)
 			continue;
-		if (frame->primitive() == ERROR) {
-			LOG(NOTICE) << "error reading on connection " << id;
-			delete frame;
-			break;
+		switch (frame->primitive()) {
+			case ERROR:
+				LOG(NOTICE) << "error reading on connection " << id;
+				break;
+			case DATA:
+			case UNIT_DATA:
+				gSigConn.send(0,id,frame);
+				delete frame;
+				continue;
+			case RELEASE:
+			case HARDRELEASE:
+				break;
+			default:
+				LOG(ERR) << "unexpected primitive " << frame->primitive();
+				break;
 		}
-		gSigConn.send(0,id,frame);
+		// Frame was not handled - delete it and end connection
 		delete frame;
+		break;
 	}
 	if (gConnMap.find(id) == chan)
 		gSigConn.send(SigConnection::SigConnLost,0,id);
