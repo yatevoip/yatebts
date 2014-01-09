@@ -51,6 +51,37 @@ namespace { // anonymous
 #define YBTS_RESTART_MIN 30000
 #define YBTS_RESTART_MAX 600000
 
+// Constant strings
+static const String s_message = "Message";
+static const String s_type = "type";
+static const String s_locAreaIdent = "LAI";
+static const String s_PLMNidentity = "PLMNidentity";
+static const String s_LAC = "LAC";
+static const String s_mobileIdent = "MobileIdentity";
+static const String s_imsi = "IMSI";
+static const String s_tmsi = "TMSI";
+static const String s_cause = "Cause";
+static const String s_cmServType = "CMServiceType";
+static const String s_cmMOCall = "MO-call-establishment-or-PM-connection-establishment";
+static const String s_ccSetup = "Setup";
+static const String s_ccEmergency = "EmergencySetup";
+static const String s_ccProceeding = "CallProceeding";
+static const String s_ccProgress = "Progress";
+static const String s_ccAlerting = "Alerting";
+static const String s_ccConnect = "Connect";
+static const String s_ccConnectAck = "ConnectAck";
+static const String s_ccDisc = "Disconnect";
+static const String s_ccRel = "Release";
+static const String s_ccRlc = "ReleaseComplete";
+static const String s_ccStatusEnq = "StatusEnquiry";
+static const String s_ccStatus = "Status";
+static const String s_ccCallRef = "TransactionIdentifier";
+static const String s_ccCalled = "CalledPartyBCDNumber";
+static const String s_ccCallState = "CallState";
+//static const String s_ccFacility = "Facility";
+static const String s_ccProgressInd = "ProgressIndicator";
+//static const String s_ccUserUser = "UserUser";
+
 class YBTSConnIdHolder;                  // A connection id holder
 class YBTSThread;
 class YBTSThreadOwner;
@@ -469,15 +500,18 @@ public:
     ~YBTSMM();
     inline XmlElement* buildMM()
 	{ return new XmlElement("MM"); }
-    inline XmlElement* buildMM(XmlElement*& ch, const char* tag) {
+    inline XmlElement* buildMM(XmlElement*& ch, const char* type) {
 	    XmlElement* mm = buildMM();
-	    ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(tag)));
+	    ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(s_message)));
+	    ch->setAttribute(s_type,type);
 	    return mm;
 	}
     void handlePDU(YBTSMessage& msg, YBTSConn* conn);
+    void newTMSI(String& tmsi);
 
 protected:
     void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
+    void handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleCMServiceRequest(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
     void sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t cause);
     void sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause = 0);
@@ -742,34 +776,6 @@ static unsigned int s_t305 = 30000;      // DISC sent, no inband tone available
 static unsigned int s_t308 = 5000;       // REL sent (operator specific, no default in spec)
                                          // First expire: re-send REL, second expire: release call
 static unsigned int s_t313 = 5000;       // Send Connect, expect Connect Ack, clear call on expire
-// Strings
-static const String s_locAreaIdent = "LAI";
-static const String s_MNC_MCC = "MNC_MCC";
-static const String s_LAC = "LAC";
-static const String s_mobileIdent = "MobileIdentity";
-static const String s_imsi = "IMSI";
-static const String s_tmsi = "TMSI";
-static const String s_cause = "Cause";
-static const String s_cmServType = "CMServiceType";
-static const String s_cmMOCall = "mocall";
-static const String s_ccSetup = "Setup";
-static const String s_ccEmergency = "EmergencySetup";
-static const String s_ccProceeding = "CallProceeding";
-static const String s_ccProgress = "Progress";
-static const String s_ccAlerting = "Alerting";
-static const String s_ccConnect = "Connect";
-static const String s_ccConnectAck = "ConnectAck";
-static const String s_ccDisc = "Disconnect";
-static const String s_ccRel = "Release";
-static const String s_ccRlc = "ReleaseComplete";
-static const String s_ccStatusEnq = "StatusEnquiry";
-static const String s_ccStatus = "Status";
-static const String s_ccCallRef = "TransactionIdentifier";
-static const String s_ccCalled = "CalledPartyBCDNumber";
-static const String s_ccCallState = "CallState";
-//static const String s_ccFacility = "Facility";
-static const String s_ccProgressInd = "ProgressIndicator";
-//static const String s_ccUserUser = "UserUser";
 
 #define YBTS_MAKENAME(x) {#x, x}
 #define YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag,ptr) \
@@ -1108,7 +1114,7 @@ static inline void decodeMsg(GSML3Codec& codec, uint8_t* data, unsigned int len,
 {
     unsigned int e = codec.decode(data,len,xml);
     if (e)
-	reason << "Codec error " << e;
+	reason << "Codec error " << e << " (" << lookup(e,GSML3Codec::s_errorsDict,"unknown") << ")";
 }
 
 // Parse message. Return 0 on failure
@@ -1139,6 +1145,13 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
     String reason;
     switch (m->primitive()) {
 	case YBTS::SigL3Message:
+#ifdef DEBUG
+	    {
+		String tmp;
+		tmp.hexify(data,len,' ');
+		Debug(recv,DebugAll,"L3 message: %s",tmp.c_str());
+	    }
+#endif
 	    decodeMsg(recv->codec(),data,len,m->m_xml,reason);
 	    break;
 	case YBTS::SigHandshake:
@@ -1163,7 +1176,7 @@ static inline bool encodeMsg(GSML3Codec& codec, const YBTSMessage& msg, DataBloc
 	unsigned int e = codec.encode(msg.xml(),buf);
 	if (!e)
 	    return true;
-	reason << "Codec error " << e;
+	reason << "Codec error " << e << " (" << lookup(e,GSML3Codec::s_errorsDict,"unknown") << ")";
     }
     else
 	reason = "Empty XML";
@@ -1318,7 +1331,7 @@ YBTSLAI::YBTSLAI(const XmlElement& xml)
 {
     const String* mnc_mcc = &String::empty();
     const String* lac = &String::empty();
-    getXmlChildTextAll(xml,mnc_mcc,s_MNC_MCC,lac,s_LAC);
+    getXmlChildTextAll(xml,mnc_mcc,s_PLMNidentity,lac,s_LAC);
     m_mnc_mcc = *mnc_mcc;
     m_lac = *lac;
     m_lai << m_mnc_mcc << "_" << m_lac;
@@ -1328,7 +1341,7 @@ XmlElement* YBTSLAI::build() const
 {
     XmlElement* xml = new XmlElement(s_locAreaIdent);
     if (m_mnc_mcc)
-	xml->addChildSafe(new XmlElement(s_MNC_MCC,m_mnc_mcc));
+	xml->addChildSafe(new XmlElement(s_PLMNidentity,m_mnc_mcc));
     if (m_lac)
 	xml->addChildSafe(new XmlElement(s_LAC,m_lac));
     return xml;
@@ -1940,23 +1953,43 @@ YBTSMM::~YBTSMM()
     delete[] m_ueTMSI;
 }
 
+void YBTSMM::newTMSI(String& tmsi)
+{
+    uint16_t t = ++m_tmsiIndex;
+    // TODO: use NNSF compatible TMSI allocation
+    //  bits 31-30: 11=P-TMSI else TMSI
+    //  bits 29-24: local allocation
+    //  bits 23-... (0-10 bits, 0-8 for LTE compatibility): Node Identity
+    //  bits ...-0 (14-24 bits, 16-24 for LTE compatibility): local allocation
+    uint8_t buf[4];
+    buf[0] = 0;
+    buf[1] = 0;
+    buf[2] = (uint8_t)(t >> 8);
+    buf[3] = (uint8_t)t;
+    tmsi.hexify(buf,4);
+}
+
 void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
 {
-    XmlElement* ch = m.xml() ? m.xml()->findFirstChild() : 0;
+    XmlElement* ch = m.xml() ? m.xml()->findFirstChild(&s_message) : 0;
     if (!ch) {
 	Debug(this,DebugNote,"Empty xml in %s [%p]",m.name(),this);
 	return;
     }
-    const String& s = ch->getTag();
-    if (s == YSTRING("LocationUpdatingRequest"))
+    const String* t = ch->getAttribute(s_type);
+    if (!t)
+	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
+    else if (*t == YSTRING("LocationUpdatingRequest"))
 	handleLocationUpdate(m,*ch,conn);
-    else if (s == YSTRING("CMServiceRequest"))
+    else if (*t == YSTRING("TMSIReallocationComplete"))
+	handleUpdateComplete(m,*ch,conn);
+    else if (*t == YSTRING("CMServiceRequest"))
 	handleCMServiceRequest(m,*ch,conn);
-    else if (s == YSTRING("CMServiceAbort"))
+    else if (*t == YSTRING("CMServiceAbort"))
 	__plugin.signalling()->dropConn(conn,true);
     else
 	// TODO: send MM status
-	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",s.c_str(),m.name(),this);
+	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",t->c_str(),m.name(),this);
 }
 
 // Handle location updating requests
@@ -2038,6 +2071,18 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
     conn->sendL3(mm);
 }
 
+// Handle location update (TMSI reallocation) complete
+void YBTSMM::handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
+{
+    if (!conn) {
+	Debug(this,DebugGoOn,"Rejecting %s conn=%u: no connection [%p]",
+	    xml.tag(),m.connId(),this);
+	sendLocationUpdateReject(m,0,CauseProtoError);
+	return;
+    }
+    __plugin.signalling()->dropConn(conn,true);
+}
+
 void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
@@ -2115,6 +2160,7 @@ void YBTSMM::sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t 
 	conn->sendL3(mm);
     else
 	__plugin.signalling()->sendL3Conn(msg.connId(),mm);
+    __plugin.signalling()->dropConn(msg.connId(),true);
 }
 
 void YBTSMM::sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause)
@@ -2170,7 +2216,8 @@ void YBTSMM::getUEByIMSISafe(RefPointer<YBTSUE>& ue, const String& imsi)
     }
     if (!tmpUE) {
 	// TODO: find a better way to allocate TMSI
-	String tmsi(++m_tmsiIndex);
+	String tmsi;
+	newTMSI(tmsi);
 	tmpUE = new YBTSUE(imsi,tmsi);
 	list.append(tmpUE);
 	m_ueTMSI[hashList(tmsi)].append(tmpUE)->setDelete(false);
@@ -3082,9 +3129,10 @@ static void parseLAI(YBTSLAI& dest, const String& lai)
 	String* mcc = static_cast<String*>((o = o->skipNext())->get());
 	String* lac = static_cast<String*>((o = o->skipNext())->get());
 	if (mnc->length() == 3 && isDigits09(*mnc) &&
-	    ((mcc->length() == 3 || mcc->length() == 2) && isDigits09(*mcc))) {
+	    ((mcc->length() == 3 || mcc->length() == 2) && isDigits09(*mcc)) &&
+	    (lac->length() == 4)) {
 	    // LAC: 16 bits long
-	    int tmp = lac->toInteger(-1);
+	    int tmp = lac->toInteger(-1,16);
 	    if (tmp >= 0 && tmp < 0xffff)
 		dest.set(*mnc,*mcc,*lac);
 	}
