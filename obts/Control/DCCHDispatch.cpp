@@ -116,15 +116,33 @@ void DCCHDispatchMessage(const L3Message* msg, LogicalChannel* DCCH)
 
 static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 {
-	LOG(INFO) << "starting dispatch loop for connection " << id;
-	unsigned timeout_ms = chan->N200() * T200ms;
+	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(chan);
+	LOG(INFO) << "starting dispatch loop for connection " << id << (tch ? " with traffic" : "");
+	unsigned int maxQ = gConfig.getNum("GSM.MaxSpeechLatency");
+	unsigned int tOut = tch ? 5 : 100; // TODO
 	while (gSigConn.valid() && (gConnMap.find(id) == chan)) {
-		L3Frame* frame = chan->recv(timeout_ms,0); // What about different SAPI?
+		if (tch) {
+			while (tch->queueSize() > maxQ)
+				delete[] tch->recvTCH();
+			unsigned char* mFrame = tch->recvTCH();
+			if (mFrame) {
+				gMediaConn.send(id,mFrame,33);
+				delete mFrame;
+			}
+		}
+		L3Frame* frame = chan->recv(tOut,0); // What about different SAPI?
 		if (!frame)
 			continue;
+		if (frame->primitive() == ERROR) {
+			LOG(NOTICE) << "error reading on connection " << id;
+			delete frame;
+			break;
+		}
 		gSigConn.send(0,id,frame);
 		delete frame;
 	}
+	if (gConnMap.find(id) == chan)
+		gSigConn.send(SigConnection::SigConnLost,0,id);
 	LOG(INFO) << "ending dispatch loop for connection " << id;
 }
 

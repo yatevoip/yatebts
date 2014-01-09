@@ -46,6 +46,7 @@ int ConnectionMap::map(GSM::LogicalChannel* chan)
 	if (i == mIndex)
 	    break;
 	if (!mMap[i]) {
+	    mMap[i] = chan;
 	    id = mIndex = i;
 	    break;
 	}
@@ -56,25 +57,29 @@ int ConnectionMap::map(GSM::LogicalChannel* chan)
     return id;
 }
 
-void ConnectionMap::unmap(unsigned int id)
+bool ConnectionMap::unmap(unsigned int id)
 {
-    if (id < 65536)
+    if (id < 65536 && mMap[id]) {
 	mMap[id] = 0;
+	return true;
+    }
+    return false;
 }
 
-void ConnectionMap::unmap(const GSM::LogicalChannel* chan)
+bool ConnectionMap::unmap(const GSM::LogicalChannel* chan)
 {
     if (!chan)
-	return;
+	return false;
     for (unsigned int i = 0; i < 65536; i++) {
 	if (mMap[i] == chan) {
 	    lock();
 	    if (mMap[i] == chan)
 		mMap[i] = 0;
 	    unlock();
-	    break;
+	    return true;
 	}
     }
+    return false;
 }
 
 int ConnectionMap::find(const GSM::LogicalChannel* chan)

@@ -117,7 +117,8 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
 {
     switch (prim) {
 	case SigConnRelease:
-	    // TODO
+	    if (!gConnMap.unmap(id))
+		LOG(ERR) << "received SigConnRelease for unmapped id " << id;
 	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id;
@@ -132,7 +133,7 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id,
 		LogicalChannel* ch = gConnMap.find(id);
 		if (ch) {
 		    L3Frame frame((const char*)data,len);
-		    ch->send(frame,info & 0x07);
+		    ch->send(frame,info & 0x03);
 		}
 		else
 		    LOG(ERR) << "received L3 frame for unmapped id " << id;
