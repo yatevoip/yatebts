@@ -690,7 +690,7 @@ public:
 	{ return m_mm; }
     inline XmlElement* buildCC()
 	{ return new XmlElement("CC"); }
-    XmlElement* buildCC(XmlElement*& ch, const char* tag, const char* callRef);
+    XmlElement* buildCC(XmlElement*& ch, const char* type, const char* callRef);
     // Handle call control messages
     void handleCC(YBTSMessage& m, YBTSConn* conn);
     // Add a pending (wait termination) call
@@ -1996,8 +1996,8 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
 void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Rejecting %s conn=%u: no connection [%p]",
-	    xml.tag(),m.connId(),this);
+	Debug(this,DebugGoOn,"Rejecting LocationUpdatingRequest conn=%u: no connection [%p]",
+	    m.connId(),this);
 	sendLocationUpdateReject(m,0,CauseProtoError);
 	return;
     }
@@ -2006,8 +2006,8 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
     findXmlChildren(xml,laiXml,s_locAreaIdent,identity,s_mobileIdent);
     if (!(laiXml && identity)) {
 	Debug(this,DebugNote,
-	    "Rejecting %s conn=%u: missing LAI or mobile identity [%p]",
-	    xml.tag(),m.connId(),this);
+	    "Rejecting LocationUpdatingRequest conn=%u: missing LAI or mobile identity [%p]",
+	    m.connId(),this);
 	sendLocationUpdateReject(m,conn,CauseInvalidIE);
 	return;
     }
@@ -2020,8 +2020,8 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
     }
     YBTSLAI lai(*laiXml);
     bool haveLAI = (lai == __plugin.signalling()->lai());
-    Debug(this,DebugAll,"Handling %s conn=%u: ident=%s/%s LAI=%s [%p]",
-	xml.tag(),conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
+    Debug(this,DebugAll,"Handling LocationUpdatingRequest conn=%u: ident=%s/%s LAI=%s [%p]",
+	conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
 	ident->c_str(),lai.lai().c_str(),this);
     // TODO: handle concurrent requests, check if we have a pending location updating
     // This should never happen, but we should handle it
@@ -2035,8 +2035,7 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 	else
 	    lai = __plugin.signalling()->lai();
 	if (!ue) {
-	    Debug(this,DebugNote,"Rejecting %s: IMSI request not implemented [%p]",
-		xml.tag(),this);
+	    Debug(this,DebugNote,"Rejecting LocationUpdatingRequest: IMSI request not implemented [%p]",this);
 	    sendLocationUpdateReject(m,conn,CauseServNotSupp);
 	    return;
 	}
@@ -2075,8 +2074,8 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 void YBTSMM::handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Rejecting %s conn=%u: no connection [%p]",
-	    xml.tag(),m.connId(),this);
+	Debug(this,DebugGoOn,"Rejecting TMSIReallocationComplete conn=%u: no connection [%p]",
+	    m.connId(),this);
 	sendLocationUpdateReject(m,0,CauseProtoError);
 	return;
     }
@@ -2086,8 +2085,8 @@ void YBTSMM::handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSCon
 void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Rejecting %s conn=%u: no connection [%p]",
-	    xml.tag(),m.connId(),this);
+	Debug(this,DebugGoOn,"Rejecting CMServiceRequest conn=%u: no connection [%p]",
+	    m.connId(),this);
 	sendCMServiceRsp(m,0,CauseProtoError);
 	return;
     }
@@ -2096,8 +2095,8 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
     findXmlChildren(xml,cmServType,s_cmServType,identity,s_mobileIdent);
     if (!(cmServType && identity)) {
 	Debug(this,DebugNote,
-	    "Rejecting %s conn=%u: missing service type or mobile identity [%p]",
-	    xml.tag(),m.connId(),this);
+	    "Rejecting CMServiceRequest conn=%u: missing service type or mobile identity [%p]",
+	    m.connId(),this);
 	sendCMServiceRsp(m,conn,CauseInvalidIE);
 	return;
     }
@@ -2107,8 +2106,8 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	;
     else {
 	Debug(this,DebugNote,
-	    "Rejecting %s conn=%u: service type '%s' not supported/subscribed [%p]",
-	    xml.tag(),m.connId(),type.c_str(),this);
+	    "Rejecting CMServiceRequest conn=%u: service type '%s' not supported/subscribed [%p]",
+	    m.connId(),type.c_str(),this);
 	sendCMServiceRsp(m,conn,CauseServNotSupp);
 	return;
     }
@@ -2119,16 +2118,15 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	sendCMServiceRsp(m,conn,cause);
 	return;
     }
-    Debug(this,DebugAll,"Handling %s conn=%u: ident=%s/%s type=%s [%p]",
-	xml.tag(),conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
+    Debug(this,DebugAll,"Handling CMServiceRequest conn=%u: ident=%s/%s type=%s [%p]",
+	conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
 	ident->c_str(),type.c_str(),this);
     RefPointer<YBTSUE> ue;
     if (haveTMSI) {
 	// Got TMSI
 	findUEByTMSISafe(ue,*ident);
 	if (!ue) {
-	    Debug(this,DebugNote,"Rejecting %s: IMSI request not implemented [%p]",
-		xml.tag(),this);
+	    Debug(this,DebugNote,"Rejecting CMServiceRequest: IMSI request not implemented [%p]",this);
 	    sendCMServiceRsp(m,conn,CauseServNotSupp);
 	    return;
 	}
@@ -2235,8 +2233,9 @@ uint8_t YBTSMM::getMobileIdentTIMSI(YBTSMessage& m, const XmlElement& request,
     ident = getIdentTIMSI(identXml,isTMSI,found);
     if (ident)
 	return 0;
+    const String* type = request.getAttribute(s_type);
     Debug(this,DebugNote,"Rejecting %s conn=%u: %s IMSI/TMSI [%p]",
-	request.tag(),m.connId(),(found ? "empty" : "missing"),this);
+	(type ? type->c_str() : "unknown"),m.connId(),(found ? "empty" : "missing"),this);
     return CauseInvalidIE;
 }
 
@@ -2244,14 +2243,16 @@ uint8_t YBTSMM::getMobileIdentTIMSI(YBTSMessage& m, const XmlElement& request,
 uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
     bool& dropConn)
 {
+    const String* type = req.getAttribute(s_type);
     if (!ue) {
-	Debug(this,DebugGoOn,"Rejecting %s: no UE object [%p]",req.tag(),this);
+	Debug(this,DebugGoOn,"Rejecting %s: no UE object [%p]",
+	    (type ? type->c_str() : "unknown"),this);
 	return CauseProtoError;
     }
     if (conn.setUE(ue))
 	return 0;
     Debug(this,DebugGoOn,"Rejecting %s: UE mismatch on connection %u [%p]",
-	req.tag(),conn.connId(),this);
+	(type ? type->c_str() : "unknown"),conn.connId(),this);
     dropConn = true;
     return CauseProtoError;
 }
@@ -2404,15 +2405,19 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular)
 // Handle CC messages
 bool YBTSChan::handleCC(const XmlElement& xml)
 {
+    const String* type = xml.getAttribute(s_type);
+    if (!type) {
+	Debug(this,DebugWarn,"Missing 'type' attribute [%p]",this);
+	return true;
+    }
     const String* callRef = xml.childText(s_ccCallRef);
     if (TelEngine::null(callRef)) {
 	Debug(this,DebugNote,"%s with empty transaction identifier [%p]",
-	    xml.tag(),this);
+	    type->c_str(),this);
 	return true;
     }
-    const String& tag = xml.getTag();
-    bool regular = (tag == s_ccSetup);
-    bool emergency = !regular && (tag == s_ccEmergency);
+    bool regular = (*type == s_ccSetup);
+    bool emergency = !regular && (*type == s_ccEmergency);
     Lock lck(m_mutex);
     ObjList* o = m_calls.find(*callRef);
     if (!o) {
@@ -2426,13 +2431,13 @@ bool YBTSChan::handleCC(const XmlElement& xml)
     YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
     if (regular || emergency)
 	call->sendWrongState();
-    else if (tag == s_ccRel || tag == s_ccRlc || tag == s_ccDisc) {
+    else if (*type == s_ccRel || *type == s_ccRlc || *type == s_ccDisc) {
 	Debug(this,DebugInfo,"Removing call '%s' [%p]",call->c_str(),this);
 	getCCCause(call->m_reason,xml);
 	String reason = call->m_reason;
-	bool final = (tag != s_ccDisc);
+	bool final = (*type != s_ccDisc);
 	if (final) {
-	    if (tag == s_ccRel)
+	    if (*type == s_ccRel)
 		call->releaseComplete();
 	    else
 		call->changeState(YBTSCallDesc::Null);
@@ -2449,7 +2454,7 @@ bool YBTSChan::handleCC(const XmlElement& xml)
 	if (disc)
 	    hangup(reason);
     }
-    else if (tag == s_ccConnectAck) {
+    else if (*type == s_ccConnectAck) {
 	if (call->m_state == YBTSCallDesc::ConnectReq) {
 	    call->changeState(YBTSCallDesc::Active);
 	    call->m_timeout = 0;
@@ -2457,9 +2462,9 @@ bool YBTSChan::handleCC(const XmlElement& xml)
 	else
 	    call->sendWrongState();
     }
-    else if (tag == s_ccStatusEnq)
+    else if (*type == s_ccStatusEnq)
 	call->sendStatus("status-enquiry-rsp");
-    else if (tag == s_ccStatus) {
+    else if (*type == s_ccStatus) {
 	String cause, cs;
 	getCCCause(cause,xml);
 	getCCCallState(cs,xml);
@@ -2485,11 +2490,12 @@ void YBTSChan::connReleased()
 
 void YBTSChan::handleSetup(const XmlElement& xml, bool regular)
 {
+    const String* type = xml.getAttribute(s_type);
     Lock lck(m_mutex);
     YBTSCallDesc* call = new YBTSCallDesc(this,xml,regular);
     if (call->null()) {
 	TelEngine::destruct(call);
-	Debug(this,DebugNote,"%s with empty call ref [%p]",xml.tag(),this);
+	Debug(this,DebugNote,"%s with empty call ref [%p]",(type ? type->c_str() : "unknown"),this);
 	return;
     }
     if (!m_calls.skipNull()) {
@@ -2687,21 +2693,28 @@ YBTSDriver::~YBTSDriver()
     TelEngine::destruct(m_mm);
 }
 
-XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* tag, const char* callRef)
+XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* type, const char* callRef)
 {
     XmlElement* mm = buildCC();
-    ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(tag)));
-    if (ch)
+    ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(s_message)));
+    if (ch) {
+	ch->setAttribute(s_type,type);
 	ch->addChildSafe(new XmlElement(s_ccCallRef,callRef));
+    }
     return mm;
 }
 
 // Handle call control messages
 void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 {
-    XmlElement* xml = m.xml() ? m.xml()->findFirstChild() : 0;
+    XmlElement* xml = m.xml() ? m.xml()->findFirstChild(&s_message) : 0;
     if (!xml) {
-	Debug(this,DebugNote,"%s with empty xml [%p]",m.name(),this);
+	Debug(this,DebugNote,"Empty xml in %s [%p]",m.name(),this);
+	return;
+    }
+    const String* type = xml->getAttribute(s_type);
+    if (!type) {
+	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
 	return;
     }
     if (conn) {
@@ -2710,8 +2723,8 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	if (chan && chan->handleCC(*xml))
 	    return;
     }
-    bool regular = (xml->getTag() == s_ccSetup);
-    bool emergency = !regular && (xml->getTag() == s_ccEmergency);
+    bool regular = (*type == s_ccSetup);
+    bool emergency = !regular && (*type == s_ccEmergency);
     if (regular || emergency) {
 	if (conn && conn->ue()) {
 	    if (canAccept()) {
@@ -2736,18 +2749,18 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
     const String* callRef = xml->childText(s_ccCallRef);
     if (TelEngine::null(callRef))
 	return;
-    bool rlc = (xml->getTag() == s_ccRlc);
+    bool rlc = (*type == s_ccRlc);
     Lock lck(this);
     // Handle pending calls
     for (ObjList* o = m_terminatedCalls.skipNull(); o; o = o->skipNext()) {
 	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
 	if (*callRef != *call || call->connId() != m.connId())
 	    continue;
-	if (rlc || xml->getTag() == s_ccRel || xml->getTag() == s_ccDisc) {
+	if (rlc || *type == s_ccRel || *type == s_ccDisc) {
 	    Debug(this,DebugNote,"Removing terminated call '%s' conn=%u",
 		call->c_str(),call->connId());
 	    if (!rlc) {
-		if (xml->getTag() == s_ccDisc &&
+		if (*type == s_ccDisc &&
 		    call->m_state == YBTSCallDesc::Disconnect) {
 		    call->release();
 		    call->setTimeout(s_t308);
@@ -2758,9 +2771,9 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	    o->remove();
 	    m_haveCalls = (0 != m_terminatedCalls.skipNull());
 	}
-	else if (xml->getTag() == s_ccStatusEnq)
+	else if (*type == s_ccStatusEnq)
 	    call->sendStatus("status-enquiry-rsp");
-	else if (xml->getTag() != s_ccStatus)
+	else if (*type != s_ccStatus)
 	    call->sendWrongState();
 	return;
     }
@@ -2768,7 +2781,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	return;
     lck.drop();
     DDebug(this,DebugInfo,"Unhandled CC %s for callref=%s conn=%p",
-	xml->tag(),TelEngine::c_safe(callRef),conn);
+	type->c_str(),TelEngine::c_safe(callRef),conn);
     YBTSCallDesc::sendGSMRel(false,*callRef,"invalid-callref",m.connId());
 }
 
