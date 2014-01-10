@@ -58,6 +58,8 @@ bool GenConnection::initialize(int fileDesc)
     if (::setsockopt(fileDesc,SOL_SOCKET,SO_LINGER,&l,sizeof(l)))
 	return false;
     mSockFd = fileDesc;
+    if (mBufSize < BUF_LEN)
+	mBufSize = BUF_LEN;
     return true;
 }
 
@@ -84,7 +86,7 @@ bool GenConnection::send(const void* buffer, size_t len)
 
 void GenConnection::run()
 {
-    unsigned char buf[BUF_LEN];
+    unsigned char buf[mBufSize];
     struct timeval tOut;
     fd_set fSet;
     FD_ZERO(&fSet);
@@ -111,7 +113,7 @@ void GenConnection::run()
 	    idle();
 	    continue;
 	}
-	ssize_t len = ::recv(fd,buf,BUF_LEN,MSG_DONTWAIT);
+	ssize_t len = ::recv(fd,buf,mBufSize,MSG_DONTWAIT);
 	if (!len) {
 	    LOG(DEBUG) << "received EOF on socket";
 	    break;

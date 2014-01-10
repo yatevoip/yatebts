@@ -32,6 +32,8 @@
 #include <SubscriberRegistry.h>
 #include <TRXManager.h>
 #include <Reporting.h>
+#include <LogConnection.h>
+#include <CmdConnection.h>
 #include <SigConnection.h>
 #include <MediaConnection.h>
 #include <ConnectionMap.h>
@@ -73,6 +75,8 @@ size_t gWatchdogRemaining();
 bool gWatchdogExpired();
 
 /** Connections to YBTS */
+extern Connection::LogConnection gLogConn;
+extern Connection::CmdConnection gCmdConn;
 extern Connection::SigConnection gSigConn;
 extern Connection::MediaConnection gMediaConn;
 extern Connection::ConnectionMap gConnMap;

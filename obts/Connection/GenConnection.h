@@ -36,8 +36,8 @@ public:
     bool start();
     void clear();
 protected:
-    inline GenConnection(int fileDesc = -1)
-	: mSockFd(-1)
+    inline GenConnection(int fileDesc = -1, int bufSize = 0)
+	: mSockFd(-1), mBufSize(bufSize)
 	{ initialize(fileDesc); }
     virtual ~GenConnection();
     bool initialize(int fileDesc);
@@ -47,6 +47,7 @@ protected:
     virtual void idle();
     virtual void run();
     int mSockFd;
+    int mBufSize;
     Thread mRecvThread;
 };
 

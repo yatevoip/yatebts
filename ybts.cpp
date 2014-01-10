@@ -91,6 +91,7 @@ class YBTSTransport;
 class YBTSLAI;                           // Holds local area id
 class YBTSConn;                          // A logical connection
 class YBTSLog;                           // Log interface
+class YBTSCommand;                       // Command interface
 class YBTSSignalling;                    // Signalling interface
 class YBTSMedia;                         // Media interface
 class YBTSUE;                            // A registered equipment
@@ -233,6 +234,7 @@ protected:
 class YBTSTransport : public GenObject, public YBTSDebug
 {
     friend class YBTSLog;
+    friend class YBTSCommand;
     friend class YBTSSignalling;
     friend class YBTSMedia;
 public:
@@ -339,7 +341,7 @@ class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
     public YBTSThreadOwner
 {
 public:
-    YBTSLog();
+    YBTSLog(const char* name);
     inline YBTSTransport& transport()
 	{ return m_transport; }
     bool start();
@@ -349,6 +351,20 @@ public:
 
 protected:
     String m_name;
+    YBTSTransport m_transport;
+};
+
+class YBTSCommand : public GenObject, public DebugEnabler
+{
+public:
+    YBTSCommand();
+    bool send(const String& str);
+    bool recv(String& str);
+    inline YBTSTransport& transport()
+	{ return m_transport; }
+    bool start();
+    void stop();
+protected:
     YBTSTransport m_transport;
 };
 
@@ -775,6 +791,7 @@ protected:
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
     virtual bool received(Message& msg, int id);
+    virtual bool commandExecute(String& retVal, const String& line);
 
     int m_state;
     Mutex m_stateMutex;
@@ -784,7 +801,9 @@ protected:
     uint64_t m_stopTime;                 // Stop time
     bool m_restart;                      // Restart flag
     uint64_t m_restartTime;              // Restart time
-    YBTSLog* m_log;                      // Log
+    YBTSLog* m_logTrans;                 // Log transceiver
+    YBTSLog* m_logBts;                   // Log OpenBTS
+    YBTSCommand* m_command;              // Command interface
     YBTSMedia* m_media;                  // Media
     YBTSSignalling* m_signalling;        // Signalling
     YBTSMM* m_mm;                        // Mobility management
@@ -1429,10 +1448,10 @@ bool YBTSConn::setUE(YBTSUE* ue)
 //
 // YBTSLog
 //
-YBTSLog::YBTSLog()
-    : Mutex(false,"YBTSLog")
+YBTSLog::YBTSLog(const char* name)
+    : Mutex(false,"YBTSLog"),
+      m_name(name)
 {
-    m_name = "ybts-log";
     debugName(m_name);
     debugChain(&__plugin);
     YBTSThreadOwner::initThreadOwner(this);
@@ -1473,7 +1492,8 @@ void YBTSLog::processLoop()
 	int rd = m_transport.recv();
 	if (rd > 0) {
 	    // TODO: decode data, output the debug message
-	    Debug(this,DebugStub,"process recv not implemented");
+	    Debug(this,DebugStub,"process recv not implemented: %s",
+		(const char*)m_transport.readBuf().data());
 	    continue;
 	}
 	if (!rd) {
@@ -1484,6 +1504,63 @@ void YBTSLog::processLoop()
 	__plugin.restart();
 	break;
     }
+}
+
+
+//
+// YBTSCommand
+//
+YBTSCommand::YBTSCommand()
+{
+    debugName("ybts-command");
+    debugChain(&__plugin);
+    m_transport.setDebugPtr(this,this);
+}
+
+bool YBTSCommand::send(const String& str)
+{
+    if (m_transport.send(str.c_str(),str.length()))
+	return true;
+    __plugin.restart();
+    return false;
+}
+
+bool YBTSCommand::recv(String& str)
+{
+    uint32_t t = Time::secNow() + 10;
+    while (!Thread::check(false)) {
+	int rd = m_transport.recv();
+	if (rd > 0) {
+	    str = (const char*)m_transport.readBuf().data();
+	    return true;
+	}
+	if (!rd) {
+	    Thread::idle();
+	    if (Time::secNow() < t)
+		continue;
+	}
+	// Socket non retryable error
+	__plugin.restart();
+	return false;
+    }
+    return false;
+}
+
+bool YBTSCommand::start()
+{
+    stop();
+    if (!m_transport.initTransport(false,s_bufLenLog,true))
+	return false;
+    Debug(this,DebugInfo,"Started [%p]",this);
+    return true;
+}
+
+void YBTSCommand::stop()
+{
+    if (!m_transport.m_socket.valid())
+	return;
+    m_transport.resetTransport();
+    Debug(this,DebugInfo,"Stopped [%p]",this);
 }
 
 
@@ -2864,7 +2941,9 @@ YBTSDriver::YBTSDriver()
     m_stopTime(0),
     m_restart(false),
     m_restartTime(0),
-    m_log(0),
+    m_logTrans(0),
+    m_logBts(0),
+    m_command(0),
     m_media(0),
     m_signalling(0),
     m_mm(0),
@@ -2878,7 +2957,9 @@ YBTSDriver::YBTSDriver()
 YBTSDriver::~YBTSDriver()
 {
     Output("Unloading module YBTS");
-    TelEngine::destruct(m_log);
+    TelEngine::destruct(m_logTrans);
+    TelEngine::destruct(m_logBts);
+    TelEngine::destruct(m_command);
     TelEngine::destruct(m_media);
     TelEngine::destruct(m_signalling);
     TelEngine::destruct(m_mm);
@@ -3083,7 +3164,12 @@ void YBTSDriver::start()
     changeState(Starting);
     while (true) {
 	// Log interface
-	if (!m_log->start())
+	if (!m_logTrans->start())
+	    break;
+	if (!m_logBts->start())
+	    break;
+	// Command interface
+	if (!m_command->start())
 	    break;
 	// Signalling interface
 	if (!m_signalling->start())
@@ -3135,7 +3221,9 @@ void YBTSDriver::stop()
     m_signalling->stop();
     m_media->stop();
     stopPeer();
-    m_log->stop();
+    m_command->stop();
+    m_logTrans->stop();
+    m_logBts->stop();
     changeState(Idle);
     lck.drop();
     channels().clear();
@@ -3153,7 +3241,9 @@ bool YBTSDriver::startPeer()
     }
     Debug(this,DebugAll,"Starting peer '%s' '%s'",cmd.c_str(),arg.c_str());
     Socket s[YBTS::FDCount];
-    s[YBTS::FDLog].attach(m_log->transport().detachRemote());
+    s[YBTS::FDLogTransceiver].attach(m_logTrans->transport().detachRemote());
+    s[YBTS::FDLogBts].attach(m_logBts->transport().detachRemote());
+    s[YBTS::FDCommand].attach(m_command->transport().detachRemote());
     s[YBTS::FDSignalling].attach(m_signalling->transport().detachRemote());
     s[YBTS::FDMedia].attach(m_media->transport().detachRemote());
     int pid = ::fork();
@@ -3384,7 +3474,9 @@ void YBTSDriver::initialize()
 	installRelay(Halt);
 	installRelay(Stop,"engine.stop");
 	installRelay(Start,"engine.start");
-        m_log = new YBTSLog;
+        m_logTrans = new YBTSLog("transceiver");
+        m_logBts = new YBTSLog(BTS_CMD);
+        m_command = new YBTSCommand;
 	m_media = new YBTSMedia;
 	m_signalling = new YBTSSignalling;
 	m_mm = new YBTSMM(ybts.getIntValue("ue_hash_size",31,5));
@@ -3447,6 +3539,31 @@ bool YBTSDriver::received(Message& msg, int id)
 	    m_mm->checkTimers(msg.msgTime());
     }
     return Driver::received(msg,id);
+}
+
+bool YBTSDriver::commandExecute(String& retVal, const String& line)
+{
+    String tmp = line;
+    if (m_command && tmp.startSkip(BTS_CMD)) {
+	if (tmp.trimSpaces().null())
+	    return false;
+	if (!m_command->send(tmp))
+	    return false;
+	if (!m_command->recv(tmp))
+	    return false;
+	// LF -> CR LF
+	for (int i = 0; (i = tmp.find('\n',i + 1)) >= 0; ) {
+	    if (tmp.at(i - 1) != '\r') {
+		tmp = tmp.substr(0,i) + "\r" + tmp.substr(i);
+		i++;
+	    }
+	}
+	if (!tmp.endsWith("\n"))
+	    tmp << "\r\n";
+	retVal = tmp;
+	return true;
+    }
+    return Driver::commandExecute(retVal,line);
 }
 
 }; // anonymous namespace

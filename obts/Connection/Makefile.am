@@ -29,11 +29,15 @@ libconnection_la_SOURCES = \
 	GenConnection.cpp \
 	SigConnection.cpp \
 	MediaConnection.cpp \
-	ConnectionMap.cpp
+	ConnectionMap.cpp \
+	CmdConnection.cpp \
+	LogConnection.cpp
 
 
 noinst_HEADERS = \
 	GenConnection.h \
 	SigConnection.h \
 	MediaConnection.h \
-	ConnectionMap.h
+	ConnectionMap.h \
+	CmdConnection.h \
+	LogConnection.h

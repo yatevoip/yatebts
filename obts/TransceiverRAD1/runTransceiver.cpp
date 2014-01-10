@@ -28,6 +28,9 @@
 #include <Configuration.h>
 #include <FactoryCalibration.h>
 
+#include "../Connection/GenConnection.h"
+#include "../Connection/LogConnection.h"
+
 using namespace std;
 
 std::vector<std::string> configurationCrossCheck(const std::string& key);
@@ -35,6 +38,9 @@ static const char *cOpenBTSConfigEnv = "OpenBTSConfigFile";
 // Load configuration from a file.
 ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):"/etc/OpenBTS/OpenBTS.db","transceiver", getConfigurationKeys());
 FactoryCalibration gFactoryCalibration;
+
+/** Connection to YBTS */
+Connection::LogConnection gLogConn(STDERR_FILENO + 1);
 
 volatile bool gbShutdown = false;
 static void ctrlCHandler(int signo)
@@ -136,6 +142,7 @@ int main(int argc, char *argv[])
   usrp->loadBurst(finalVecShort,finalVec.size());
 */
   trx->start();
+  gLogConn.write("Starting transceiver");
   //int i = 0;
   while(!gbShutdown) { sleep(1); } //i++; if (i==60) exit(1);}
 

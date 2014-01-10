@@ -28,9 +28,9 @@ namespace YBTS {
 // The enum is used as index starting from STDERR_FILENO + 1
 enum YBTSFileDesc
 {
-    FDLog = 0,
-    FDControl,
-    FDStatus,
+    FDLogTransceiver = 0,
+    FDLogBts,
+    FDCommand,
     FDSignalling,
     FDMedia,
     FDCount                              // Number of file descriptors

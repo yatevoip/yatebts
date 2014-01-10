@@ -113,6 +113,8 @@ Peering::PeerInterface gPeerInterface;
 Peering::NeighborTable gNeighborTable;
 
 /** Connections to YBTS */
+Connection::LogConnection gLogConn(STDERR_FILENO + 2);
+Connection::CmdConnection gCmdConn(STDERR_FILENO + 3);
 Connection::SigConnection gSigConn(STDERR_FILENO + 4);
 Connection::MediaConnection gMediaConn(STDERR_FILENO + 5);
 Connection::ConnectionMap gConnMap;
@@ -386,13 +388,15 @@ int main(int argc, char *argv[])
 	gSubscriberRegistry.init();
 	gParser.addCommands();
 
-	if (gSigConn.valid() && gMediaConn.valid()) {
+	if (/* gLogConn.valid() && gCmdConn.valid() && */ gSigConn.valid() && gMediaConn.valid()) {
 		COUT("\nConnected to YBTS\n");
 		gSigConn.start();
 		gMediaConn.start();
 	}
 	else {
 		COUT("\nNot started by YBTS\n");
+		gLogConn.clear();
+		gCmdConn.clear();
 		gSigConn.clear();
 		gMediaConn.clear();
 	}
@@ -635,6 +639,22 @@ int main(int argc, char *argv[])
 	// OK, now it is safe to start the BTS.
 	gBTS.start();
 
+	if (gCmdConn.valid()) {
+		close(sock);
+		gLogConn.write("OpenBTS ready");
+		while (gLogConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
+			char* line = gCmdConn.read();
+			if (!line)
+				break;
+			std::ostringstream sout;
+			int res = gParser.process(line,sout);
+			free(line);
+			gCmdConn.write(sout.str().c_str());
+			if (res < 0)
+				break;
+		}
+		return 0;
+	}
 
 	struct sockaddr_un cmdSockName;
 	cmdSockName.sun_family = AF_UNIX;
