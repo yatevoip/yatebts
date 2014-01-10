@@ -69,11 +69,13 @@ private:
   libusb_transfer                *d_read_work_in_progress;
   unsigned char                  *d_read_buffer;
   unsigned char                  *d_read_buffer_end;
+  int                             d_io_health;
 
   libusb_transfer *get_write_work_in_progress ();
   void reap_complete_writes ();
   bool reload_read_buffer ();
   bool submit_lut (libusb_transfer *lut);
+  void check_health (bool ok);
 
 
 protected:

@@ -11,10 +11,15 @@
 #include <algorithm>
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
+#include <signal.h>
 
 // ------------------------------------------------------------------------
 // 	libusb_transfer allocation, deallocation, and callback
 // ------------------------------------------------------------------------
+
+#define HEALTH_DEF  5
+#define HEALTH_MAX 10
 
 static void
 free_lut (libusb_transfer *lut)
@@ -230,7 +235,8 @@ fusb_ephandle::fusb_ephandle(fusb_devhandle *dh,
   : d_endpoint(endpoint), d_input_p(input_p), d_block_size(block_size), d_nblocks(nblocks), d_started(false),
     d_devhandle (dh),
     d_write_work_in_progress (0), d_write_buffer (0),
-    d_read_work_in_progress (0), d_read_buffer (0), d_read_buffer_end (0)
+    d_read_work_in_progress (0), d_read_buffer (0), d_read_buffer_end (0),
+    d_io_health(HEALTH_DEF)
 {
 
   if (d_block_size < 0 || d_block_size > MAX_BLOCK_SIZE)
@@ -376,10 +382,13 @@ fusb_ephandle::reap_complete_writes ()
 
     if (lut->status != LIBUSB_TRANSFER_COMPLETED) {
       LOG(ERR) << "Invalid LUT status " << lut->status;
+      check_health (false);
     }
     else if (lut->actual_length != lut->length){
       LOG(ERR) << "Improper write of " << lut->actual_length;
+      check_health (false);
     }
+    else check_health (true);
 
     free_list_add (lut);
   }
@@ -443,12 +452,14 @@ fusb_ephandle::reload_read_buffer ()
       if (!d_devhandle->_reap(true))
         {
  	  LOG(ERR) << "No libusb events";
+          check_health (false);
           return false;
         }
     if (lut->status != LIBUSB_TRANSFER_COMPLETED) {
       LOG(ERR) << "Improper read status " << lut->status;
       lut->actual_length = 0;
       free_list_add (lut);
+      check_health (false);
       return false;
     }
 
@@ -456,6 +467,7 @@ fusb_ephandle::reload_read_buffer ()
     d_read_buffer = (unsigned char *) lut->buffer;
     d_read_buffer_end = d_read_buffer + lut->actual_length;
 
+    check_health (true);
     return true;
   }
 }
@@ -509,7 +521,26 @@ fusb_ephandle::submit_lut (libusb_transfer *lut)
   if (!d_devhandle->_submit_lut (lut)) {
     LOG(ERR) << "USB submission failed";
     free_list_add (lut);
+    check_health (false);
     return false;
   }
   return true;
+}
+
+/*
+ * ephandle error handling
+ */
+
+void
+fusb_ephandle::check_health (bool ok)
+{
+  if (ok) {
+    if (d_io_health < HEALTH_MAX)
+      d_io_health++;
+  }
+  else if (--d_io_health < 0) {
+    LOG(CRIT) << "Excessive USB errors";
+    d_io_health = HEALTH_DEF;
+    kill(getpid(), SIGTERM);
+  }
 }
