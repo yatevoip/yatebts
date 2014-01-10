@@ -368,7 +368,7 @@ bool rad1LoadFpga (libusb_device_handle *udh, const char *filename,
 
   usbMsg (udh, VRQ_SET_LED, 1, 0, 0, 0); // led 1 off
 
-  return true;
+  return ok;
 
  fail:
   fclose (fp);
