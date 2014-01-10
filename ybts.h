@@ -42,10 +42,11 @@ enum YBTSFileDesc
  *
  */
 enum YBTSSigPrimitive {
-    SigL3Message = 0,                    // Connection related L3 message
-    SigConnRelease = 2,                  // Request to release a connection
-    SigHandshake = 128,                  // Handshake
-    SigHeartbeat = 255,                  // Heartbeat
+    SigL3Message   =   0,                // Connection related L3 message
+    SigConnLost    =   1,                // Connection to UE lost
+    SigConnRelease =   2,                // Request to release a connection
+    SigHandshake   = 128,                // Handshake
+    SigHeartbeat   = 255,                // Heartbeat
 };
 
 }; // namespace YBTS

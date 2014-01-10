@@ -75,7 +75,8 @@ static const String s_ccRel = "Release";
 static const String s_ccRlc = "ReleaseComplete";
 static const String s_ccStatusEnq = "StatusEnquiry";
 static const String s_ccStatus = "Status";
-static const String s_ccCallRef = "TransactionIdentifier";
+static const String s_ccCallRef = "TID";
+static const String s_ccTIFlag = "TIFlag";
 static const String s_ccCalled = "CalledPartyBCDNumber";
 static const String s_ccCallState = "CallState";
 //static const String s_ccFacility = "Facility";
@@ -593,7 +594,7 @@ public:
 	Connect = 28,                    // N28: Connect indication
     };
     // Incoming
-    YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular);
+    YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef);
     inline const char* stateName() const
 	{ return stateName(m_state); }
     inline const char* reason()
@@ -644,9 +645,9 @@ public:
     inline YBTSConn* conn() const
 	{ return m_conn; }
     // Init incoming chan. Return false to destruct the channel
-    bool initIncoming(const XmlElement& xml, bool regular);
+    bool initIncoming(const XmlElement& xml, bool regular, const String* callRef);
     // Handle CC messages
-    bool handleCC(const XmlElement& xml);
+    bool handleCC(const XmlElement& xml, const String* callRef);
     // Connection released notification
     void connReleased();
     // BTS stopping notification
@@ -658,7 +659,7 @@ protected:
 	    ObjList* o = m_calls.skipNull();
 	    return o ? static_cast<YBTSCallDesc*>(o->get()) : 0;
 	}
-    void handleSetup(const XmlElement& xml, bool regular);
+    void handleSetup(const XmlElement& xml, bool regular, const String* callRef);
     void hangup(const char* reason = 0, bool final = false);
     inline void setReason(const char* reason, Mutex* mtx = 0) {
 	    if (!reason)
@@ -725,7 +726,7 @@ public:
 	{ return m_mm; }
     inline XmlElement* buildCC()
 	{ return new XmlElement("CC"); }
-    XmlElement* buildCC(XmlElement*& ch, const char* type, const char* callRef);
+    XmlElement* buildCC(XmlElement*& ch, const char* type, const char* callRef, bool tiFlag = false);
     // Handle call control messages
     void handleCC(YBTSMessage& m, YBTSConn* conn);
     // Add a pending (wait termination) call
@@ -1194,6 +1195,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	    break;
 	case YBTS::SigHandshake:
 	case YBTS::SigHeartbeat:
+	case YBTS::SigConnLost:
 	    break;
 	default:
 	    reason = "No decoder";
@@ -1759,6 +1761,9 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    return Ok;
 	case YBTS::SigHandshake:
 	    return handleHandshake(msg);
+	case YBTS::SigConnLost:
+	    __plugin.signalling()->dropConn(msg.connId(),false);
+	    return Ok;
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
     return Ok;
@@ -2449,7 +2454,7 @@ uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
 // YBTSCallDesc
 //
 // Incoming
-YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular)
+YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef)
     : YBTSConnIdHolder(chan->connId()),
     m_state(Null),
     m_incoming(true),
@@ -2458,14 +2463,14 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular)
     m_relSent(0),
     m_chan(chan)
 {
+    if (callRef)
+	assign(*callRef);
     for (const ObjList* o = xml.getChildren().skipNull(); o; o = o->skipNext()) {
 	XmlElement* x = static_cast<XmlChild*>(o->get())->xmlElement();
 	if (!x)
 	    continue;
 	const String& s = x->getTag();
-	if (s == s_ccCallRef)
-	    assign(x->getText());
-	else if (s == s_ccCalled)
+	if (s == s_ccCalled)
 	    m_called = x->getText();
     }
 }
@@ -2565,12 +2570,12 @@ YBTSChan::YBTSChan(YBTSConn* conn)
 }
 
 // Init incoming chan. Return false to destruct the channel
-bool YBTSChan::initIncoming(const XmlElement& xml, bool regular)
+bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* callRef)
 {
     if (!m_conn)
 	return false;
     Lock lck(driver());
-    handleSetup(xml,regular);
+    handleSetup(xml,regular,callRef);
     YBTSCallDesc* call = firstCall();
     if (!call)
 	return false;
@@ -2590,14 +2595,13 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular)
 }
 
 // Handle CC messages
-bool YBTSChan::handleCC(const XmlElement& xml)
+bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef)
 {
     const String* type = xml.getAttribute(s_type);
     if (!type) {
 	Debug(this,DebugWarn,"Missing 'type' attribute [%p]",this);
 	return true;
     }
-    const String* callRef = xml.childText(s_ccCallRef);
     if (TelEngine::null(callRef)) {
 	Debug(this,DebugNote,"%s with empty transaction identifier [%p]",
 	    type->c_str(),this);
@@ -2610,7 +2614,7 @@ bool YBTSChan::handleCC(const XmlElement& xml)
     if (!o) {
 	lck.drop();
 	if (regular || emergency) {
-	    handleSetup(xml,regular);
+	    handleSetup(xml,regular,callRef);
 	    return true;
 	}
 	return false;
@@ -2675,11 +2679,11 @@ void YBTSChan::connReleased()
     hangup();
 }
 
-void YBTSChan::handleSetup(const XmlElement& xml, bool regular)
+void YBTSChan::handleSetup(const XmlElement& xml, bool regular, const String* callRef)
 {
     const String* type = xml.getAttribute(s_type);
     Lock lck(m_mutex);
-    YBTSCallDesc* call = new YBTSCallDesc(this,xml,regular);
+    YBTSCallDesc* call = new YBTSCallDesc(this,xml,regular,callRef);
     if (call->null()) {
 	TelEngine::destruct(call);
 	Debug(this,DebugNote,"%s with empty call ref [%p]",(type ? type->c_str() : "unknown"),this);
@@ -2880,14 +2884,15 @@ YBTSDriver::~YBTSDriver()
     TelEngine::destruct(m_mm);
 }
 
-XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* type, const char* callRef)
+XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* type, const char* callRef, bool tiFlag)
 {
     XmlElement* mm = buildCC();
+    XmlElement* cr = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(s_ccCallRef,callRef)));
+    if (cr)
+	cr->setAttribute(s_ccTIFlag,String::boolText(tiFlag));
     ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(s_message)));
-    if (ch) {
+    if (ch)
 	ch->setAttribute(s_type,type);
-	ch->addChildSafe(new XmlElement(s_ccCallRef,callRef));
-    }
     return mm;
 }
 
@@ -2904,10 +2909,11 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
 	return;
     }
+    const String* callRef = m.xml()->childText(s_ccCallRef);
     if (conn) {
 	RefPointer<YBTSChan> chan;
 	findChan(conn->connId(),chan);
-	if (chan && chan->handleCC(*xml))
+	if (chan && chan->handleCC(*xml,callRef))
 	    return;
     }
     bool regular = (*type == s_ccSetup);
@@ -2916,7 +2922,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	if (conn && conn->ue()) {
 	    if (canAccept()) {
 		YBTSChan* chan = new YBTSChan(conn);
-		if (!chan->initIncoming(*xml,regular))
+		if (!chan->initIncoming(*xml,regular,callRef))
 		    TelEngine::destruct(chan);
 		return;
 	    }
@@ -2928,12 +2934,10 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	    Debug(this,DebugNote,
 		"Refusing new GSM call, no user associated with connection %u",
 		conn->connId());
-	const String* callRef = xml->childText(s_ccCallRef);
 	if (!TelEngine::null(callRef))
 	    YBTSCallDesc::sendGSMRel(false,*callRef,"noconn",m.connId());
 	return;
     }
-    const String* callRef = xml->childText(s_ccCallRef);
     if (TelEngine::null(callRef))
 	return;
     bool rlc = (*type == s_ccRlc);
