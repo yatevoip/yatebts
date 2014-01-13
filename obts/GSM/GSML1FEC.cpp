@@ -36,6 +36,8 @@
 
 #include "../GPRS/GPRSExport.h"
 
+#include <string>
+
 #undef WARNING
 
 using namespace std;

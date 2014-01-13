@@ -33,7 +33,7 @@ using namespace std;
 #include <GSMLogicalChannel.h>
 #include <GSML3MMMessages.h>
 
-#include <SubscriberRegistry.h>
+//#include <SubscriberRegistry.h>
 
 #include <Logger.h>
 #include <Reporting.h>
@@ -103,11 +103,11 @@ RRLPServer::RRLPServer(L3MobileIdentity wMobileID, LogicalChannel *wDCCH)
 	//otherwise just go on
 	if (gConfig.getBool("Control.LUR.QueryIMEI")){
 		//check supported bit
-		string supported= gSubscriberRegistry.imsiGet(name, "RRLPSupported");
-		if(supported.empty() || supported == "0"){
-			LOG(INFO) << "RRLP not supported for " << name;
-			trouble = true;
-		}
+		//string supported= gSubscriberRegistry.imsiGet(name, "RRLPSupported");
+		//if(supported.empty() || supported == "0"){
+		//	LOG(INFO) << "RRLP not supported for " << name;
+		//	trouble = true;
+		//}
 	}
 }
 
@@ -177,16 +177,17 @@ bool RRLPServer::transact()
 			}
 		}
 
+		// FIXME YATEBTS -- If we want to support RRLP, we need to save the results somewhere.
 		// quit if location decoded 
 		if (response.find("latitude") != response.end() && 
 		    response.find("longitude") != response.end() && 
 		    response.find("positionError") != response.end()) {
-			if (!gSubscriberRegistry.RRLPUpdate(name, response["latitude"], 
-							    response["longitude"], 
-							    response["positionError"])){
-				LOG(INFO) << "SR update problem";
-				return false;
-			}
+			//if (!gSubscriberRegistry.RRLPUpdate(name, response["latitude"], 
+			//				    response["longitude"], 
+			//				    response["positionError"])){
+			//	LOG(INFO) << "SR update problem";
+			//	return false;
+			//}
 			return true;
 		}
 
@@ -249,9 +250,9 @@ bool RRLPServer::transact()
 					if (gConfig.getBool("Control.LUR.QueryIMEI")){
 						// flag unsupported in SR so we don't waste time on it again
 						// flag unsupported in SR so we don't waste time on it again
-						if (gSubscriberRegistry.imsiSet(name, "RRLPSupported", "0")) {
-							LOG(INFO) << "SR update problem";
-						}
+						//if (gSubscriberRegistry.imsiSet(name, "RRLPSupported", "0")) {
+						//	LOG(INFO) << "SR update problem";
+						//}
 					}
 					return false;
 				case 98:

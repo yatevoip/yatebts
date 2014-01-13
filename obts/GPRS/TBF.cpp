@@ -22,6 +22,8 @@
 #include "BSSG.h"
 #include "RLCEngine.h"
 
+using namespace std;
+
 namespace GPRS {
 
 typedef SGSN::GprsSgsnDownlinkPdu DownlinkQPdu;

@@ -27,6 +27,9 @@
 #include "Utils.h"
 #include "SgsnExport.h"
 
+#include <string>
+
+
 #define CASENAME(x) case x: return #x;
 
 namespace GPRS {
@@ -569,7 +572,7 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 	void msDumpCommon(std::ostream&os) const;
 	void msDumpChannels(std::ostream&os) const;
 	RROperatingMode::type getRROperatingMode();
-	string id() const;
+	std::string id() const;
 	void msAliasTlli(uint32_t newTlli);
 	void msChangeTlli(uint32_t newTlli);
 
@@ -580,7 +583,7 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 
 	// These are the functions required by the MSUEAdapter:
 	uint32_t msGetHandle() { return msTlli; }
-	string msid() const { return id(); }
+	std::string msid() const { return id(); }
 	//void msWriteHighSide(ByteVector &dlpdu, uint32_t tlli, const char *descr) {
 		//msDownlinkQueue.write(new GprsSgsnDownlinkPdu(dlpdu,tlli,descr));
 	//}

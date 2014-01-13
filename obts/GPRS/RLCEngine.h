@@ -34,6 +34,8 @@
 #include "TBF.h"
 #define FAST_TBF 1			// Use aggregated downlink TBFs.
 
+#include <string>
+
 namespace GPRS {
 
 class PDTCHL1FEC;
@@ -62,7 +64,7 @@ class RLCEngineBase
 	unsigned addSN(int sn1, int sn2) const;	// Allow negative numbers.
 	void incSN(unsigned &psn);
 	virtual void engineDump(std::ostream &os) const = 0;
-	string engineDumpStr() const { std::ostringstream os; engineDump(os); return os.str(); }
+	std::string engineDumpStr() const { std::ostringstream os; engineDump(os); return os.str(); }
 };
 
 enum RlcUpState {

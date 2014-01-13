@@ -19,7 +19,7 @@
 //#include <SIPUtility.h>
 //#include <SIPMessage.h>
 //#include <SIPEngine.h>
-#include <SubscriberRegistry.h>
+//#include <SubscriberRegistry.h>
 //#include "RList.h"
 #include "LLC.h"
 //#include "MSInfo.h"

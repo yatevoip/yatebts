@@ -26,6 +26,8 @@
 #include "Sgsn.h"
 #include "RLCMessages.h"
 
+#include <string>
+
 namespace GPRS {
 
 // If WaitForStall is true, a stalled TBF will send only one block at a time

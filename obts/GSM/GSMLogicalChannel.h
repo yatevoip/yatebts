@@ -37,6 +37,8 @@
 
 #include <Logger.h>
 
+#include <string>
+
 class ARFCNManager;
 class UDPSocket;
 
@@ -331,7 +333,7 @@ public:
 	public:
 	bool inUseByGPRS() { return mL1->inUseByGPRS(); }
 
-	bool decryptUplink_maybe(string wIMSI, int wA5Alg) { return mL1->decoder()->decrypt_maybe(wIMSI, wA5Alg); }
+	bool decryptUplink_maybe(std::string wIMSI, int wA5Alg) { return mL1->decoder()->decrypt_maybe(wIMSI, wA5Alg); }
 };
 
 

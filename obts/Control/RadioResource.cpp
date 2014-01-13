@@ -466,9 +466,9 @@ void Control::ProcessHandoverAccess(GSM::TCHFACCHLogicalChannel *TCH)
 	gPeerInterface.sendUntilAck(transaction,ind);
 
 	// Update subscriber registry to reflect new registration.
-	if (transaction->SRIMSI().length() && transaction->SRCALLID().length()) {
-		gSubscriberRegistry.addUser(transaction->SRIMSI().c_str(), transaction->SRCALLID().c_str());
-	}
+	//if (transaction->SRIMSI().length() && transaction->SRCALLID().length()) {
+	//	gSubscriberRegistry.addUser(transaction->SRIMSI().c_str(), transaction->SRCALLID().c_str());
+	//}
 
 	// The call is running.
 	LOG(INFO) << "succesful inbound handover " << *transaction;

@@ -17,6 +17,7 @@
 #include "GSMTransfer.h"
 #include <Sockets.h>
 #include <Globals.h>
+#include <Logger.h>
 
 UDPSocket GSMTAPSocket;
 

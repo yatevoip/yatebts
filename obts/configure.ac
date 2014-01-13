@@ -114,7 +114,6 @@ AC_CONFIG_FILES([\
     TRXManager/Makefile \
     CLI/Makefile \
     Peering/Makefile \
-    SR/Makefile \
     sqlite3/Makefile \
 ])
 

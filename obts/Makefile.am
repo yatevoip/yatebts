@@ -35,7 +35,6 @@ _SUBDIRS = \
 	CommonLibs \
 	Connection \
 	Globals \
-	SR \
 	CLI \
 	GSM \
 	SMS \

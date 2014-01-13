@@ -32,7 +32,6 @@ TRX_INCLUDEDIR = $(top_srcdir)/TRXManager
 GLOBALS_INCLUDEDIR = $(top_srcdir)/Globals
 CLI_INCLUDEDIR = $(top_srcdir)/CLI
 SQLITE_INCLUDEDIR = $(top_srcdir)/sqlite3
-SR_INCLUDEDIR = $(top_srcdir)/SR
 PEERING_INCLUDEDIR = $(top_srcdir)/Peering
 
 SVNDEV = -D'SVN_REV="$(shell svnversion -n $(top_builddir))"'
@@ -50,7 +49,6 @@ STD_DEFINES_AND_INCLUDES = \
 	-I$(TRX_INCLUDEDIR) \
 	-I$(GLOBALS_INCLUDEDIR) \
 	-I$(CLI_INCLUDEDIR) \
-	-I$(SR_INCLUDEDIR) \
 	-I$(PEERING_INCLUDEDIR) \
 	-I$(SQLITE_INCLUDEDIR)
 
@@ -65,7 +63,6 @@ TRX_LA = $(top_builddir)/TRXManager/libtrxmanager.la
 CONTROL_LA = $(top_builddir)/Control/libcontrol.la
 GLOBALS_LA = $(top_builddir)/Globals/libglobals.la
 CLI_LA = $(top_builddir)/CLI/libcli.la
-SR_LA = $(top_builddir)/SR/libSR.la
 PEERING_LA = $(top_builddir)/Peering/libpeering.la
 SQLITE_LA = $(top_builddir)/sqlite3/libsqlite.la -ldl
 

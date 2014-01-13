@@ -29,7 +29,7 @@
 #include <CLI.h>
 #include <PhysicalStatus.h>
 #include <TMSITable.h>
-#include <SubscriberRegistry.h>
+//#include <SubscriberRegistry.h>
 #include <TRXManager.h>
 #include <Reporting.h>
 #include <LogConnection.h>
@@ -64,7 +64,7 @@ extern Control::TMSITable gTMSITable;
 extern GSM::PhysicalStatus gPhysStatus;
 
 /** The subscriber registry and authenticator */
-extern SubscriberRegistry gSubscriberRegistry;
+//extern SubscriberRegistry gSubscriberRegistry;
 
 /** The global transceiver interface. */
 extern TransceiverManager gTRX;

@@ -20,6 +20,8 @@
 #include "../GPRS/GPRSExport.h"
 #include <Logger.h>
 
+using namespace std;
+
 
 namespace GSM {
 

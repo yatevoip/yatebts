@@ -21,6 +21,8 @@
 #include <vector>
 #include <string>
 
+#include "config.h"
+
 #include <Configuration.h>
 std::vector<std::string> configurationCrossCheck(const std::string& key);
 static const char *cOpenBTSConfigEnv = "OpenBTSConfigFile";
@@ -49,7 +51,7 @@ ReportingTable gReports(gConfig.getStr("Control.Reporting.StatsTable").c_str());
 #include <PowerManager.h>
 #include <Configuration.h>
 #include <PhysicalStatus.h>
-#include <SubscriberRegistry.h>
+//#include <SubscriberRegistry.h>
 #include "NeighborTable.h"
 #include <Peering.h>
 
@@ -100,7 +102,7 @@ GSMConfig gBTS;
 TransceiverManager gTRX(gConfig.getNum("GSM.Radio.ARFCNs"), gConfig.getStr("TRX.IP").c_str(), gConfig.getNum("TRX.Port"));
 
 // Subscriber registry and http authentication
-SubscriberRegistry gSubscriberRegistry;
+//SubscriberRegistry gSubscriberRegistry;
 
 /** The global peering interface. */
 Peering::PeerInterface gPeerInterface;
@@ -333,14 +335,14 @@ int main(int argc, char *argv[])
 	srandom(time(NULL));
 
 	gConfig.setUpdateHook(purgeConfig);
-	LOG(ALERT) << "M-BTS (re)starting, build date " << __DATE__;
+	LOG(ALERT) << "M-BTS (re)starting, version " << VERSION << " build date " << __DATE__;
 
 	COUT("\n\n" << gOpenBTSWelcome << "\n");
 	gTMSITable.open(gConfig.getStr("Control.Reporting.TMSITable").c_str());
 	//gTransactionTable.init(gConfig.getStr("Control.Reporting.TransactionTable").c_str());
 	gPhysStatus.open(gConfig.getStr("Control.Reporting.PhysStatusTable").c_str());
 	gBTS.init();
-	gSubscriberRegistry.init();
+	//gSubscriberRegistry.init();
 	gParser.addCommands();
 
 	if (/* gLogConn.valid() && gCmdConn.valid() && */ gSigConn.valid() && gMediaConn.valid()) {

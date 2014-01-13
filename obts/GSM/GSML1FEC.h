@@ -39,6 +39,7 @@
 
 #include "../GPRS/GPRSExport.h"
 
+#include <string>
 
 class ARFCNManager;
 
@@ -379,7 +380,7 @@ class L1Decoder {
 	void countGoodFrame();
 	void countBadFrame();
 
-	bool decrypt_maybe(string wIMSI, int wA5Alg);
+	bool decrypt_maybe(std::string wIMSI, int wA5Alg);
 	unsigned char *kc() { return mKc; }
 };
 
