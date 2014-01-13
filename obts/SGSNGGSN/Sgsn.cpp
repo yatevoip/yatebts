@@ -15,10 +15,10 @@
 */
 
 #include <list>
-#include <SIPInterface.h>
-#include <SIPUtility.h>
-#include <SIPMessage.h>
-#include <SIPEngine.h>
+//#include <SIPInterface.h>
+//#include <SIPUtility.h>
+//#include <SIPMessage.h>
+//#include <SIPEngine.h>
 #include <SubscriberRegistry.h>
 //#include "RList.h"
 #include "LLC.h"
@@ -34,7 +34,7 @@ using namespace Utils;
 #define CASENAME(x) case x: return #x;
 #define SRB3 3
 
-using namespace SIP;
+//using namespace SIP;
 
 namespace SGSN {
 typedef std::list<SgsnInfo*> SgsnInfoList_t;
@@ -533,7 +533,7 @@ void MSUEAdapter::sgsnHandleSecurityModeComplete(bool success)
 }
 #endif
 
-#if RN_UMTS
+#if 0
 static void sendAuthenticationRequest(SgsnInfo *si, string IMSI)
 {
         SIPEngine engine(gConfig.getStr("SIP.Proxy.Registration").c_str(),IMSI.c_str());
@@ -568,18 +568,18 @@ static void handleAuthenticationResponse(SgsnInfo *si, L3GmmMsgAuthenticationRes
 		string RAND = si->mRAND.hexstr();
                 // verify SRES 
 		bool success = false;
-                try {
-			// FIXME YATEBTS -- We need a new authentication procedure here.
-                        //SIPEngine engine(gConfig.getStr("SIP.Proxy.Registration").c_str(),IMSI.c_str());
-                        //SGSNLOG("waiting for registration on IMSI: " << IMSI);
-                        //string SRESstr = armsg.mSRES.hexstr();
-                        //success = engine.Register(SIPEngine::SIPRegister, &RAND, IMSI.c_str(), SRESstr.c_str());
-                }
-                catch(SIPTimeout) {
-                        SGSNLOG("SIP authentication timed out.  Is the proxy running at " << gConfig.getStr("SIP.Proxy.Registration"));
-                        // TODO: Reject 
-                        return;
-                }
+                //try {
+		//	// FIXME YATEBTS -- We need a new authentication procedure here.
+                //        //SIPEngine engine(gConfig.getStr("SIP.Proxy.Registration").c_str(),IMSI.c_str());
+                //        //SGSNLOG("waiting for registration on IMSI: " << IMSI);
+                //        //string SRESstr = armsg.mSRES.hexstr();
+                //        //success = engine.Register(SIPEngine::SIPRegister, &RAND, IMSI.c_str(), SRESstr.c_str());
+                //}
+                //catch(SIPTimeout) {
+                //        SGSNLOG("SIP authentication timed out.  Is the proxy running at " << gConfig.getStr("SIP.Proxy.Registration"));
+                //        // TODO: Reject 
+                //        return;
+                //}
 
 		if (!success) return;
 

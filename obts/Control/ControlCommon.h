@@ -35,7 +35,6 @@
 #include <GSML3MMElements.h>
 #include <GSML3CCElements.h>
 #include <GSML3RRMessages.h>
-#include <SIPEngine.h>
 
 #include "TMSITable.h"
 

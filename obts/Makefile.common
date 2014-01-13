@@ -27,7 +27,6 @@ CONTROL_INCLUDEDIR = $(top_srcdir)/Control
 GSM_INCLUDEDIR = $(top_srcdir)/GSM
 GPRS_INCLUDEDIR = $(top_srcdir)/GPRS
 SGSNGGSN_INCLUDEDIR = $(top_srcdir)/SGSNGGSN
-SIP_INCLUDEDIR = $(top_srcdir)/SIP
 SMS_INCLUDEDIR = $(top_srcdir)/SMS
 TRX_INCLUDEDIR = $(top_srcdir)/TRXManager
 GLOBALS_INCLUDEDIR = $(top_srcdir)/Globals
@@ -47,7 +46,6 @@ STD_DEFINES_AND_INCLUDES = \
 	-I$(GSM_INCLUDEDIR) \
 	-I$(GPRS_INCLUDEDIR) \
 	-I$(SGSNGGSN_INCLUDEDIR) \
-	-I$(SIP_INCLUDEDIR) \
 	-I$(SMS_INCLUDEDIR) \
 	-I$(TRX_INCLUDEDIR) \
 	-I$(GLOBALS_INCLUDEDIR) \
@@ -62,7 +60,6 @@ CONN_LA = $(top_builddir)/Connection/libconnection.la
 GSM_LA = $(top_builddir)/GSM/libGSM.la
 GPRS_LA = $(top_builddir)/GPRS/libGPRS.la
 SGSNGGSN_LA = $(top_builddir)/SGSNGGSN/libSGSNGGSN.la
-SIP_LA = $(top_builddir)/SIP/libSIP.la
 SMS_LA = $(top_builddir)/SMS/libSMS.la
 TRX_LA = $(top_builddir)/TRXManager/libtrxmanager.la
 CONTROL_LA = $(top_builddir)/Control/libcontrol.la

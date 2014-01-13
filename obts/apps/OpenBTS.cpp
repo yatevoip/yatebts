@@ -43,7 +43,6 @@ ReportingTable gReports(gConfig.getStr("Control.Reporting.StatsTable").c_str());
 #include <ControlCommon.h>
 //#include <TransactionTable.h>
 
-#include <SIPInterface.h>
 #include <Globals.h>
 
 #include <CLI.h>
@@ -86,9 +85,6 @@ Control::TMSITable gTMSITable;
 
 // Physical status reporting
 GSM::PhysicalStatus gPhysStatus;
-
-// The global SIPInterface object.
-SIP::SIPInterface gSIPInterface;
 
 // Configure the BTS object based on the config file.
 // So don't create this until AFTER loading the config file.
@@ -185,47 +181,6 @@ void createStats()
 	gReports.create("OpenBTS.CLI.Command");
 	// count of CLI commands where responses could not be returned
 	gReports.create("OpenBTS.CLI.Command.ResponseFailure");
-
-	// count of SIP transactions that failed with 3xx responses from the remote end
-	gReports.create("OpenBTS.SIP.Failed.Remote.3xx");
-	// count of SIP transactions that failed with 4xx responses from the remote end
-	gReports.create("OpenBTS.SIP.Failed.Remote.4xx");
-	// count of SIP transactions that failed with 5xx responses from the remote end
-	gReports.create("OpenBTS.SIP.Failed.Remote.5xx");
-	// count of SIP transactions that failed with 6xx responses from the remote end
-	gReports.create("OpenBTS.SIP.Failed.Remote.6xx");
-	// count of SIP transactions that failed with unrecognized responses from the remote end
-	gReports.create("OpenBTS.SIP.Failed.Remote.xxx");
-	// count of SIP transactions that failed due to local-end errors
-	gReports.create("OpenBTS.SIP.Failed.Local");
-	// count of timeout events on SIP socket reads 
-	gReports.create("OpenBTS.SIP.ReadTimeout");
-	// count of SIP messages that were never properly acked
-	gReports.create("OpenBTS.SIP.LostProxy");
-	// count of SIP message not sent due to unresolvable host name
-	gReports.create("OpenBTS.SIP.UnresolvedHostname");
-	// count of INVITEs received in the SIP layer
-	gReports.create("OpenBTS.SIP.INVITE.In");
-	// count of SOS INVITEs sent from the SIP layer; these are not included in ..INVITE.OUT
-	gReports.create("OpenBTS.SIP.INVITE-SOS.Out");
-	// count of INVITEs sent from the in SIP layer
-	gReports.create("OpenBTS.SIP.INVITE.Out");
-	// count of INVITE-OKs sent from the in SIP layer (connection established)
-	gReports.create("OpenBTS.SIP.INVITE-OK.Out");
-	// count of MESSAGEs received in the in SIP layer
-	gReports.create("OpenBTS.SIP.MESSAGE.In");
-	// count of MESSAGESs sent from the SIP layer
-	gReports.create("OpenBTS.SIP.MESSAGE.Out");
-	// count of REGISTERSs sent from the SIP layer
-	gReports.create("OpenBTS.SIP.REGISTER.Out");
-	// count of BYEs sent from the SIP layer
-	gReports.create("OpenBTS.SIP.BYE.Out");
-	// count of BYEs received in the SIP layer
-	gReports.create("OpenBTS.SIP.BYE.In");
-	// count of BYE-OKs sent from SIP layer (final disconnect handshake)
-	gReports.create("OpenBTS.SIP.BYE-OK.Out");
-	// count of BYE-OKs received in SIP layer (final disconnect handshake)
-	gReports.create("OpenBTS.SIP.BYE-OK.In");
 
 	// count of initiated LUR attempts
 	gReports.create("OpenBTS.GSM.MM.LUR.Start");
@@ -378,7 +333,7 @@ int main(int argc, char *argv[])
 	srandom(time(NULL));
 
 	gConfig.setUpdateHook(purgeConfig);
-	LOG(ALERT) << "OpenBTS (re)starting, ver " << VERSION << " build date " << __DATE__;
+	LOG(ALERT) << "M-BTS (re)starting, build date " << __DATE__;
 
 	COUT("\n\n" << gOpenBTSWelcome << "\n");
 	gTMSITable.open(gConfig.getStr("Control.Reporting.TMSITable").c_str());
@@ -420,9 +375,6 @@ int main(int argc, char *argv[])
 	} else {
 		LOG(NOTICE) << "transceiver already running";
 	}
-
-	// Start the SIP interface.
-	gSIPInterface.start();
 
 	// Start the peer interface
 	gPeerInterface.start();
@@ -714,35 +666,19 @@ vector<string> configurationCrossCheck(const string& key) {
 	vector<string> warnings;
 	ostringstream warning;
 
-	// GSM.Timer.T3113 should equal SIP.Timer.B
-	if (key.compare("GSM.Timer.T3113") == 0 || key.compare("SIP.Timer.B") == 0) {
-		string gsm = gConfig.getStr("GSM.Timer.T3113");
-		string sip = gConfig.getStr("SIP.Timer.B");
-		if (gsm.compare(sip) != 0) {
-			warning << "GSM.Timer.T3113 (" << gsm << ") and SIP.Timer.B (" << sip << ") should usually have the same value";
-			warnings.push_back(warning.str());
-			warning.str(std::string());
-		}
-
 	// Control.VEA depends on GSM.CellSelection.NECI
-	} else if (key.compare("Control.VEA") == 0 || key.compare("GSM.CellSelection.NECI") == 0) {
+	if (key.compare("Control.VEA") == 0 || key.compare("GSM.CellSelection.NECI") == 0) {
 		if (gConfig.getBool("Control.VEA") && gConfig.getStr("GSM.CellSelection.NECI").compare("1") != 0) {
 			warning << "Control.VEA is enabled but will not be functional until GSM.CellSelection.NECI is set to \"1\"";
 			warnings.push_back(warning.str());
 			warning.str(std::string());
 		}
 
-	// GSM.Timer.T3212 should be a factor of six and shorter than SIP.RegistrationPeriod
-	} else if (key.compare("GSM.Timer.T3212") == 0 || key.compare("SIP.RegistrationPeriod") == 0) {
+	// GSM.Timer.T3212 should be a factor of six
+	} else if (key.compare("GSM.Timer.T3212") == 0) {
 		int gsm = gConfig.getNum("GSM.Timer.T3212");
-		int sip = gConfig.getNum("SIP.RegistrationPeriod");
 		if (key.compare("GSM.Timer.T3212") == 0 && gsm % 6) {
 			warning << "GSM.Timer.T3212 should be a factor of 6";
-			warnings.push_back(warning.str());
-			warning.str(std::string());
-		}
-		if (gsm >= sip) {
-			warning << "GSM.Timer.T3212 (" << gsm << ") should be shorter than SIP.RegistrationPeriod (" << sip << ")";
 			warnings.push_back(warning.str());
 			warning.str(std::string());
 		}
@@ -842,16 +778,6 @@ vector<string> configurationCrossCheck(const string& key) {
 			warning.str(std::string());
 		}
 
-	// TODO : SIP.SMSC is actually broken with the verification bits, no way to set value as null
-	// SIP.SMSC should normally be NULL if SMS.MIMIEType is "text/plain" and "smsc" if SMS.MIMEType is "application/vnd.3gpp".
-	} else if (key.compare("SMS.MIMEType") == 0 || key.compare("SIP.SMSC") == 0) {
-		string sms = gConfig.getStr("SMS.MIMEType");
-		string sip = gConfig.getStr("SIP.SMSC");
-		if (sms.compare("application/vnd.3gpp.sms") == 0 && sip.compare("smsc") != 0) {
-			warning << "SMS.MIMEType is set to \"application/vnc.3gpp.sms\", SIP.SMSC should usually be set to \"smsc\"";
-			warnings.push_back(warning.str());
-			warning.str(std::string());
-		}
 	}
 
 	return warnings;

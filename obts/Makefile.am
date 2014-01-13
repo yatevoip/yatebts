@@ -37,7 +37,6 @@ _SUBDIRS = \
 	Globals \
 	SR \
 	CLI \
-	SIP \
 	GSM \
 	SMS \
 	TRXManager \

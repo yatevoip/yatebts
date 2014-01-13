@@ -27,8 +27,6 @@
 #include <GSML3MMMessages.h>
 #include <GSMConfig.h>
 
-#include <SIPEngine.h>
-#include <SIPInterface.h>
 #include <Sgsn.h>
 
 #include <Logger.h>
@@ -215,8 +213,6 @@ void  Control::resolveIMSI(L3MobileIdentity& mobileIdentity, LogicalChannel* LCH
 		// Cause 0x60 "Invalid mandatory information"
 		LCH->send(L3CMServiceReject(L3RejectCause(0x60)));
 		LCH->send(L3ChannelRelease());
-		// The SIP side and transaction record don't exist yet.
-		// So we're done.
 		return;
 	}
 }
