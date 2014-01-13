@@ -38,7 +38,7 @@
 #include <SIPInterface.h>
 #include <SIPUtility.h>
 
-#include <CallControl.h>
+//#include <CallControl.h>
 
 #include <Reporting.h>
 #include <Logger.h>

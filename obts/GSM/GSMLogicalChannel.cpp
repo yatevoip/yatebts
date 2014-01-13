@@ -28,7 +28,7 @@
 #include "GSMConfig.h"
 
 #include <TransactionTable.h>
-#include <SMSControl.h>
+//#include <SMSControl.h>
 #include <ControlCommon.h>
 #include "GPRSExport.h"
 
@@ -52,12 +52,12 @@ void LogicalChannel::open()
 		LOG(DEBUG) << "SAPI=" << s << " open complete";
 	}
 	// Empty any stray transactions in the FIFO from the SIP layer.
-	while (true) {
-		Control::TransactionEntry *trans = mTransactionFIFO.readNoBlock();
-		if (!trans) break;
-		LOG(WARNING) << "flushing stray transaction " << *trans;
-		// FIXME -- Shouldn't we be deleting these?
-	}
+	//while (true) {
+	//	Control::TransactionEntry *trans = mTransactionFIFO.readNoBlock();
+	//	if (!trans) break;
+	//	LOG(WARNING) << "flushing stray transaction " << *trans;
+	//	// FIXME -- Shouldn't we be deleting these?
+	//}
 	LOG(DEBUG);
 }
 
@@ -412,44 +412,46 @@ void SACCHLogicalChannel::serviceLoop()
 			if (smsFrame) nothing=false;
 			L3Message* smsMessage = processSACCHMessage(smsFrame);
 			delete smsFrame;
-			if (smsMessage) {
-				const SMS::CPData* cpData = dynamic_cast<const SMS::CPData*>(smsMessage);
-				if (cpData) {
-					OBJLOG(INFO) << "SMS CPDU " << *cpData;
-					Control::TransactionEntry *transaction = gTransactionTable.find(this);
-					try {
-						if (transaction) {
-							Control::InCallMOSMSController(cpData,transaction,this);
-						} else {
-							OBJLOG(WARNING) << "in-call MOSMS CP-DATA with no corresponding transaction";
-						}
-					} catch (Control::ControlLayerException e) {
-						//LogicalChannel::send(RELEASE,3);
-						gTransactionTable.remove(e.transactionID());
-					}
-				} else {
-					OBJLOG(NOTICE) << "SACCH SAP3 sent unaticipated message " << rrMessage;
-				}
-				delete smsMessage;
-			}
+			// FIXME YATEBTS -- In-call SMS processing goes here.
+			delete smsMessage;
+			//if (smsMessage) {
+			//	const SMS::CPData* cpData = dynamic_cast<const SMS::CPData*>(smsMessage);
+			//	if (cpData) {
+			//		OBJLOG(INFO) << "SMS CPDU " << *cpData;
+			//		//Control::TransactionEntry *transaction = gTransactionTable.find(this);
+			//		//try {
+			//		//	if (transaction) {
+			//		//		Control::InCallMOSMSController(cpData,transaction,this);
+			//		//	} else {
+			//		//		OBJLOG(WARNING) << "in-call MOSMS CP-DATA with no corresponding transaction";
+			//		//	}
+			//		//} catch (Control::ControlLayerException e) {
+			//		//	//LogicalChannel::send(RELEASE,3);
+			//		//	gTransactionTable.remove(e.transactionID());
+			//		}
+			//	} else {
+			//		OBJLOG(NOTICE) << "SACCH SAP3 sent unaticipated message " << rrMessage;
+			//	}
+			//	delete smsMessage;
+			//}
 
 			// Anything from the SIP side?
 			// MTSMS (delivery from SIP to the MS)
-			Control::TransactionEntry *sipTransaction = mTransactionFIFO.readNoBlock();
-			if (sipTransaction) {
-				OBJLOG(INFO) << "SIP-side transaction: " << sipTransaction;
-				assert(sipTransaction->service() == L3CMServiceType::MobileTerminatedShortMessage);
-				try {
-					Control::MTSMSController(sipTransaction,this);
-				} catch (Control::ControlLayerException e) {
-					//LogicalChannel::send(RELEASE,3);
-					gTransactionTable.remove(e.transactionID());
-				}
-			}
+			//Control::TransactionEntry *sipTransaction = mTransactionFIFO.readNoBlock();
+			//if (sipTransaction) {
+			//	OBJLOG(INFO) << "SIP-side transaction: " << sipTransaction;
+			//	assert(sipTransaction->service() == L3CMServiceType::MobileTerminatedShortMessage);
+			//	try {
+			//		Control::MTSMSController(sipTransaction,this);
+			//	} catch (Control::ControlLayerException e) {
+			//		//LogicalChannel::send(RELEASE,3);
+			//		gTransactionTable.remove(e.transactionID());
+			//	}
+			//}
 
 			// Did we get anything from the phone?
 			// If not, we may have lost contact.  Bump the RSSI to induce more power
-			if (nothing) RSSIBumpDown(gConfig.getNum("Control.SACCHTimeout.BumpDown"));
+			//if (nothing) RSSIBumpDown(gConfig.getNum("Control.SACCHTimeout.BumpDown"));
 
 			// Nothing happened?
 			if (nothing) break;
