@@ -1331,6 +1331,8 @@ void TCHFACCHL1Decoder::writeLowSideRx(const RxBurst& inBurst)
 		OBJLOG(DEBUG) << "TCHFACCHL1Decoder not active, ignoring input";
 		return;
 	}
+// Remove handover support
+#if 0
 	if (mHandoverPending) {
 		// If this channel is waiting for an inbound handover,
 		// try to decode a handover access burst.
@@ -1359,10 +1361,11 @@ void TCHFACCHL1Decoder::writeLowSideRx(const RxBurst& inBurst)
 		unsigned ref = mHD.peekField(0,8);
 		LOG(INFO) << "handover access ref=" << ref;
 
-		if (!Control::SaveHandoverAccess(ref,inBurst.RSSI(),inBurst.timingError(),inBurst.time())) return;
+		//if (!Control::SaveHandoverAccess(ref,inBurst.RSSI(),inBurst.timingError(),inBurst.time())) return;
 		mUpstream->writeLowSide(HANDOVER_ACCESS);
 		return;
 	}
+#endif
 	processBurst(inBurst);
 }
 

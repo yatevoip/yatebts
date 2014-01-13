@@ -27,10 +27,10 @@
 
 #include <Defines.h>
 #include "ControlCommon.h"
-#include "TransactionTable.h"
+//#include "TransactionTable.h"
 #include "RadioResource.h"
-#include "SMSControl.h"
-#include "CallControl.h"
+//#include "SMSControl.h"
+//#include "CallControl.h"
 
 #include <GSMLogicalChannel.h>
 #include <GSMConfig.h>
@@ -38,7 +38,7 @@
 
 #include <NeighborTable.h>
 #include <Peering.h>
-#include <SIPEngine.h>
+//#include <SIPEngine.h>
 
 
 #include <Reporting.h>
@@ -302,6 +302,7 @@ void* Control::AccessGrantServiceLoop(void*)
 	return NULL;
 }
 
+#if 0
 void abortInboundHandover(TransactionEntry* transaction, unsigned cause, GSM::LogicalChannel *LCH=NULL)
 {
 	LOG(DEBUG) << "aborting inbound handover " << *transaction;
@@ -314,9 +315,11 @@ void abortInboundHandover(TransactionEntry* transaction, unsigned cause, GSM::Lo
 
 	gTransactionTable.remove(transaction);
 }
+#endif
 
 
 
+#if 0
 bool Control::SaveHandoverAccess(unsigned handoverReference, float RSSI, float timingError, const GSM::Time& timestamp)
 {
 	// In this function, we are "BS2" in the ladder diagram.
@@ -342,10 +345,13 @@ bool Control::SaveHandoverAccess(unsigned handoverReference, float RSSI, float t
 	transaction->setInboundHandover(RSSI,timingError,gBTS.clock().systime(timestamp));
 	return true;
 }
+#endif
 
 
 
 
+// Removing handover, for now.
+#if 0
 void Control::ProcessHandoverAccess(GSM::TCHFACCHLogicalChannel *TCH)
 {
 	// In this function, we are "BS2" in the ladder diagram.
@@ -469,8 +475,10 @@ void Control::ProcessHandoverAccess(GSM::TCHFACCHLogicalChannel *TCH)
 	transaction->GSMState(GSM::Active);
 	callManagementLoop(transaction,TCH);
 }
+#endif
 
 
+#if 0
 void Control::HandoverDetermination(const L3MeasurementResults& measurements, SACCHLogicalChannel* SACCH)
 {
 	// This is called from the SACCH service loop.
@@ -552,6 +560,7 @@ void Control::HandoverDetermination(const L3MeasurementResults& measurements, SA
 	}
 	gPeerInterface.sendMessage(&peerAddr,msg.c_str());
 }
+#endif
 
 
 
@@ -596,39 +605,45 @@ void Control::PagingResponseHandler(const L3PagingResponse* resp, LogicalChannel
 	// erased before this handler was called.  That's too bad.
 	// HACK -- We also flush stray transactions until we find what we 
 	// are looking for.
-	TransactionEntry* transaction = gTransactionTable.answeredPaging(mobileID);
-	if (!transaction) {
-		LOG(WARNING) << "Paging Reponse with no transaction record for " << mobileID;
-		// Cause 0x41 means "call already cleared".
-		DCCH->send(L3ChannelRelease(0x41));
-		return;
-	}
-	LOG(INFO) << "paging reponse for transaction " << *transaction;
+	//TransactionEntry* transaction = gTransactionTable.answeredPaging(mobileID);
+	//if (!transaction) {
+	//	LOG(WARNING) << "Paging Reponse with no transaction record for " << mobileID;
+	//	// Cause 0x41 means "call already cleared".
+	//	DCCH->send(L3ChannelRelease(0x41));
+	//	return;
+	//}
+	//LOG(INFO) << "paging reponse for transaction " << *transaction;
 	// Set the transaction channel.
-	transaction->channel(DCCH);
+	// FIXME YATEBTS -- We need to create a new connection at this point.
+	//transaction->channel(DCCH);
 	// We are looking for a mobile-terminated transaction.
 	// The transaction controller will take it from here.
-	switch (transaction->service().type()) {
+	// FIXME YATEBTS -- We will need store the service type in the paging record,
+	// since the transaction table is gone now.
+	// This is just a placeholder to get the code to compile.
+	L3CMServiceType::TypeCode service = L3CMServiceType::UndefinedType;
+	switch (service) {
+		// FIXME YATEBTS -- These handlers will need to change.
 		case L3CMServiceType::MobileTerminatedCall:
-			MTCStarter(transaction, DCCH);
+			//MTCStarter(transaction, DCCH);
 			return;
 		case L3CMServiceType::MobileTerminatedShortMessage:
-			MTSMSController(transaction, DCCH);
-			return;
-		case L3CMServiceType::TestCall:
-			TestCall(transaction, DCCH);
+			//MTSMSController(transaction, DCCH);
 			return;
 		default:
+			return;
 			// Flush stray MOC entries.
 			// There should not be any, but...
-			LOG(ERR) << "non-valid paging-state transaction: " << *transaction;
-			gTransactionTable.remove(transaction);
+			//LOG(ERR) << "non-valid paging-state transaction: " << *transaction;
+			//gTransactionTable.remove(transaction);
 			// FIXME -- Send a channel release on the DCCH.
 	}
 }
 
 
 
+// Just use VEA and we don't need this anymore.
+#if 0
 void Control::AssignmentCompleteHandler(const L3AssignmentComplete *confirm, TCHFACCHLogicalChannel *TCH)
 {
 	// The assignment complete handler is used to
@@ -661,6 +676,7 @@ void Control::AssignmentCompleteHandler(const L3AssignmentComplete *confirm, TCH
 	}
 	// If we got here, the call is cleared.
 }
+#endif
 
 
 
@@ -723,14 +739,17 @@ unsigned Pager::pageAll()
 
 	// Clear expired entries.
 	PagingEntryList::iterator lp = mPageIDs.begin();
+	// FIXME YATEBTS -- We should probably be looking at a connection table,
+	// to see what paging activity is still meaningful.
 	while (lp != mPageIDs.end()) {
 		bool expired = lp->expired();
-		bool defunct = gTransactionTable.find(lp->transactionID()) == NULL;
-		if (!expired && !defunct) ++lp;
+		//bool defunct = gTransactionTable.find(lp->transactionID()) == NULL;
+		//if (!expired && !defunct) ++lp;
+		if (!expired) ++lp;
 		else {
 			LOG(INFO) << "erasing " << lp->ID();
 			// Non-responsive, dead transaction?
-			gTransactionTable.removePaging(lp->transactionID());
+			//gTransactionTable.removePaging(lp->transactionID());
 			// remove from the list
 			lp=mPageIDs.erase(lp);
 		}

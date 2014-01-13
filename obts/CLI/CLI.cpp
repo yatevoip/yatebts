@@ -351,36 +351,6 @@ int sendsimple(int argc, char** argv, ostream& os)
 }
 
 
-/** Submit an SMS for delivery to an IMSI. */
-int sendsms(int argc, char** argv, ostream& os)
-{
-	if (argc<4) return BAD_NUM_ARGS;
-
-	char *IMSI = argv[1];
-	char *srcAddr = argv[2];
-	string rest = "";
-	for (int i=3; i<argc; i++) rest = rest + argv[i] + " ";
-	const char *txtBuf = rest.c_str();
-
-	if (!isIMSI(IMSI)) {
-		os << "Invalid IMSI. Enter 15 digits only.";
-		return BAD_VALUE;
-	}
-
-	Control::TransactionEntry *transaction = new Control::TransactionEntry(
-		gConfig.getStr("SIP.Proxy.SMS").c_str(),
-		GSM::L3MobileIdentity(IMSI),
-		NULL,
-		GSM::L3CMServiceType::MobileTerminatedShortMessage,
-		GSM::L3CallingPartyBCDNumber(srcAddr),
-		GSM::Paging,
-		txtBuf);
-	transaction->messageType("text/plain");
-	Control::initiateMTTransaction(transaction,GSM::SDCCHType,30000);
-	os << "message submitted for delivery" << endl;
-	return SUCCESS;
-}
-
 
 /** Print current usage loads. */
 int printStats(int argc, char** argv, ostream& os)
@@ -977,38 +947,6 @@ int page(int argc, char **argv, ostream& os)
 }
 
 
-int testcall(int argc, char **argv, ostream& os)
-{
-	if (argc!=3) return BAD_NUM_ARGS;
-	char *IMSI = argv[1];
-	if (strlen(IMSI)!=15) {
-		os << IMSI << " is not a valid IMSI" << endl;
-		return BAD_VALUE;
-	}
-	Control::TransactionEntry *transaction = new Control::TransactionEntry(
-		gConfig.getStr("SIP.Proxy.Speech").c_str(),
-		GSM::L3MobileIdentity(IMSI),
-		NULL,
-		GSM::L3CMServiceType::TestCall,
-		GSM::L3CallingPartyBCDNumber("0"),
-		GSM::Paging);
-	Control::initiateMTTransaction(transaction,GSM::TCHFType,1000*atoi(argv[2]));
-	return SUCCESS;
-}
-
-int endcall(int argc, char **argv, ostream& os)
-{
-	if (argc!=2) return BAD_NUM_ARGS;
-	unsigned transID = atoi(argv[1]);
-	Control::TransactionEntry* target = gTransactionTable.find(transID);
-	if (!target) {
-		os << transID << " not found in table";
-		return BAD_VALUE;
-	}
-	target->terminate();
-	return SUCCESS;
-}
-
 
 
 
@@ -1316,7 +1254,6 @@ void Parser::addCommands()
 	addCommand("help", showHelp, "[command] -- list available commands or gets help on a specific command.");
 	addCommand("shutdown", exit_function, "[wait] -- shut down or restart OpenBTS, either immediately, or waiting for existing calls to clear with a timeout in seconds");
 	addCommand("tmsis", tmsis, "[\"clear\"] or [\"dump\" filename] -- print/clear the TMSI table or dump it to a file.");
-	addCommand("sendsms", sendsms, "IMSI src# message... -- send direct SMS to IMSI, addressed from source number src#.");
 	addCommand("sendsimple", sendsimple, "IMSI src# message... -- send SMS to IMSI via SIP interface, addressed from source number src#.");
 	addCommand("load", printStats, "-- print the current activity loads.");
 	addCommand("cellid", cellID, "[MCC MNC LAC CI] -- get/set location area identity (MCC, MNC, LAC) and cell ID (CI)");
@@ -1339,8 +1276,6 @@ void Parser::addCommands()
 	addCommand("rmconfig", rmconfig, "key -- set a configuration value back to its default or remove a custom key/value pair");
 	addCommand("unconfig", unconfig, "key -- disable a configuration key by setting an empty value");
 	addCommand("notices", notices, "-- show startup copyright and legal notices");
-	addCommand("endcall", endcall,"trans# -- terminate the given transaction");
-	addCommand("testcall", testcall, "IMSI time -- initiate a TCHF test call to a given IMSI with a given paging time");
 	addCommand("sysinfo", sysinfo, "-- print current system information messages");
 	addCommand("neighbors", neighbors, "-- dump the neighbor table");
 	addCommand("gprs", GPRS::gprsCLI,"GPRS mode sub-command.  Type: gprs help for more");

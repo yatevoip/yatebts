@@ -400,7 +400,7 @@ void SACCHLogicalChannel::serviceLoop()
 					// Note that the typeAndOffset of a SACCH match the host channel.
 					gPhysStatus.setPhysical(this, mMeasurementResults);
 					// Check for handover requirement.
-					Control::HandoverDetermination(mMeasurementResults,this);
+					//Control::HandoverDetermination(mMeasurementResults,this);
 				} else {
 					OBJLOG(NOTICE) << "SACCH SAP0 sent unaticipated message " << rrMessage;
 				}

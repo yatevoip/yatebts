@@ -32,7 +32,6 @@ noinst_LTLIBRARIES = libcontrol.la
 libcontrol_la_SOURCES = \
 	TransactionTable.cpp \
 	TMSITable.cpp \
-	CallControl.cpp \
 	SMSControl.cpp \
 	ControlCommon.cpp \
 	MobilityManagement.cpp \
@@ -51,6 +50,5 @@ noinst_HEADERS = \
 	TMSITable.h \
 	RadioResource.h \
 	MobilityManagement.h \
-	CallControl.h \
 	TMSITable.h \
 	RRLPServer.h
