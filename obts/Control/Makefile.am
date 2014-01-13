@@ -32,7 +32,6 @@ noinst_LTLIBRARIES = libcontrol.la
 libcontrol_la_SOURCES = \
 	TransactionTable.cpp \
 	TMSITable.cpp \
-	SMSControl.cpp \
 	ControlCommon.cpp \
 	RadioResource.cpp \
 	DCCHDispatch.cpp \
@@ -44,7 +43,6 @@ libcontrol_la_SOURCES = \
 
 noinst_HEADERS = \
 	ControlCommon.h \
-	SMSControl.h \
 	TransactionTable.h \
 	TMSITable.h \
 	RadioResource.h \
