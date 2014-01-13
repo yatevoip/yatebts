@@ -24,7 +24,7 @@
 #include <GSMLogicalChannel.h>
 #include <GSMConfig.h>
 #include <ControlCommon.h>
-#include <TransactionTable.h>
+//#include <TransactionTable.h>
 #include <SubscriberRegistry.h>
 
 #include <Sockets.h>
@@ -445,7 +445,8 @@ bool SIPInterface::checkInvite( osip_message_t * msg)
 	}
 
 	// Find any active transaction for this IMSI with an assigned TCH or SDCCH.
-	GSM::LogicalChannel *chan = gTransactionTable.findChannel(mobileID);
+	GSM::LogicalChannel *chan = NULL;
+	//GSM::LogicalChannel *chan = gTransactionTable.findChannel(mobileID);
 	if (chan) {
 		// If the type is TCH and the service is SMS, get the SACCH.
 		// Otherwise, for now, just say chan=NULL.
@@ -458,40 +459,40 @@ bool SIPInterface::checkInvite( osip_message_t * msg)
 	}
 
 	// Check SIP map.  Repeated entry?  Page again.
-	if (mSIPMap.map().readNoBlock(callIDNum) != NULL) { 
-		TransactionEntry* transaction= gTransactionTable.find(mobileID,callIDNum);
-		// There's a FIFO but no trasnaction record?
-		if (!transaction) {
-			LOG(WARNING) << "repeated INVITE/MESSAGE with no transaction record";
-			// Delete the bogus FIFO.
-			mSIPMap.remove(callIDNum);
-			return false;
-		}
-		LOG(INFO) << "pre-existing transaction record: " << *transaction;
-		//if this is not the saved invite, it's a RE-invite. Respond saying we don't support it. 
-		if (!transaction->sameINVITE(msg)){
-		  /* don't cancel the call */
-			LOG(CRIT) << "got reinvite. transaction: " << *transaction << " SIP re-INVITE: " << msg;
-			transaction->MODSendERROR(msg, 488, "Not Acceptable Here", false);
-			/* I think we'd need to create a new transaction for this ack. Right now, just assume the ack makes it back. 
-			   if not, we'll hear another INVITE */
-			//transaction->MODWaitForERRORACK(false); //don't cancel the call
-			return false;
-		}
-
-		// Send trying, if appropriate.
-		bool sendTrying = serviceType!=L3CMServiceType::MobileTerminatedShortMessage;
-		sendTrying = sendTrying || !gConfig.getBool("SIP.RFC3428.NoTrying");
-		if (sendTrying) transaction->MTCSendTrying();
-
-		// And if no channel is established yet, page again.
-		if (!chan) {
-			LOG(INFO) << "repeated SIP INVITE/MESSAGE, repaging for transaction " << *transaction; 
-			gBTS.pager().addID(mobileID,requiredChannel,*transaction);
-		}
-
-		return false;
-	}
+//	if (mSIPMap.map().readNoBlock(callIDNum) != NULL) { 
+//		TransactionEntry* transaction= gTransactionTable.find(mobileID,callIDNum);
+//		// There's a FIFO but no trasnaction record?
+//		if (!transaction) {
+//			LOG(WARNING) << "repeated INVITE/MESSAGE with no transaction record";
+//			// Delete the bogus FIFO.
+//			mSIPMap.remove(callIDNum);
+//			return false;
+//		}
+//		LOG(INFO) << "pre-existing transaction record: " << *transaction;
+//		//if this is not the saved invite, it's a RE-invite. Respond saying we don't support it. 
+//		if (!transaction->sameINVITE(msg)){
+//		  /* don't cancel the call */
+//			LOG(CRIT) << "got reinvite. transaction: " << *transaction << " SIP re-INVITE: " << msg;
+//			transaction->MODSendERROR(msg, 488, "Not Acceptable Here", false);
+//			/* I think we'd need to create a new transaction for this ack. Right now, just assume the ack makes it back. 
+//			   if not, we'll hear another INVITE */
+//			//transaction->MODWaitForERRORACK(false); //don't cancel the call
+//			return false;
+//		}
+//
+//		// Send trying, if appropriate.
+//		bool sendTrying = serviceType!=L3CMServiceType::MobileTerminatedShortMessage;
+//		sendTrying = sendTrying || !gConfig.getBool("SIP.RFC3428.NoTrying");
+//		if (sendTrying) transaction->MTCSendTrying();
+//
+//		// And if no channel is established yet, page again.
+//		if (!chan) {
+//			LOG(INFO) << "repeated SIP INVITE/MESSAGE, repaging for transaction " << *transaction; 
+//			gBTS.pager().addID(mobileID,requiredChannel,*transaction);
+//		}
+//
+//		return false;
+//	}
 
 	// So we will need a new channel.
 	// Check gBTS for channel availability.
@@ -505,11 +506,11 @@ bool SIPInterface::checkInvite( osip_message_t * msg)
 	else { LOG(INFO) << "set up MTC paging for channel=" << requiredChannel; }
 
 	// Check for new user busy condition.
-	if (!chan && gTransactionTable.isBusy(mobileID)) {
-		LOG(NOTICE) << "user busy: " << mobileID;
-		sendEarlyError(msg,proxy.c_str(),486,"Busy Here");
-		return true;
-	}
+//	if (!chan && gTransactionTable.isBusy(mobileID)) {
+//		LOG(NOTICE) << "user busy: " << mobileID;
+//		sendEarlyError(msg,proxy.c_str(),486,"Busy Here");
+//		return true;
+//	}
 
 
 	// Add an entry to the SIP Map to route inbound SIP messages.
@@ -532,58 +533,58 @@ bool SIPInterface::checkInvite( osip_message_t * msg)
 	LOG(DEBUG) << "callerID " << callerID << "@" << callerHost;
 
 
-	// Build the transaction table entry.
-	// This constructor sets TI automatically for an MT transaction.
-	TransactionEntry *transaction = new TransactionEntry(proxy.c_str(),mobileID,chan,serviceType,callerID);
-	// FIXME -- These parameters should be arguments to the constructor above.
-	transaction->SIPUser(callIDNum,IMSI,callerID,callerHost);
-	transaction->saveINVITE(msg,false);
-	// Tell the sender we are trying.
-	if (serviceType!=L3CMServiceType::MobileTerminatedShortMessage) transaction->MTCSendTrying();
-
-	// SMS?  Get the text message body to deliver.
-	if (serviceType == L3CMServiceType::MobileTerminatedShortMessage) {
-		osip_body_t *body;
-		osip_content_type_t *contentType;
-		osip_message_get_body(msg,0,&body);
-		contentType = osip_message_get_content_type(msg);
-		const char *text = NULL;
-		char *type = NULL;
-		if (body) text = body->body;
-		if (text) transaction->message(text, body->length);
-		else LOG(NOTICE) << "MTSMS incoming MESSAGE method with no message body for " << mobileID;
-		/* Ok, so osip does some funny stuff here. The MIME type is split into type and subType.
-			Basically, text/plain becomes type=text, subType=plain. We need to put those together...
-		*/
-		if (contentType) {
-			type = (char *)malloc(strlen(contentType->type)+strlen(contentType->subtype)+2);
-		}
-		if (type) {
-			strcpy(type,contentType->type);
-			strcat(type,"/");
-			strcat(type,contentType->subtype);
-			transaction->messageType(type);
-			free(type);
-		}
-		else LOG(NOTICE) << "MTSMS incoming MESSAGE method with no content type (or memory error) for " << mobileID;
-	}
-
-	LOG(INFO) << "MTC MTSMS make transaction and add to transaction table: "<< *transaction;
-	gTransactionTable.add(transaction); 
-
-	// If there's an existing channel, skip the paging step.
-	if (!chan) {
-		// Add to paging list.
-		LOG(DEBUG) << "MTC MTSMS new SIP invite, initial paging for mobile ID " << mobileID;
-		gBTS.pager().addID(mobileID,requiredChannel,*transaction);	
-	} else {
-		// Add a transaction to an existing channel.
-		chan->addTransaction(transaction);
-		// FIXME -- We need to write something into the channel to trigger the new transaction.
-		// We need to send a message into the chan's dispatch loop,
-		// becasue we can't block this thread to run the transaction.
-	}
-
+//	// Build the transaction table entry.
+//	// This constructor sets TI automatically for an MT transaction.
+//	TransactionEntry *transaction = new TransactionEntry(proxy.c_str(),mobileID,chan,serviceType,callerID);
+//	// FIXME -- These parameters should be arguments to the constructor above.
+//	transaction->SIPUser(callIDNum,IMSI,callerID,callerHost);
+//	transaction->saveINVITE(msg,false);
+//	// Tell the sender we are trying.
+//	if (serviceType!=L3CMServiceType::MobileTerminatedShortMessage) transaction->MTCSendTrying();
+//
+//	// SMS?  Get the text message body to deliver.
+//	if (serviceType == L3CMServiceType::MobileTerminatedShortMessage) {
+//		osip_body_t *body;
+//		osip_content_type_t *contentType;
+//		osip_message_get_body(msg,0,&body);
+//		contentType = osip_message_get_content_type(msg);
+//		const char *text = NULL;
+//		char *type = NULL;
+//		if (body) text = body->body;
+//		if (text) transaction->message(text, body->length);
+//		else LOG(NOTICE) << "MTSMS incoming MESSAGE method with no message body for " << mobileID;
+//		/* Ok, so osip does some funny stuff here. The MIME type is split into type and subType.
+//			Basically, text/plain becomes type=text, subType=plain. We need to put those together...
+//		*/
+//		if (contentType) {
+//			type = (char *)malloc(strlen(contentType->type)+strlen(contentType->subtype)+2);
+//		}
+//		if (type) {
+//			strcpy(type,contentType->type);
+//			strcat(type,"/");
+//			strcat(type,contentType->subtype);
+//			transaction->messageType(type);
+//			free(type);
+//		}
+//		else LOG(NOTICE) << "MTSMS incoming MESSAGE method with no content type (or memory error) for " << mobileID;
+//	}
+//
+//	LOG(INFO) << "MTC MTSMS make transaction and add to transaction table: "<< *transaction;
+//	gTransactionTable.add(transaction); 
+//
+//	// If there's an existing channel, skip the paging step.
+//	if (!chan) {
+//		// Add to paging list.
+//		LOG(DEBUG) << "MTC MTSMS new SIP invite, initial paging for mobile ID " << mobileID;
+//		gBTS.pager().addID(mobileID,requiredChannel,*transaction);	
+//	} else {
+//		// Add a transaction to an existing channel.
+//		chan->addTransaction(transaction);
+//		// FIXME -- We need to write something into the channel to trigger the new transaction.
+//		// We need to send a message into the chan's dispatch loop,
+//		// becasue we can't block this thread to run the transaction.
+//	}
+//
 	return true;
 }
 

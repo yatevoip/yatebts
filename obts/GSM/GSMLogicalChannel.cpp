@@ -27,7 +27,7 @@
 #include "GSMLogicalChannel.h"
 #include "GSMConfig.h"
 
-#include <TransactionTable.h>
+//#include <TransactionTable.h>
 //#include <SMSControl.h>
 #include <ControlCommon.h>
 #include "GPRSExport.h"
@@ -574,11 +574,11 @@ ostream& GSM::operator<<(ostream& os, const LogicalChannel& chan)
 }
 
 
-void LogicalChannel::addTransaction(Control::TransactionEntry *transaction)
-{
-	assert(transaction->channel()==this);
-	mTransactionFIFO.write(transaction);
-}
+//void LogicalChannel::addTransaction(Control::TransactionEntry *transaction)
+//{
+//	assert(transaction->channel()==this);
+//	mTransactionFIFO.write(transaction);
+//}
 
 // vim: ts=4 sw=4
 

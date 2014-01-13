@@ -569,10 +569,11 @@ static void handleAuthenticationResponse(SgsnInfo *si, L3GmmMsgAuthenticationRes
                 // verify SRES 
 		bool success = false;
                 try {
-                        SIPEngine engine(gConfig.getStr("SIP.Proxy.Registration").c_str(),IMSI.c_str());
-                        SGSNLOG("waiting for registration on IMSI: " << IMSI);
-                        string SRESstr = armsg.mSRES.hexstr();
-                        success = engine.Register(SIPEngine::SIPRegister, &RAND, IMSI.c_str(), SRESstr.c_str());
+			// FIXME YATEBTS -- We need a new authentication procedure here.
+                        //SIPEngine engine(gConfig.getStr("SIP.Proxy.Registration").c_str(),IMSI.c_str());
+                        //SGSNLOG("waiting for registration on IMSI: " << IMSI);
+                        //string SRESstr = armsg.mSRES.hexstr();
+                        //success = engine.Register(SIPEngine::SIPRegister, &RAND, IMSI.c_str(), SRESstr.c_str());
                 }
                 catch(SIPTimeout) {
                         SGSNLOG("SIP authentication timed out.  Is the proxy running at " << gConfig.getStr("SIP.Proxy.Registration"));

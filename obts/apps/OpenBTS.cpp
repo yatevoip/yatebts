@@ -41,7 +41,7 @@ ReportingTable gReports(gConfig.getStr("Control.Reporting.StatsTable").c_str());
 #include <GSMLogicalChannel.h>
 
 #include <ControlCommon.h>
-#include <TransactionTable.h>
+//#include <TransactionTable.h>
 
 #include <SIPInterface.h>
 #include <Globals.h>
@@ -82,7 +82,7 @@ const char* gDateTime = __DATE__ " " __TIME__;
 Control::TMSITable gTMSITable;
 
 // The transaction table.
-Control::TransactionTable gTransactionTable;
+//Control::TransactionTable gTransactionTable;
 
 // Physical status reporting
 GSM::PhysicalStatus gPhysStatus;
@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
 
 	COUT("\n\n" << gOpenBTSWelcome << "\n");
 	gTMSITable.open(gConfig.getStr("Control.Reporting.TMSITable").c_str());
-	gTransactionTable.init(gConfig.getStr("Control.Reporting.TransactionTable").c_str());
+	//gTransactionTable.init(gConfig.getStr("Control.Reporting.TransactionTable").c_str());
 	gPhysStatus.open(gConfig.getStr("Control.Reporting.PhysStatusTable").c_str());
 	gBTS.init();
 	gSubscriberRegistry.init();

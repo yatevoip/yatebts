@@ -33,7 +33,7 @@
 #include "GSML2LAPDm.h"
 #include "GSML3RRElements.h"
 #include "GSMTDMA.h"
-#include <TransactionTable.h>
+//#include <TransactionTable.h>
 
 #include <Logger.h>
 
@@ -48,7 +48,7 @@ class UDPSocket;
 
 namespace GSM {
 
-typedef InterthreadQueue<Control::TransactionEntry> TransactionFIFO;
+//typedef InterthreadQueue<Control::TransactionEntry> TransactionFIFO;
 
 class SACCHLogicalChannel;
 class L3Message;
@@ -82,7 +82,7 @@ protected:
 		A FIFO of inbound transactions intiated in the SIP layers on an already-active channel.
 		Unlike most interthread FIFOs, do *NOT* delete the pointers that come out of it.
 	*/
-	TransactionFIFO mTransactionFIFO;
+	//TransactionFIFO mTransactionFIFO;
 
 public:
 
@@ -204,7 +204,7 @@ public:
 	/**
 		Initiate a transaction from the SIP side on an already-active channel.
 	(*/
-	virtual void addTransaction(Control::TransactionEntry* transaction);
+	//virtual void addTransaction(Control::TransactionEntry* transaction);
 
 	/**
 		Serialize and send an L3Message with a given primitive.

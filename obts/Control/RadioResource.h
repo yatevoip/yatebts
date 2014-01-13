@@ -37,7 +37,7 @@ class L3HandoverAccess;
 
 namespace Control {
 
-class TransactionEntry;
+//class TransactionEntry;
 
 
 
@@ -185,7 +185,6 @@ class Pager {
 	void addID(
 		const GSM::L3MobileIdentity& addID,
 		GSM::ChannelType chanType,
-		TransactionEntry& transaction,
 		unsigned wLife=gConfig.getNum("GSM.Timer.T3113")
 	);
 

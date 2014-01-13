@@ -34,7 +34,7 @@
 #include <GSMConfig.h>
 #include <GSMLogicalChannel.h>
 #include <ControlCommon.h>
-#include <TransactionTable.h>
+//#include <TransactionTable.h>
 #include <TRXManager.h>
 #include <PowerManager.h>
 #include <TMSITable.h>
@@ -363,7 +363,6 @@ int printStats(int argc, char** argv, ostream& os)
 	os << "AGCH/PCH load: " << gBTS.AGCHLoad() << ',' << gBTS.PCHLoad() << endl;
 	// paging table size
 	os << "Paging table size: " << gBTS.pager().pagingEntryListSize() << endl;
-	os << "Transactions: " << gTransactionTable.size() << endl;
 	// 3122 timer current value (the number of seconds an MS should hold off the next RACH)
 	os << "T3122: " << gBTS.T3122() << " ms (target " << gConfig.getNum("GSM.Radio.PowerManager.TargetT3122") << " ms)" << endl;
 	os << "== GPRS ==" << endl;
@@ -420,18 +419,6 @@ int cellID(int argc, char** argv, ostream& os)
 }
 
 
-
-
-/** Print table of current transactions. */
-int calls(int argc, char** argv, ostream& os)
-{
-	bool showAll = false;
-	if (argc==2) showAll = true;
-	if (argc>2) return BAD_NUM_ARGS;
-	size_t count = gTransactionTable.dump(os,showAll);
-	os << endl << count << " transactions in table" << endl;
-	return SUCCESS;
-}
 
 
 
@@ -1015,9 +1002,9 @@ int chans(int argc, char **argv, ostream& os)
 	while (sChanItr != gBTS.SDCCHPool().end()) {
 		const GSM::SDCCHLogicalChannel* sChan = *sChanItr;
 		if (sChan->active() || showAll) {
-			Control::TransactionEntry *trans = gTransactionTable.find(sChan);
+			//Control::TransactionEntry *trans = gTransactionTable.find(sChan);
 			int tid = 0;
-			if (trans) tid = trans->ID();
+			//if (trans) tid = trans->ID();
 			printChanInfo(tid,sChan,os);
 			//if (showAll) printChanInfo(tid,sChan->SACCH(),os);
 		}
@@ -1029,9 +1016,9 @@ int chans(int argc, char **argv, ostream& os)
 	while (tChanItr != gBTS.TCHPool().end()) {
 		const GSM::TCHFACCHLogicalChannel* tChan = *tChanItr;
 		if (tChan->active() || showAll) {
-			Control::TransactionEntry *trans = gTransactionTable.find(tChan);
+			//Control::TransactionEntry *trans = gTransactionTable.find(tChan);
 			int tid = 0;
-			if (trans) tid = trans->ID();
+			//if (trans) tid = trans->ID();
 			printChanInfo(tid,tChan,os);
 			//if (showAll) printChanInfo(tid,tChan->SACCH(),os);
 		}
@@ -1257,7 +1244,6 @@ void Parser::addCommands()
 	addCommand("sendsimple", sendsimple, "IMSI src# message... -- send SMS to IMSI via SIP interface, addressed from source number src#.");
 	addCommand("load", printStats, "-- print the current activity loads.");
 	addCommand("cellid", cellID, "[MCC MNC LAC CI] -- get/set location area identity (MCC, MNC, LAC) and cell ID (CI)");
-	addCommand("calls", calls, "-- print the transaction table");
 	addCommand("rawconfig", rawconfig, "[] OR [patt] OR [key val(s)] -- print the current configuration, print configuration values matching a pattern, or set/change a configuration value");
 	addCommand("trxfactory", trxfactory, "-- print the radio's factory calibration and meta information");
 	addCommand("audit", audit, "-- audit the current configuration for troubleshooting");

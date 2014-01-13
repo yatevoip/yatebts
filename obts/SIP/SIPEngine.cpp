@@ -40,7 +40,7 @@
 #include "SIPUtility.h"
 #include "SIPMessage.h"
 #include "SIPEngine.h"
-#include "TransactionTable.h"
+//#include "TransactionTable.h"
 
 #undef WARNING
 
@@ -1558,6 +1558,7 @@ bool SIPEngine::sameINVITE(osip_message_t * msg){
 }
 
 
+#if 0
 SIPState SIPEngine::inboundHandoverCheckForOK(Mutex *lock)
 {
 	return MOCCheckForOK(lock);
@@ -1689,6 +1690,7 @@ SIPState SIPEngine::inboundHandoverSendINVITE(TransactionEntry *transaction, uns
 	mState = Starting;
 	return mState;
 }
+#endif
 
 
 // vim: ts=4 sw=4

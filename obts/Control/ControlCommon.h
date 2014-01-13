@@ -55,8 +55,8 @@ class L3CMServiceRequest;
 /**@namespace Control This namepace is for use by the control layer. */
 namespace Control {
 
-class TransactionEntry;
-class TransactionTable;
+//class TransactionEntry;
+//class TransactionTable;
 
 /**@name Call control time-out values (in ms) from ITU-T Q.931 Table 9-1 and GSM 04.08 Table 11.4. */
 //@{
@@ -153,64 +153,64 @@ class ControlLayerException {
 
 	private:
 
-	unsigned mTransactionID;
+	unsigned mConnectionID;
 
 	public:
 
-	ControlLayerException(unsigned wTransactionID=0)
-		:mTransactionID(wTransactionID)
+	ControlLayerException(unsigned wConnectionID=0)
+		:mConnectionID(wConnectionID)
 	{}
 
-	unsigned transactionID() { return mTransactionID; }
+	unsigned connectionID() { return mConnectionID; }
 };
 
 /** Thrown when the control layer gets the wrong message */
 class UnexpectedMessage : public ControlLayerException {
 	public:
-	UnexpectedMessage(unsigned wTransactionID=0)
-		:ControlLayerException(wTransactionID)
+	UnexpectedMessage(unsigned wConnectionID=0)
+		:ControlLayerException(wConnectionID)
 	{}
 };
 
 /** Thrown when recvL3 returns NULL */
 class ChannelReadTimeout : public ControlLayerException {
 	public:
-	ChannelReadTimeout(unsigned wTransactionID=0)
-		:ControlLayerException(wTransactionID)
+	ChannelReadTimeout(unsigned wConnectionID=0)
+		:ControlLayerException(wConnectionID)
 	{}
 };
 
 /** Thrown when L3 can't parse an incoming message */
 class UnsupportedMessage : public ControlLayerException {
 	public:
-	UnsupportedMessage(unsigned wTransactionID=0)
-		:ControlLayerException(wTransactionID)
+	UnsupportedMessage(unsigned wConnectionID=0)
+		:ControlLayerException(wConnectionID)
 	{}
 };
 
 /** Thrown when the control layer gets the wrong primitive */
 class UnexpectedPrimitive : public ControlLayerException {
 	public:
-	UnexpectedPrimitive(unsigned wTransactionID=0)
-		:ControlLayerException(wTransactionID)
+	UnexpectedPrimitive(unsigned wConnectionID=0)
+		:ControlLayerException(wConnectionID)
 	{}
 };
 
 /**  Thrown when a T3xx expires */
 class Q931TimerExpired : public ControlLayerException {
 	public:
-	Q931TimerExpired(unsigned wTransactionID=0)
-		:ControlLayerException(wTransactionID)
+	Q931TimerExpired(unsigned wConnectionID=0)
+		:ControlLayerException(wConnectionID)
 	{}
 };
 
 /** Thrown if we touch a removed transaction. */
-class RemovedTransaction : public ControlLayerException {
-	public:
-	RemovedTransaction(unsigned wTransactionID=0)
-		:ControlLayerException(wTransactionID)
-	{}
-};
+//class RemovedTransaction : public ControlLayerException {
+//	public:
+//	RemovedTransaction(unsigned wTransactionID=0)
+//		:ControlLayerException(wTransactionID)
+//	{}
+//};
 
 
 //@}
@@ -223,7 +223,7 @@ class RemovedTransaction : public ControlLayerException {
 /**@addtogroup Globals */
 //@{
 /** A single global transaction table in the global namespace. */
-extern Control::TransactionTable gTransactionTable;
+//extern Control::TransactionTable gTransactionTable;
 //@}
 
 

@@ -13,7 +13,7 @@
 #include <GSMConfig.h>
 #include <GSMLogicalChannel.h>
 #include <GSML3RRElements.h>
-#include <TransactionTable.h>
+//#include <TransactionTable.h>
 
 #undef WARNING
 
@@ -136,26 +136,26 @@ void PeerInterface::process(const struct sockaddr_in* peer, const char* message)
 	// must be handover related
 
 	// Initial inbound handover request?
-	if (strncmp(message,"REQ HANDOVER ",13)==0)
-		return processHandoverRequest(peer,message);
+	//if (strncmp(message,"REQ HANDOVER ",13)==0)
+	//	return processHandoverRequest(peer,message);
 
 	// Handover response? ("Handover Accept" in the ladder.)
-	if (strncmp(message,"RSP HANDOVER ",13)==0)
-		return processHandoverResponse(peer,message);
+	//if (strncmp(message,"RSP HANDOVER ",13)==0)
+	//	return processHandoverResponse(peer,message);
 
 	// IND HANDOVER_COMPLETE
-	if (strncmp(message,"IND HANDOVER_COMPLETE ", 22)==0)
-		return processHandoverComplete(peer,message);
+	//if (strncmp(message,"IND HANDOVER_COMPLETE ", 22)==0)
+	//	return processHandoverComplete(peer,message);
 
 	// IND HANDOVER_FAILURE
-	if (strncmp(message,"IND HANDOVER_FAILURE ", 21)==0)
-		return processHandoverFailure(peer,message);
+	//if (strncmp(message,"IND HANDOVER_FAILURE ", 21)==0)
+	//	return processHandoverFailure(peer,message);
 
 	// Other handover messages go into the FIFO map.
 	// FIXME -- We need something here to spot malformed messages.
-	unsigned transactionID;
-	sscanf(message, "%*s %*s %u", &transactionID);
-	mFIFOMap.writeFIFO(transactionID,message);
+	//unsigned transactionID;
+	//sscanf(message, "%*s %*s %u", &transactionID);
+	//mFIFOMap.writeFIFO(transactionID,message);
 }
 
 
@@ -219,6 +219,7 @@ void PeerInterface::sendNeighborParamsRequest(const struct sockaddr_in* peer)
 }
 
 
+#if 0
 void PeerInterface::processHandoverRequest(const struct sockaddr_in* peer, const char* message)
 {
 	// This is "Handover Request" in the ladder diagram; we are "BS2" accepting it.
@@ -302,7 +303,9 @@ void PeerInterface::processHandoverRequest(const struct sockaddr_in* peer, const
 	sendMessage(peer,rsp);
 	return;
 }
+#endif
 
+#if 0
 void PeerInterface::processHandoverComplete(const struct sockaddr_in* peer, const char* message)
 {
 
@@ -329,8 +332,10 @@ void PeerInterface::processHandoverComplete(const struct sockaddr_in* peer, cons
 
 	return;
 }
+#endif
 
 
+#if 0
 void PeerInterface::processHandoverFailure(const struct sockaddr_in* peer, const char* message)
 {
 
@@ -360,10 +365,12 @@ void PeerInterface::processHandoverFailure(const struct sockaddr_in* peer, const
 
 	return;
 }
+#endif
 
 
 
 
+#if 0
 void PeerInterface::processHandoverResponse(const struct sockaddr_in* peer, const char* message)
 {
 	unsigned cause;
@@ -403,6 +410,7 @@ void PeerInterface::processHandoverResponse(const struct sockaddr_in* peer, cons
 		GSM::L3SynchronizationIndication(true, true)
 	);
 }
+#endif
 
 
 
@@ -414,6 +422,7 @@ void PeerInterface::sendMessage(const struct sockaddr_in* peer, const char *mess
 	mSocket.send((const struct sockaddr*)peer,message);
 }
 
+#if 0
 bool PeerInterface::sendUntilAck(const Control::TransactionEntry* transaction, const char* message)
 {
 	LOG(DEBUG) << "sending message until ACK: " << message;
@@ -446,6 +455,7 @@ bool PeerInterface::sendUntilAck(const Control::TransactionEntry* transaction, c
 	free(ack);
 	return false;
 }
+#endif
 
 
 

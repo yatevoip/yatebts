@@ -30,7 +30,6 @@ EXTRA_DIST = README.Control
 noinst_LTLIBRARIES = libcontrol.la
 
 libcontrol_la_SOURCES = \
-	TransactionTable.cpp \
 	TMSITable.cpp \
 	ControlCommon.cpp \
 	RadioResource.cpp \
@@ -43,7 +42,6 @@ libcontrol_la_SOURCES = \
 
 noinst_HEADERS = \
 	ControlCommon.h \
-	TransactionTable.h \
 	TMSITable.h \
 	RadioResource.h \
 	TMSITable.h \

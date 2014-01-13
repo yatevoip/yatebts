@@ -686,10 +686,10 @@ void Control::AssignmentCompleteHandler(const L3AssignmentComplete *confirm, TCH
 
 
 void Pager::addID(const L3MobileIdentity& newID, ChannelType chanType,
-		TransactionEntry& transaction, unsigned wLife)
+		unsigned wLife)
 {
-	transaction.GSMState(GSM::Paging);
-	transaction.setTimer("3113",wLife);
+	//transaction.GSMState(GSM::Paging);
+	//transaction.setTimer("3113",wLife);
 	// Add a mobile ID to the paging list for a given lifetime.
 	ScopedLock lock(mLock);
 	// If this ID is already in the list, just reset its timer.
@@ -705,7 +705,7 @@ void Pager::addID(const L3MobileIdentity& newID, ChannelType chanType,
 		}
 	}
 	// If this ID is new, put it in the list.
-	mPageIDs.push_back(PagingEntry(newID,chanType,transaction.ID(),wLife));
+	mPageIDs.push_back(PagingEntry(newID,chanType,0,wLife));
 	LOG(INFO) << newID << " added to table";
 	mPageSignal.signal();
 }

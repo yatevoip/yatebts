@@ -34,7 +34,7 @@
 
 
 namespace Control {
-class TransactionEntry;
+//class TransactionEntry;
 }
 
 namespace GSM {
@@ -340,9 +340,9 @@ public:
 
 	/**@name Messages for Handover procedure. */
 	//@{
-	SIPState inboundHandoverSendINVITE(Control::TransactionEntry*, unsigned int);
-	SIPState inboundHandoverCheckForOK(Mutex *lock);
-	SIPState inboundHandoverSendACK();
+	//SIPState inboundHandoverSendINVITE(Control::TransactionEntry*, unsigned int);
+	//SIPState inboundHandoverCheckForOK(Mutex *lock);
+	//SIPState inboundHandoverSendACK();
 	//@}
 
 
