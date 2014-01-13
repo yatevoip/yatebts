@@ -22,7 +22,7 @@
 
 #include "ControlCommon.h"
 #include "RadioResource.h"
-#include "MobilityManagement.h"
+//#include "MobilityManagement.h"
 #include <GSMLogicalChannel.h>
 #include <GSML3MMMessages.h>
 #include <GSML3RRMessages.h>

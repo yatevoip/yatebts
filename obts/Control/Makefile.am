@@ -34,7 +34,6 @@ libcontrol_la_SOURCES = \
 	TMSITable.cpp \
 	SMSControl.cpp \
 	ControlCommon.cpp \
-	MobilityManagement.cpp \
 	RadioResource.cpp \
 	DCCHDispatch.cpp \
 	SMSCB.cpp \
@@ -49,6 +48,5 @@ noinst_HEADERS = \
 	TransactionTable.h \
 	TMSITable.h \
 	RadioResource.h \
-	MobilityManagement.h \
 	TMSITable.h \
 	RRLPServer.h
