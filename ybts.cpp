@@ -69,7 +69,7 @@ static const String s_ccProceeding = "CallProceeding";
 static const String s_ccProgress = "Progress";
 static const String s_ccAlerting = "Alerting";
 static const String s_ccConnect = "Connect";
-static const String s_ccConnectAck = "ConnectAck";
+static const String s_ccConnectAck = "ConnectAcknowledge";
 static const String s_ccDisc = "Disconnect";
 static const String s_ccRel = "Release";
 static const String s_ccRlc = "ReleaseComplete";
@@ -348,7 +348,7 @@ public:
     void stop();
     // Read socket
     virtual void processLoop();
-
+    bool setDebug(Message& msg, const String& target);
 protected:
     String m_name;
     YBTSTransport m_transport;
@@ -364,6 +364,7 @@ public:
 	{ return m_transport; }
     bool start();
     void stop();
+    bool setDebug(Message& msg, const String& target);
 protected:
     YBTSTransport m_transport;
 };
@@ -573,7 +574,7 @@ protected:
 	const XmlElement& identXml, const String*& ident, bool& isTMSI);
     // Set UE for a connection
     uint8_t setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
-	bool& dropConn);
+	bool* dropConn = 0);
     void updateExpire(YBTSUE* ue);
     void checkTimers(const Time& time = Time());
     void loadUElist();
@@ -610,7 +611,11 @@ public:
 	Connect = 28,                    // N28: Connect indication
     };
     // Incoming
-    YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef);
+    YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef, bool tiFlag = false);
+    inline bool incoming() const
+	{ return m_incoming; }
+    inline const String& callRef() const
+	{ return m_callRef; }
     inline const char* stateName() const
 	{ return stateName(m_state); }
     inline const char* reason()
@@ -626,19 +631,23 @@ public:
     inline void release() {
 	    changeState(Release);
 	    m_relSent++;
-	    sendGSMRel(true,*this,reason(),connId());
+	    sendGSMRel(true,reason(),connId());
 	}
     inline void releaseComplete() {
 	    changeState(Null);
-	    sendGSMRel(false,*this,reason(),connId());
+	    sendGSMRel(false,reason(),connId());
 	}
     void sendCC(const String& tag, XmlElement* c1 = 0, XmlElement* c2 = 0);
     void changeState(int newState);
     inline void setTimeout(unsigned int intervalMs, const Time& time = Time())
 	{ m_timeout = time + (uint64_t)intervalMs * 1000; }
     // Send CC REL or RLC
-    static void sendGSMRel(bool rel, const String& callRef, const char* reason,
+    static void sendGSMRel(bool rel, const String& callRef, bool tiFlag, const char* reason,
 	uint16_t connId);
+    inline void sendGSMRel(bool rel, const char* reason, uint16_t connId)
+	{ sendGSMRel(rel,callRef(),incoming(),reason,connId); }
+    static const char* prefix(bool tiFlag)
+	{ return tiFlag ? "o" : "i"; }
     static inline const char* stateName(int stat)
 	{ return lookup(stat,s_stateName); }
     static const TokenDict s_stateName[];
@@ -649,6 +658,7 @@ public:
     uint64_t m_timeout;
     uint8_t m_relSent;
     YBTSChan* m_chan;
+    String m_callRef;
     String m_reason;
     String m_called;
 };
@@ -663,7 +673,7 @@ public:
     // Init incoming chan. Return false to destruct the channel
     bool initIncoming(const XmlElement& xml, bool regular, const String* callRef);
     // Handle CC messages
-    bool handleCC(const XmlElement& xml, const String* callRef);
+    bool handleCC(const XmlElement& xml, const String* callRef, bool tiFlag);
     // Connection released notification
     void connReleased();
     // BTS stopping notification
@@ -788,10 +798,13 @@ protected:
 	    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
 	    Debug(this,DebugAll,"Scheduled stop in %ums",stopIntervalMs);
 	}
+    void btsStatus(Message& msg);
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
     virtual bool received(Message& msg, int id);
     virtual bool commandExecute(String& retVal, const String& line);
+    virtual bool commandComplete(Message& msg, const String& partLine, const String& partWord);
+    virtual bool setDebug(Message& msg, const String& target);
 
     int m_state;
     Mutex m_stateMutex;
@@ -811,6 +824,7 @@ protected:
     bool m_haveCalls;                    // Empty terminated calls list flag
     bool m_engineStart;
     unsigned int m_engineStop;
+    ObjList* m_helpCache;
 };
 
 INIT_PLUGIN(YBTSDriver);
@@ -1504,6 +1518,27 @@ void YBTSLog::processLoop()
 	__plugin.restart();
 	break;
     }
+}
+
+bool YBTSLog::setDebug(Message& msg, const String& target)
+{
+    String str = msg.getValue("line");
+    if (str.startSkip("level")) {
+	int dbg = debugLevel();
+	str >> dbg;
+	debugLevel(dbg);
+    }
+    else if (str == "reset")
+	debugChain(&__plugin);
+    else {
+	bool dbg = debugEnabled();
+	str >> dbg;
+	debugEnabled(dbg);
+    }
+    msg.retValue() << "Module " << target
+	<< " debug " << (debugEnabled() ? "on" : "off")
+	<< " level " << debugLevel() << "\r\n";
+    return true;
 }
 
 
@@ -2258,11 +2293,6 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 	    findUEByTMSISafe(ue,*ident);
 	else
 	    lai = __plugin.signalling()->lai();
-	if (!ue) {
-	    Debug(this,DebugNote,"Rejecting LocationUpdatingRequest: IMSI request not implemented [%p]",this);
-	    sendLocationUpdateReject(m,conn,CauseServNotSupp);
-	    return;
-	}
     }
     else {
 	// Got IMSI: Create/retrieve TMSI
@@ -2270,18 +2300,29 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 	if (!haveLAI)
 	    lai = __plugin.signalling()->lai();
     }
-    bool dropConn = false;
-    Lock lck(conn);
-    cause = setConnUE(*conn,ue,xml,dropConn);
-    lck.drop();
+    if (!ue) {
+	Debug(this,DebugNote,"Rejecting LocationUpdatingRequest: IMSI request not implemented [%p]",this);
+	sendLocationUpdateReject(m,conn,CauseServNotSupp);
+	return;
+    }
+    conn->lock();
+    cause = setConnUE(*conn,ue,xml);
+    conn->unlock();
     if (cause) {
 	sendLocationUpdateReject(m,conn,cause);
-	if (dropConn)
-	    __plugin.signalling()->dropConn(conn,true);
+	return;
+    }
+    Message msg("user.register");
+    msg.addParam("driver",__plugin.name());
+    msg.addParam("username",ue->imsi());
+    msg.addParam("number",ue->msisdn(),false);
+    msg.addParam("imei",ue->imei(),false);
+    msg.addParam("tmsi",ue->tmsi(),false);
+    if (!Engine::dispatch(msg)) {
+	sendLocationUpdateReject(m,conn,cause);
 	return;
     }
     updateExpire(ue);
-    // Accept all for now
     Lock lckUE(ue);
     ue->m_registered = true;
     saveUEs();
@@ -2390,21 +2431,20 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
 	ident->c_str(),type.c_str(),this);
     RefPointer<YBTSUE> ue;
-    if (haveTMSI) {
+    if (haveTMSI)
 	// Got TMSI
 	findUEByTMSISafe(ue,*ident);
-	if (!ue) {
-	    Debug(this,DebugNote,"Rejecting CMServiceRequest: IMSI request not implemented [%p]",this);
-	    sendCMServiceRsp(m,conn,CauseServNotSupp);
-	    return;
-	}
-    }
     else
 	// Got IMSI: Create/retrieve TMSI
 	getUEByIMSISafe(ue,*ident);
+    if (!ue) {
+	Debug(this,DebugNote,"Rejecting CMServiceRequest: IMSI request not implemented [%p]",this);
+	sendCMServiceRsp(m,conn,CauseServNotSupp);
+	return;
+    }
     bool dropConn = false;
     Lock lck(conn);
-    cause = setConnUE(*conn,ue,xml,dropConn);
+    cause = setConnUE(*conn,ue,xml,&dropConn);
     lck.drop();
     ue = 0;
     sendCMServiceRsp(m,conn,cause);
@@ -2510,7 +2550,7 @@ uint8_t YBTSMM::getMobileIdentTIMSI(YBTSMessage& m, const XmlElement& request,
 
 // Set UE for a connection
 uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
-    bool& dropConn)
+    bool* dropConn)
 {
     const String* type = req.getAttribute(s_type);
     if (!ue) {
@@ -2522,7 +2562,8 @@ uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
 	return 0;
     Debug(this,DebugGoOn,"Rejecting %s: UE mismatch on connection %u [%p]",
 	(type ? type->c_str() : "unknown"),conn.connId(),this);
-    dropConn = true;
+    if (dropConn)
+	*dropConn = true;
     return CauseProtoError;
 }
 
@@ -2531,17 +2572,19 @@ uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
 // YBTSCallDesc
 //
 // Incoming
-YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef)
+YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef, bool tiFlag)
     : YBTSConnIdHolder(chan->connId()),
     m_state(Null),
-    m_incoming(true),
+    m_incoming(!tiFlag),
     m_regular(regular),
     m_timeout(0),
     m_relSent(0),
     m_chan(chan)
 {
-    if (callRef)
-	assign(*callRef);
+    if (callRef) {
+	m_callRef = *callRef;
+	*this << prefix(tiFlag) << m_callRef;
+    }
     for (const ObjList* o = xml.getChildren().skipNull(); o; o = o->skipNext()) {
 	XmlElement* x = static_cast<XmlChild*>(o->get())->xmlElement();
 	if (!x)
@@ -2589,7 +2632,7 @@ void YBTSCallDesc::sendStatus(const char* cause)
 void YBTSCallDesc::sendCC(const String& tag, XmlElement* c1, XmlElement* c2)
 {
     XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,tag,*this);
+    XmlElement* cc = __plugin.buildCC(ch,tag,*this,m_incoming);
     if (ch) {
 	ch->addChildSafe(c1);
 	ch->addChildSafe(c2);
@@ -2615,11 +2658,11 @@ void YBTSCallDesc::changeState(int newState)
 }
 
 // Send CC REL or RLC
-void YBTSCallDesc::sendGSMRel(bool rel, const String& callRef, const char* reason,
+void YBTSCallDesc::sendGSMRel(bool rel, const String& callRef, bool tiFlag, const char* reason,
     uint16_t connId)
 {
     XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,rel ? s_ccRel : s_ccRlc,callRef);
+    XmlElement* cc = __plugin.buildCC(ch,rel ? s_ccRel : s_ccRlc,callRef,tiFlag);
     if (ch)
 	ch->addChildSafe(buildCCCause(reason));
     __plugin.signalling()->sendL3Conn(connId,cc);
@@ -2672,7 +2715,7 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
 }
 
 // Handle CC messages
-bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef)
+bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFlag)
 {
     const String* type = xml.getAttribute(s_type);
     if (!type) {
@@ -2687,7 +2730,9 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef)
     bool regular = (*type == s_ccSetup);
     bool emergency = !regular && (*type == s_ccEmergency);
     Lock lck(m_mutex);
-    ObjList* o = m_calls.find(*callRef);
+    String cref;
+    cref << YBTSCallDesc::prefix(tiFlag) << *callRef;
+    ObjList* o = m_calls.find(cref);
     if (!o) {
 	lck.drop();
 	if (regular || emergency) {
@@ -2854,7 +2899,7 @@ bool YBTSChan::msgProgress(Message& msg)
     YBTSCallDesc* call = firstCall();
     if (!call)
 	return false;
-    if (call->m_incoming)
+    if (call->incoming())
 	call->progressing(buildProgressIndicator(msg));
     return true;
 }
@@ -2868,7 +2913,7 @@ bool YBTSChan::msgRinging(Message& msg)
     YBTSCallDesc* call = firstCall();
     if (!call)
 	return false;
-    if (call->m_incoming && call->m_state == YBTSCallDesc::CallProceeding)
+    if (call->incoming() && call->m_state == YBTSCallDesc::CallProceeding)
 	call->alert(buildProgressIndicator(msg));
     return true;
 }
@@ -2949,7 +2994,8 @@ YBTSDriver::YBTSDriver()
     m_mm(0),
     m_haveCalls(false),
     m_engineStart(false),
-    m_engineStop(0)
+    m_engineStop(0),
+    m_helpCache(0)
 {
     Output("Loaded module YBTS");
 }
@@ -2963,6 +3009,7 @@ YBTSDriver::~YBTSDriver()
     TelEngine::destruct(m_media);
     TelEngine::destruct(m_signalling);
     TelEngine::destruct(m_mm);
+    TelEngine::destruct(m_helpCache);
 }
 
 XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* type, const char* callRef, bool tiFlag)
@@ -2990,17 +3037,35 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
 	return;
     }
-    const String* callRef = m.xml()->childText(s_ccCallRef);
+    const String* callRef = 0;
+    bool tiFlag = false;
+    const XmlElement* tid = m.xml()->findFirstChild(&s_ccCallRef);
+    if (tid) {
+	callRef = &tid->getText();
+	if (TelEngine::null(callRef))
+	    callRef = 0;
+	const String* attr = tid->getAttribute(s_ccTIFlag);
+	if (attr)
+	    tiFlag = attr->toBoolean();
+    }
     if (conn) {
 	RefPointer<YBTSChan> chan;
 	findChan(conn->connId(),chan);
-	if (chan && chan->handleCC(*xml,callRef))
+	if (chan && chan->handleCC(*xml,callRef,tiFlag))
 	    return;
     }
     bool regular = (*type == s_ccSetup);
     bool emergency = !regular && (*type == s_ccEmergency);
     if (regular || emergency) {
-	if (conn && conn->ue()) {
+	if (!conn)
+	    Debug(this,DebugNote,"Refusing new GSM call, no connection");
+	else if (!conn->ue())
+	    Debug(this,DebugNote,
+		"Refusing new GSM call, no user associated with connection %u",
+		conn->connId());
+	else if (tiFlag)
+	    Debug(this,DebugNote,"Refusing new GSM call, invalid direction");
+	else {
 	    if (canAccept()) {
 		YBTSChan* chan = new YBTSChan(conn);
 		if (!chan->initIncoming(*xml,regular,callRef))
@@ -3009,14 +3074,8 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	    }
 	    Debug(this,DebugNote,"Refusing new GSM call, full or exiting");
 	}
-	else if (!conn)
-	    Debug(this,DebugNote,"Refusing new GSM call, no connection");
-	else
-	    Debug(this,DebugNote,
-		"Refusing new GSM call, no user associated with connection %u",
-		conn->connId());
 	if (!TelEngine::null(callRef))
-	    YBTSCallDesc::sendGSMRel(false,*callRef,"noconn",m.connId());
+	    YBTSCallDesc::sendGSMRel(false,*callRef,!tiFlag,"noconn",m.connId());
 	return;
     }
     if (TelEngine::null(callRef))
@@ -3054,7 +3113,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
     lck.drop();
     DDebug(this,DebugInfo,"Unhandled CC %s for callref=%s conn=%p",
 	type->c_str(),TelEngine::c_safe(callRef),conn);
-    YBTSCallDesc::sendGSMRel(false,*callRef,"invalid-callref",m.connId());
+    YBTSCallDesc::sendGSMRel(false,*callRef,!tiFlag,"invalid-callref",m.connId());
 }
 
 // Add a pending (wait termination) call
@@ -3408,6 +3467,11 @@ void YBTSDriver::checkRestart(const Time& time)
 	m_restart = false;
 }
 
+void YBTSDriver::btsStatus(Message& msg)
+{
+    msg.retValue() << "name=" << BTS_CMD << ",type=misc;state=" << stateName() << "\r\n";
+}
+
 
 static void parseLAI(YBTSLAI& dest, const String& lai)
 {
@@ -3503,40 +3567,50 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
 
 bool YBTSDriver::received(Message& msg, int id)
 {
-    if (id == Start) {
-	if (!m_engineStart) {
-	    m_engineStart = true;
-	    startIdle();
-	}
-	return false;
-    }
-    if (id == Stop)
-	return handleEngineStop(msg);
-    if (id == Halt) {
-	dropAll(msg);
-	stop();
-	return false;
-    }
-    if (id == Timer) {
-	// Handle stop/restart
-	// Don't handle both in the same tick: wait some time between stop and restart
-	if (m_stop)
-	    checkStop(msg.msgTime());
-	else if (m_restart)
-	    checkRestart(msg.msgTime());
-	if (m_signalling->shouldCheckTimers()) {
-	    int res = m_signalling->checkTimers(msg.msgTime());
-	    if (res) {
-		if (res == YBTSSignalling::FatalError)
-		    stopNoRestart();
-		else
-		    restart();
+    switch (id) {
+	case Start:
+	    if (!m_engineStart) {
+		m_engineStart = true;
+		startIdle();
 	    }
-	}
-	if (m_haveCalls)
-	    checkTerminatedCalls(msg.msgTime());
-	if (m_mm)
-	    m_mm->checkTimers(msg.msgTime());
+	    return false;
+	case Stop:
+	    return handleEngineStop(msg);
+	case Halt:
+	    dropAll(msg);
+	    stop();
+	    return false;
+	case Timer:
+	    // Handle stop/restart
+	    // Don't handle both in the same tick: wait some time between stop and restart
+	    if (m_stop)
+		checkStop(msg.msgTime());
+	    else if (m_restart)
+		checkRestart(msg.msgTime());
+	    if (m_signalling->shouldCheckTimers()) {
+		int res = m_signalling->checkTimers(msg.msgTime());
+		if (res) {
+		    if (res == YBTSSignalling::FatalError)
+			stopNoRestart();
+		    else
+			restart();
+		}
+	    }
+	    if (m_haveCalls)
+		checkTerminatedCalls(msg.msgTime());
+	    if (m_mm)
+		m_mm->checkTimers(msg.msgTime());
+	    break;
+	case Status:
+	    {
+		String dest = msg.getValue(YSTRING("module"));
+		if (dest.null() || dest == YSTRING(BTS_CMD)) {
+		    btsStatus(msg);
+		    if (dest)
+			return true;
+		}
+	    }
+	    break;
     }
     return Driver::received(msg,id);
 }
@@ -3564,6 +3638,52 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
 	return true;
     }
     return Driver::commandExecute(retVal,line);
+}
+
+bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const String& partWord)
+{
+    if (partLine.null())
+	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
+    if (partLine == YSTRING("debug"))
+	itemComplete(msg.retValue(),YSTRING("transceiver"),partWord);
+    if ((partLine == YSTRING("debug")) || (partLine == YSTRING("status")))
+	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
+    if (m_command && (partLine == YSTRING(BTS_CMD))) {
+	if (!m_helpCache && lock(100000)) {
+	    String tmp;
+	    if (m_command->send("help") && m_command->recv(tmp) && tmp.trimBlanks()) {
+		ObjList* help = new ObjList;
+		ObjList* app = help;
+		ObjList* lines = tmp.split('\n');
+		for (ObjList* l = lines; l; l = l->skipNext()) {
+		    ObjList* words = l->get()->toString().split('\t',false);
+		    if (words->get() && !words->get()->toString().startsWith("Type")) {
+			while (GenObject* o = words->remove(false))
+			    app = app->append(o);
+		    }
+		    TelEngine::destruct(words);
+		}
+		TelEngine::destruct(lines);
+		m_helpCache = help;
+	    }
+	    unlock();
+	}
+	if (m_helpCache) {
+	    for (ObjList* l = m_helpCache->skipNull(); l; l = l->skipNext())
+		itemComplete(msg.retValue(),l->get()->toString(),partWord);
+	}
+	return true;
+    }
+    return Driver::commandComplete(msg,partLine,partWord);
+}
+
+bool YBTSDriver::setDebug(Message& msg, const String& target)
+{
+    if (target == YSTRING("transceiver"))
+	return m_logTrans && m_logTrans->setDebug(msg,target);
+    if (target == YSTRING(BTS_CMD))
+	return m_logBts && m_logBts->setDebug(msg,target);
+    return Driver::setDebug(msg,target);
 }
 
 }; // anonymous namespace
