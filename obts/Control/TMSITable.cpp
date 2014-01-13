@@ -22,7 +22,7 @@
 #include <sqlite3.h>
 #include <sqlite3util.h>
 
-#include <GSML3MMMessages.h>
+//#include <GSML3MMMessages.h>
 #include <Reporting.h>
 #include <Globals.h>
 
@@ -31,6 +31,8 @@
 #include <iomanip>
 
 #include <sys/stat.h>
+
+#include <GSML3CommonElements.h>
 
 using namespace std;
 using namespace Control;
@@ -108,7 +110,7 @@ TMSITable::~TMSITable()
 
 
 
-unsigned TMSITable::assign(const char* IMSI, const GSM::L3LocationUpdatingRequest* lur)
+unsigned TMSITable::assign(const char* IMSI)
 {
 	// Create or find an entry based on IMSI.
 	// Return assigned TMSI.
@@ -129,26 +131,10 @@ unsigned TMSITable::assign(const char* IMSI, const GSM::L3LocationUpdatingReques
 	LOG(NOTICE) << "new entry for IMSI " << IMSI;
 	char query[1000];
 	unsigned now = (unsigned)time(NULL);
-	if (!lur) {
-		sprintf(query,
-				"INSERT INTO TMSI_TABLE (IMSI,CREATED,ACCESSED) "
-				"VALUES ('%s',%u,%u)",
-				IMSI,now,now);
-	} else {
-		const GSM::L3LocationAreaIdentity &lai = lur->LAI();
-		const GSM::L3MobileIdentity &mid = lur->mobileID();
-		if (mid.type()==GSM::TMSIType) {
-			sprintf(query,
-					"INSERT INTO TMSI_TABLE (IMSI,CREATED,ACCESSED,PREV_MCC,PREV_MNC,PREV_LAC,OLD_TMSI) "
-					"VALUES ('%s',%u,%u,%u,%u,%u,%u)",
-					IMSI,now,now,lai.MCC(),lai.MNC(),lai.LAC(),mid.TMSI());
-		} else {
-			sprintf(query,
-					"INSERT INTO TMSI_TABLE (IMSI,CREATED,ACCESSED,PREV_MCC,PREV_MNC,PREV_LAC) "
-					"VALUES ('%s',%u,%u,%u,%u,%u)",
-					IMSI,now,now,lai.MCC(),lai.MNC(),lai.LAC());
-		}
-	}
+	sprintf(query,
+			"INSERT INTO TMSI_TABLE (IMSI,CREATED,ACCESSED) "
+			"VALUES ('%s',%u,%u)",
+			IMSI,now,now);
 	if (!sqlite3_command(mDB,query)) {
 		LOG(ALERT) << "TMSI creation failed";
 		return 0;

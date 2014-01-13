@@ -31,7 +31,7 @@ using namespace std;
 #include "RRLPServer.h"
 
 #include <GSMLogicalChannel.h>
-#include <GSML3MMMessages.h>
+#include <GSML3RRMessages.h>
 
 //#include <SubscriberRegistry.h>
 

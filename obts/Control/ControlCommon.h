@@ -32,8 +32,8 @@
 
 
 #include <GSML3CommonElements.h>
-#include <GSML3MMElements.h>
-#include <GSML3CCElements.h>
+//#include <GSML3MMElements.h>
+//#include <GSML3CCElements.h>
 #include <GSML3RRMessages.h>
 
 #include "TMSITable.h"
@@ -110,24 +110,6 @@ GSM::L3Message* getMessage(GSM::LogicalChannel* LCH, unsigned SAPI=0);
 void DCCHDispatcher(GSM::LogicalChannel *DCCH);
 //@}
 
-
-
-/**
-	Resolve a mobile ID to an IMSI.
-	Returns TMSI, if it is already in the TMSITable.
-	@param sameLAI True if the mobileID is known to have come from this LAI.
-	@param mobID A mobile ID, that may be modified by the function.
-	@param LCH The Dm channel to the mobile.
-	@return A TMSI value from the TMSITable or zero if not found.
-*/
-unsigned  resolveIMSI(bool sameLAI, GSM::L3MobileIdentity& mobID, GSM::LogicalChannel* LCH);
-
-/**
-	Resolve a mobile ID to an IMSI.
-	@param mobID A mobile ID, that may be modified by the function.
-	@param LCH The Dm channel to the mobile.
-*/
-void  resolveIMSI(GSM::L3MobileIdentity& mobID, GSM::LogicalChannel* LCH);
 
 
 

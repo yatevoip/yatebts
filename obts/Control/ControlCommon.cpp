@@ -22,9 +22,9 @@
 
 #include <GSMLogicalChannel.h>
 #include <GSML3Message.h>
-#include <GSML3CCMessages.h>
+//#include <GSML3CCMessages.h>
 #include <GSML3RRMessages.h>
-#include <GSML3MMMessages.h>
+//#include <GSML3MMMessages.h>
 #include <GSMConfig.h>
 
 #include <Sgsn.h>
@@ -116,106 +116,6 @@ L3Message* Control::getMessage(LogicalChannel *LCH, unsigned SAPI)
 
 
 
-
-
-
-/* Resolve a mobile ID to an IMSI and return TMSI if it is assigned. */
-unsigned  Control::resolveIMSI(bool sameLAI, L3MobileIdentity& mobileID, LogicalChannel* LCH)
-{
-	// Returns known or assigned TMSI.
-	assert(LCH);
-	LOG(DEBUG) << "resolving mobile ID " << mobileID << ", sameLAI: " << sameLAI;
-
-	// IMSI already?  See if there's a TMSI already, too.
-	if (mobileID.type()==IMSIType) {
-		GPRS::GPRSNotifyGsmActivity(mobileID.digits());
-		return gTMSITable.TMSI(mobileID.digits());
-	}
-
-	// IMEI?  WTF?!
-	// FIXME -- Should send MM Reject, cause 0x60, "invalid mandatory information".
-	if (mobileID.type()==IMEIType) throw UnexpectedMessage();
-
-	// Must be a TMSI.
-	// Look in the table to see if it's one we assigned.
-	unsigned TMSI = mobileID.TMSI();
-	char* IMSI = NULL;
-	if (sameLAI) IMSI = gTMSITable.IMSI(TMSI);
-	if (IMSI) {
-		// We assigned this TMSI already; the TMSI/IMSI pair is already in the table.
-		GPRS::GPRSNotifyGsmActivity(IMSI);
-		mobileID = L3MobileIdentity(IMSI);
-		LOG(DEBUG) << "resolving mobile ID (table): " << mobileID;
-		free(IMSI);
-		return TMSI;
-	}
-	// Not our TMSI.
-	// Phones are not supposed to do this, but many will.
-	// If the IMSI's not in the table, ASK for it.
-	LCH->send(L3IdentityRequest(IMSIType));
-	// FIXME -- This request times out on T3260, 12 sec.  See GSM 04.08 Table 11.2.
-	L3Message* msg = getMessage(LCH);
-	L3IdentityResponse *resp = dynamic_cast<L3IdentityResponse*>(msg);
-	if (!resp) {
-		if (msg) delete msg;
-		throw UnexpectedMessage();
-	}
-	mobileID = resp->mobileID();
-	LOG(INFO) << resp;
-	delete msg;
-	LOG(DEBUG) << "resolving mobile ID (requested): " << mobileID;
-	// FIXME -- Should send MM Reject, cause 0x60, "invalid mandatory information".
-	if (mobileID.type()!=IMSIType) throw UnexpectedMessage();
-	// Return 0 to indicate that we have not yet assigned our own TMSI for this phone.
-	return 0;
-}
-
-
-
-/* Resolve a mobile ID to an IMSI. */
-void  Control::resolveIMSI(L3MobileIdentity& mobileIdentity, LogicalChannel* LCH)
-{
-	// Are we done already?
-	if (mobileIdentity.type()==IMSIType) return;
-
-	// If we got a TMSI, find the IMSI.
-	if (mobileIdentity.type()==TMSIType) {
-		char *IMSI = gTMSITable.IMSI(mobileIdentity.TMSI());
-		if (IMSI) {
-			GPRS::GPRSNotifyGsmActivity(IMSI);
-			mobileIdentity = L3MobileIdentity(IMSI);
-		}
-		free(IMSI);
-	}
-
-	// Still no IMSI?  Ask for one.
-	if (mobileIdentity.type()!=IMSIType) {
-		LOG(NOTICE) << "MOC with no IMSI or valid TMSI.  Reqesting IMSI.";
-		LCH->send(L3IdentityRequest(IMSIType));
-		// FIXME -- This request times out on T3260, 12 sec.  See GSM 04.08 Table 11.2.
-		L3Message* msg = getMessage(LCH);
-		L3IdentityResponse *resp = dynamic_cast<L3IdentityResponse*>(msg);
-		if (!resp) {
-			if (msg) delete msg;
-			throw UnexpectedMessage();
-		}
-		mobileIdentity = resp->mobileID();
-		if (mobileIdentity.type()==IMSIType) {
-			GPRS::GPRSNotifyGsmActivity(mobileIdentity.digits());
-		}
-		delete msg;
-	}
-
-	// Still no IMSI??
-	if (mobileIdentity.type()!=IMSIType) {
-		// FIXME -- This is quick-and-dirty, not following GSM 04.08 5.
-		LOG(WARNING) << "MOC setup with no IMSI";
-		// Cause 0x60 "Invalid mandatory information"
-		LCH->send(L3CMServiceReject(L3RejectCause(0x60)));
-		LCH->send(L3ChannelRelease());
-		return;
-	}
-}
 
 
 

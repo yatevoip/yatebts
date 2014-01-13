@@ -61,7 +61,7 @@ class TMSITable {
 		@param The associated LUR, if any.
 		@return The assigned TMSI.
 	*/
-	unsigned assign(const char* IMSI, const GSM::L3LocationUpdatingRequest* lur=NULL);
+	unsigned assign(const char* IMSI);
 
 	/**
 		Find an IMSI in the table.

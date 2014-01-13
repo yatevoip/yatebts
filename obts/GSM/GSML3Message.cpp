@@ -15,13 +15,11 @@
 
 #include "GSML3Message.h"
 #include "GSML3RRMessages.h"
-#include "GSML3MMMessages.h"
-#include "GSML3CCMessages.h"
 #include <Logger.h>
 
 
 //#include <SMSTransfer.h>
-#include <SMSMessages.h>
+//#include <SMSMessages.h>
 //using namespace SMS;
 
 
@@ -134,9 +132,6 @@ GSM::L3Message* GSM::parseL3(const GSM::L3Frame& source)
 	try {
 		switch (PD) {
 			case L3RadioResourcePD: retVal=parseL3RR(source); break;
-			case L3MobilityManagementPD: retVal=parseL3MM(source); break;
-			case L3CallControlPD: retVal=parseL3CC(source); break;
-			case L3SMSPD: retVal=SMS::parseSMS(source); break;
 			default:
 				LOG(NOTICE) << "L3 parsing failed for unsupported protocol " << PD;
 				return NULL;

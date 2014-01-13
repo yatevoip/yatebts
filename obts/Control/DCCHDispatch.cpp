@@ -24,7 +24,7 @@
 #include "RadioResource.h"
 //#include "MobilityManagement.h"
 #include <GSMLogicalChannel.h>
-#include <GSML3MMMessages.h>
+//#include <GSML3MMMessages.h>
 #include <GSML3RRMessages.h>
 
 #include <Logger.h>

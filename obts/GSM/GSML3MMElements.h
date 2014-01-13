@@ -27,56 +27,6 @@
 
 namespace GSM {
 
-/** CM Service Type, GSM 04.08 10.5.3.3 */
-class L3CMServiceType : public L3ProtocolElement {
-
-	public:
-
-	enum TypeCode {
-		UndefinedType=0,
-		MobileOriginatedCall=1,
-		ShortMessage=4,							///< specifically, MO-SMS
-		SupplementaryService=8,
-		VoiceCallGroup=9,
-		VoiceBroadcast=10,
-		LocationService=11,
-		MobileTerminatedCall=100,				///< non-standard code
-		MobileTerminatedShortMessage=101,		///< non-standard code
-		TestCall=102,			///< non-standard code
-		HandoverCall=103,		///< non-standard code
-		FuzzCall=104,			///< non-standard code
-	};
-		
-	private:
-
-	TypeCode mType;
-
-	public:
-
-	L3CMServiceType(TypeCode wType=UndefinedType)
-		:L3ProtocolElement(),mType(wType)
-	{}
-
-	TypeCode type() const { return mType; }
-
-	bool operator==(const L3CMServiceType& other) const
-		{ return mType == other.mType; }
-
-	bool operator!=(const L3CMServiceType& other) const
-		{ return mType != other.mType; }
-	
-	size_t lengthV() const { return 0; }	
-	void writeV(L3Frame&, size_t&) const { assert(0); }
-	void parseV(const L3Frame &src, size_t &rp);
-	void parseV(const L3Frame&, size_t&, size_t) { assert(0); }
-	void text(std::ostream&) const;
-
-};
-
-
-std::ostream& operator<<(std::ostream& os, L3CMServiceType::TypeCode code);
-
-
 /** RejectCause, GSM 04.08 10.5.3.6 */
 class L3RejectCause : public L3ProtocolElement {
 

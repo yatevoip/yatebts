@@ -353,5 +353,35 @@ void L3CipheringKeySequenceNumber::text(ostream& os) const
 }
 
 
+void L3CMServiceType::parseV(const L3Frame& src, size_t &rp)
+{
+	mType = (TypeCode)src.readField(rp,4);
+}
+
+
+ostream& GSM::operator<<(ostream& os, L3CMServiceType::TypeCode code)
+{
+	switch (code) {
+		case L3CMServiceType::MobileOriginatedCall: os << "MOC"; break;
+		case L3CMServiceType::ShortMessage: os << "SMS"; break;
+		case L3CMServiceType::SupplementaryService: os << "SS"; break;
+		case L3CMServiceType::VoiceCallGroup: os << "VGCS"; break;
+		case L3CMServiceType::VoiceBroadcast: os << "VBS"; break;
+		case L3CMServiceType::LocationService: os << "LCS"; break;
+		case L3CMServiceType::MobileTerminatedCall: os << "MTC"; break;
+		case L3CMServiceType::MobileTerminatedShortMessage: os << "MTSMS"; break;
+		case L3CMServiceType::TestCall: os << "Test"; break;
+		case L3CMServiceType::FuzzCall: os << "Fuzz"; break;
+		default: os << "?" << (int)code << "?";
+	}
+	return os;
+}
+
+void L3CMServiceType::text(ostream& os) const
+{
+	os << mType;
+}
+
+
 
 // vim: ts=4 sw=4

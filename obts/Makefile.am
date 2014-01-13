@@ -37,7 +37,6 @@ _SUBDIRS = \
 	Globals \
 	CLI \
 	GSM \
-	SMS \
 	TRXManager \
 	Control \
 	Peering \
