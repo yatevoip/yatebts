@@ -82,6 +82,8 @@ static const String s_ccCallState = "CallState";
 //static const String s_ccFacility = "Facility";
 static const String s_ccProgressInd = "ProgressIndicator";
 //static const String s_ccUserUser = "UserUser";
+static const String s_ccSsCLIR = "CLIRInvocation";
+static const String s_ccSsCLIP = "CLIRSuppresion";
 
 class YBTSConnIdHolder;                  // A connection id holder
 class YBTSThread;
@@ -565,8 +567,13 @@ protected:
     void sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t cause);
     void sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause = 0);
     void sendIdentityRequest(YBTSConn* conn, const char* type);
+    bool findUESafe(RefPointer<YBTSUE>& ue, const String& dest);
     // Find UE by TMSI
     void findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi);
+    // Find UE by IMEI
+    void findUEByIMEISafe(RefPointer<YBTSUE>& ue, const String& imei);
+    // Find UE by MSISDN
+    void findUEByMSISDNSafe(RefPointer<YBTSUE>& ue, const String& msisdn);
     // Find UE by IMSI. Create it if not found
     void getUEByIMSISafe(RefPointer<YBTSUE>& ue, const String& imsi, bool create = true);
     inline unsigned int hashList(const String& str)
@@ -877,6 +884,7 @@ const TokenDict YBTSMessage::s_priName[] =
     {"ConnLost",             YBTS::SigConnLost},
     {"ConnRelease",          YBTS::SigConnRelease},
     {"StartMedia",           YBTS::SigStartMedia},
+    {"StopMedia",            YBTS::SigStopMedia},
     {"Handshake",            YBTS::SigHandshake},
     {"Heartbeat",            YBTS::SigHeartbeat},
     {0,0}
@@ -2583,6 +2591,21 @@ void YBTSMM::sendIdentityRequest(YBTSConn* conn, const char* type)
     conn->sendL3(mm);
 }
 
+bool YBTSMM::findUESafe(RefPointer<YBTSUE>& ue, const String& dest)
+{
+    ue = 0;
+    String tmp(dest);
+    if (tmp.startSkip("+",false))
+	findUEByMSISDNSafe(ue,tmp);
+    else if (tmp.startSkip("IMSI",false))
+	getUEByIMSISafe(ue,tmp,false);
+    else if (tmp.startSkip("IMEI",false))
+	findUEByIMEISafe(ue,tmp);
+    else if (tmp.startSkip("TMSI",false))
+	findUEByTMSISafe(ue,tmp);
+    return ue != 0;
+}
+
 // Find UE by TMSI
 void YBTSMM::findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi)
 {
@@ -2601,6 +2624,42 @@ void YBTSMM::findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi)
     XDebug(this,DebugAll,"findUEByTMSISafe(%s) found (%p) [%p]",
 	tmsi.c_str(),tmpUE,this);
     ue = tmpUE;
+}
+
+// Find UE by IMEI
+void YBTSMM::findUEByIMEISafe(RefPointer<YBTSUE>& ue, const String& imei)
+{
+    if (!imei)
+	return;
+    Lock lck(m_ueMutex);
+    for (unsigned int n = 0; n < m_ueHashLen; n++) {
+	ObjList& list = m_ueTMSI[n];
+	for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
+	    YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	    if (imei == u->imei()) {
+		ue = u;
+		return;
+	    }
+	}
+    }
+}
+
+// Find UE by MSISDN
+void YBTSMM::findUEByMSISDNSafe(RefPointer<YBTSUE>& ue, const String& msisdn)
+{
+    if (!msisdn)
+	return;
+    Lock lck(m_ueMutex);
+    for (unsigned int n = 0; n < m_ueHashLen; n++) {
+	ObjList& list = m_ueTMSI[n];
+	for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
+	    YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	    if (msisdn == u->msisdn()) {
+		ue = u;
+		return;
+	    }
+	}
+    }
 }
 
 // Find UE by IMSI. Create it if not found
@@ -2812,6 +2871,10 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
     r->addParam("username",ue->imsi(),false);
     r->addParam("imei",ue->imei(),false);
     r->addParam("emergency",String::boolText(!call->m_regular));
+    if (xml.findFirstChild(&s_ccSsCLIR))
+	r->addParam("privacy",String::boolText(true));
+    else if (xml.findFirstChild(&s_ccSsCLIP))
+	r->addParam("privacy",String::boolText(false));
     Message* s = message("chan.startup");
     s->addParam("caller",caller,false);
     s->addParam("called",call->m_called,false);
@@ -3693,11 +3756,19 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
 	Debug(this,DebugWarn,"GSM call found but no data channel!");
 	return false;
     }
-    if (m_state != RadioUp) {
+    if ((m_state != RadioUp) || !m_mm) {
 	Debug(this,DebugWarn,"GSM call: Radio is not up!");
 	msg.setParam(YSTRING("error"),"interworking");
 	return false;
     }
+    RefPointer<YBTSUE> ue;
+    if (!m_mm->findUESafe(ue,dest)) {
+	// We may consider paging UEs that are not in the TMSI table
+	msg.setParam(YSTRING("error"),"offline");
+	return false;
+    }
+    Debug(this,DebugCall,"MO call to IMSI=%s TMSI=%s",ue->imsi().c_str(),ue->tmsi().c_str());
+    // TODO
     Debug(this,DebugStub,"msgExecute not implemented");
     return false;
 }
