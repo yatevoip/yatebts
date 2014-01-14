@@ -3,6 +3,7 @@
 /*
 * Copyright 2008, 2009 Free Software Foundation, Inc.
 * Copyright 2011 Range Networks, Inc.
+* Copyright 2014 Legba, Inc.
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing

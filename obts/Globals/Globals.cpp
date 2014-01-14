@@ -3,6 +3,7 @@
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
+* Copyright 2014 Legba, Inc.
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -32,13 +33,18 @@ const char *gVersionString = "release " VERSION FEATURES PROD_CAT " built " __DA
 
 const char* gOpenBTSWelcome =
 	//23456789123456789223456789323456789423456789523456789623456789723456789
-	"OpenBTS\n"
+	"Yate-BTS MBTS Component\n"
 	"Copyright 2008, 2009, 2010 Free Software Foundation, Inc.\n"
 	"Copyright 2010 Kestrel Signal Processing, Inc.\n"
 	"Copyright 2011, 2012, 2013 Range Networks, Inc.\n"
-	"Release " VERSION " " PROD_CAT " formal build date " __DATE__ " rev" SVN_REV "\n"
+	"Copyright 2014 SC Null Team Impex SRL\n"
+	"Copyeight 2014 Legba, Inc.\n"
 	"\"OpenBTS\" is a registered trademark of Range Networks, Inc.\n"
 	"\nContributors:\n"
+	"  SC Null Team Impex SRL:\n"
+	"    Paul Chitescu\n"
+	"  Legba, Inc.\n"
+	"    David Burgess\n"
 	"  Range Networks, Inc.:\n"
 	"    David Burgess, Harvind Samra, Donald Kirker, Doug Brown,\n"
 	"    Pat Thompson, Kurtis Heimerl\n"
@@ -50,11 +56,10 @@ const char* gOpenBTSWelcome =
 	"    Anne Kwong, Jacob Appelbaum, Joshua Lackey, Alon Levy\n"
 	"    Alexander Chemeris, Alberto Escudero-Pascual\n"
 	"Incorporated L/GPL libraries and components:\n"
-	"  libosip2, LGPL, 2.1 Copyright 2001-2007 Aymeric MOIZARD jack@atosc.org\n"
-	"  libortp, LGPL, 2.1 Copyright 2001 Simon MORLAT simon.morlat@linphone.org\n"
 	"  libusb, LGPL 2.1, various copyright holders, www.libusb.org\n"
 	"Incorporated BSD/MIT-style libraries and components:\n"
-	"  A5/1 Pedagogical Implementation, Simplified BSD License, Copyright 1998-1999 Marc Briceno, Ian Goldberg, and David Wagner\n"
+	"  A5/1 Pedagogical Implementation, Simplified BSD License,\n"
+	"    Copyright 1998-1999 Marc Briceno, Ian Goldberg, and David Wagner\n"
 	"Incorporated public domain libraries and components:\n"
 	"  sqlite3, released to public domain 15 Sept 2001, www.sqlite.org\n"
 	"\n"
@@ -64,6 +69,8 @@ const char* gOpenBTSWelcome =
 	"All users of this software are expected to comply with applicable\n"
 	"regulations and laws.  See the LEGAL file in the source code for\n"
 	"more information.\n"
+	"\n"
+	"Release " VERSION " " PROD_CAT " formal build date " __DATE__ " rev" SVN_REV "\n"
 	"\n"
 ;
 
