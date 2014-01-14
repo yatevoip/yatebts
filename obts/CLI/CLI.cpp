@@ -302,55 +302,6 @@ int isIMSI(const char *imsi)
 	return 1;
 }
 
-/** Submit an SMS for delivery to an IMSI. */
-int sendsimple(int argc, char** argv, ostream& os)
-{
-	if (argc<4) return BAD_NUM_ARGS;
-
-	char *IMSI = argv[1];
-	char *srcAddr = argv[2];
-	string rest = "";
-	for (int i=3; i<argc; i++) rest = rest + argv[i] + " ";
-	const char *txtBuf = rest.c_str();
-
-	if (!isIMSI(IMSI)) {
-		os << "Invalid IMSI. Enter 15 digits only.";
-		return BAD_VALUE;
-	}
-
-	static UDPSocket sock(0,"127.0.0.1",gConfig.getNum("SIP.Local.Port"));
-
-	static const char form[] =
-		"MESSAGE sip:IMSI%s@127.0.0.1 SIP/2.0\n"
-		"Via: SIP/2.0/TCP 127.0.0.1;branch=%x\n"
-		"Max-Forwards: 2\n"
-		"From: %s <sip:%s@127.0.0.1:%d>;tag=%d\n"
-		"To: sip:IMSI%s@127.0.0.1\n"
-		"Call-ID: %x@127.0.0.1:%d\n"
-		"CSeq: 1 MESSAGE\n"
-		"Content-Type: text/plain\nContent-Length: %u\n"
-		"\n%s\n";
-	static char buffer[1500];
-	snprintf(buffer,1499,form,
-		IMSI, (unsigned)random(), srcAddr,srcAddr,sock.port(),(unsigned)random(), IMSI, (unsigned)random(),sock.port(), strlen(txtBuf), txtBuf);
-	sock.write(buffer);
-
-	os << "message submitted for delivery" << endl;
-
-#if 0
-	int numRead = sock.read(buffer,10000);
-	if (numRead>=0) {
-		buffer[numRead]='\0';
-		os << "response: " << buffer << endl;
-	} else {
-		os << "timed out waiting for response";
-	}
-#endif
-
-	return SUCCESS;
-}
-
-
 
 /** Print current usage loads. */
 int printStats(int argc, char** argv, ostream& os)
@@ -1241,7 +1192,6 @@ void Parser::addCommands()
 	addCommand("help", showHelp, "[command] -- list available commands or gets help on a specific command.");
 	addCommand("shutdown", exit_function, "[wait] -- shut down or restart OpenBTS, either immediately, or waiting for existing calls to clear with a timeout in seconds");
 	addCommand("tmsis", tmsis, "[\"clear\"] or [\"dump\" filename] -- print/clear the TMSI table or dump it to a file.");
-	addCommand("sendsimple", sendsimple, "IMSI src# message... -- send SMS to IMSI via SIP interface, addressed from source number src#.");
 	addCommand("load", printStats, "-- print the current activity loads.");
 	addCommand("cellid", cellID, "[MCC MNC LAC CI] -- get/set location area identity (MCC, MNC, LAC) and cell ID (CI)");
 	addCommand("rawconfig", rawconfig, "[] OR [patt] OR [key val(s)] -- print the current configuration, print configuration values matching a pattern, or set/change a configuration value");
