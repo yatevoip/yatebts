@@ -32,7 +32,6 @@ ConnectionMap::ConnectionMap()
     : mIndex(0)
 {
     memset(mMap,0,sizeof(mMap));
-    memset(mMedia,0,sizeof(mMedia));
 }
 
 int ConnectionMap::map(GSM::LogicalChannel* chan)
@@ -46,9 +45,9 @@ int ConnectionMap::map(GSM::LogicalChannel* chan)
 	i = (i + 1) % BTS_CONN_MAP_SIZE;
 	if (i == mIndex)
 	    break;
-	if (!mMap[i]) {
-	    mMap[i] = chan;
-	    mMedia[i] = 0;
+	if (!mMap[i].mChan) {
+	    mMap[i].mChan = chan;
+	    mMap[i].mMedia = 0;
 	    id = mIndex = i;
 	    break;
 	}
@@ -61,15 +60,15 @@ int ConnectionMap::map(GSM::LogicalChannel* chan)
 
 void ConnectionMap::mapMedia(unsigned int id, GSM::TCHFACCHLogicalChannel* media)
 {
-    if ((id < BTS_CONN_MAP_SIZE) && mMap[id])
-	mMedia[id] = media;
+    if ((id < BTS_CONN_MAP_SIZE) && mMap[id].mChan)
+	mMap[id].mMedia = media;
 }
 
 bool ConnectionMap::unmap(unsigned int id)
 {
-    if ((id < BTS_CONN_MAP_SIZE) && mMap[id]) {
-	mMap[id] = 0;
-	mMedia[id] = 0;
+    if ((id < BTS_CONN_MAP_SIZE) && mMap[id].mChan) {
+	mMap[id].mChan = 0;
+	mMap[id].mMedia = 0;
 	return true;
     }
     return false;
@@ -80,11 +79,12 @@ bool ConnectionMap::unmap(const GSM::LogicalChannel* chan)
     if (!chan)
 	return false;
     for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {
-	if (mMap[i] == chan) {
+	Conn& c = mMap[i];
+	if (c.mChan == chan) {
 	    lock();
-	    if (mMap[i] == chan) {
-		mMap[i] = 0;
-		mMedia[i] = 0;
+	    if (c.mChan == chan) {
+		c.mChan = 0;
+		c.mMedia = 0;
 	    }
 	    unlock();
 	    return true;
@@ -96,7 +96,7 @@ bool ConnectionMap::unmap(const GSM::LogicalChannel* chan)
 int ConnectionMap::find(const GSM::LogicalChannel* chan)
 {
     for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {
-	if (mMap[i] == chan)
+	if (mMap[i].mChan == chan)
 	    return i;
     }
     return -1;
@@ -104,12 +104,12 @@ int ConnectionMap::find(const GSM::LogicalChannel* chan)
 
 GSM::LogicalChannel* ConnectionMap::find(unsigned int id)
 {
-    return (id < BTS_CONN_MAP_SIZE) ? mMap[id] : 0;
+    return (id < BTS_CONN_MAP_SIZE) ? mMap[id].mChan : 0;
 }
 
 GSM::TCHFACCHLogicalChannel* ConnectionMap::findMedia(unsigned int id)
 {
-    return (id < BTS_CONN_MAP_SIZE) ? mMedia[id] : 0;
+    return (id < BTS_CONN_MAP_SIZE) ? mMap[id].mMedia : 0;
 }
 
 /* vi: set ts=8 sw=4 sts=4 noet: */

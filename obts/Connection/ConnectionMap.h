@@ -38,6 +38,10 @@ namespace Connection {
 class ConnectionMap : public Mutex
 {
 public:
+    struct Conn {
+	GSM::LogicalChannel* mChan;
+	GSM::TCHFACCHLogicalChannel* mMedia;
+    };
     ConnectionMap();
     int map(GSM::LogicalChannel* chan);
     void mapMedia(unsigned int id, GSM::TCHFACCHLogicalChannel* media);
@@ -48,8 +52,7 @@ public:
     GSM::TCHFACCHLogicalChannel* findMedia(unsigned int id);
 private:
     unsigned int mIndex;
-    GSM::LogicalChannel* mMap[BTS_CONN_MAP_SIZE];
-    GSM::TCHFACCHLogicalChannel* mMedia[BTS_CONN_MAP_SIZE];
+    Conn mMap[BTS_CONN_MAP_SIZE];
 };
 
 }; // namespace Connection
