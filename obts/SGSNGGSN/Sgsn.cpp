@@ -44,7 +44,7 @@ static GmmInfoList_t sGmmInfoList;
 static Mutex sSgsnListMutex;	// One lock sufficient for all lists maintained by SGSN.
 static void dumpGmmInfo();
 #if RN_UMTS
-static void sendAuthenticationRequest(SgsnInfo *si, string IMSI);
+//static void sendAuthenticationRequest(SgsnInfo *si, string IMSI);
 #endif
 
 //static void killOtherTlli(SgsnInfo *si,uint32_t newTlli);
@@ -113,7 +113,7 @@ SgsnInfo::SgsnInfo(uint32_t wMsHandle) :
 	//memset(mOldMnc,0,sizeof(mOldMnc));
 	time(&mLastUseTime);
 #if RN_UMTS == 0
-	mLlcEngine = new LlcEngine(this);
+//	mLlcEngine = new LlcEngine(this);
 #endif
 	sSgsnInfoList.push_back(this);
 }
@@ -156,7 +156,7 @@ std::ostream& operator<<(std::ostream& os, const SgsnInfo*si)
 		os << ms->msid();
 	} else {
 #if RN_UMTS
-		os << LOGHEX2("URNTI", si->mMsHandle);
+//		os << LOGHEX2("URNTI", si->mMsHandle);
 #else
 		os << LOGHEX2("TLLI", si->mMsHandle);
 #endif
@@ -318,12 +318,12 @@ bool GmmInfo::freePdp(unsigned nsapi)
 void SgsnInfo::deactivateRabs(unsigned nsapiMask)
 {
 #if RN_UMTS
-	MSUEAdapter *ms = getMS();
-	if (ms) {
-		ms->msDeactivateRabs(nsapiMask);
-	} else {
-		SGSNERROR("ggsn: DeactivatePdpContextRequest: MS not found "<<this);
-	}
+//	MSUEAdapter *ms = getMS();
+//	if (ms) {
+//		ms->msDeactivateRabs(nsapiMask);
+//	} else {
+//		SGSNERROR("ggsn: DeactivatePdpContextRequest: MS not found "<<this);
+//	}
 #endif
 }
 
@@ -357,13 +357,13 @@ void SgsnInfo::sgsnSend2MsHighSide(ByteVector &pdu,const char *descr, int rbid)
 		// TODO: It would be safer not to call getMS, but just send the dlpdu through
 		// an InterthreadQueue and let the UMTS or GPRS L2 handle that part in its own thread.
 		// In that case we have to add oldTlli to the message also.
-		if (!ms) {
-			SGSNWARN("no corresponding MS for URNTI " << mMsHandle);
-			return;
-		}
+//		if (!ms) {
+//			SGSNWARN("no corresponding MS for URNTI " << mMsHandle);
+//			return;
+//		}
 		// For UMTS we pass the rbid which is an intrinsic part of this channel.
 		// TODO: Update UMTS to use DownlinkPdu too.
-		ms->msWriteHighSide(pdu,rbid,descr);
+//		ms->msWriteHighSide(pdu,rbid,descr);
 #else
 		GmmInfo *gmm = getGmm();
 		uint32_t tlli, aliasTlli = 0;
@@ -394,11 +394,11 @@ void SgsnInfo::sgsnWriteHighSideMsg(L3GprsDlMsg &msg)
 {
 #if RN_UMTS
 		// bypass llc
-		ByteVector bv(1000);
-		bv.setAppendP(0,0);
-		msg.gWrite(bv);
-		SGSNLOG("Sending "<<msg.str() <<this);
-		sgsnSend2MsHighSide(bv,msg.mtname(),SRB3);	// TODO: Is SRB3 correct?
+//		ByteVector bv(1000);
+//		bv.setAppendP(0,0);
+//		msg.gWrite(bv);
+//		SGSNLOG("Sending "<<msg.str() <<this);
+//		sgsnSend2MsHighSide(bv,msg.mtname(),SRB3);	// TODO: Is SRB3 correct?
 #else
 		LlcDlFrame lframe(1000);
 		lframe.setAppendP(0,0);
@@ -413,7 +413,7 @@ void SgsnInfo::sgsnWriteHighSide(ByteVector &sdu,int nsapi)
 {
 #if RN_UMTS
 		// The PDCP is a complete no-op.
-		sgsnSend2MsHighSide(sdu,"userdata",nsapi);
+//		sgsnSend2MsHighSide(sdu,"userdata",nsapi);
 #else
 		mLlcEngine->llcWriteHighSide(sdu,nsapi);
 #endif
@@ -471,6 +471,7 @@ static void handleAttachStep(SgsnInfo *si)
 		return;
 	}
 #if RN_UMTS
+	assert(0);
 		// Must do the Security Proecedure first, message flow like this:
 		//      L3 AttachRequest
 		// MS ---------------------------------> Network
@@ -487,19 +488,19 @@ static void handleAttachStep(SgsnInfo *si)
 		// the Mobility Management protocol layer, in which case there is
 		// a Kc sitting in the TMSI table.
 		// We need to pass it a nul-terminated IMSI string.
-		string IMSI = gmm->mImsi.hexstr();
+//		string IMSI = gmm->mImsi.hexstr();
 		//int len = gmm->mImsi.size();
 		//char imsi[len+2];
 		//memcpy(imsi,gmm->mImsi.hexstr().c_str(),len);
 		//imsi[len] = 0;
-		LOG(INFO) << "Looking up Kc for imsi " << IMSI;
-		string Kcs = gTMSITable.getKc(IMSI.c_str());
-		if (Kcs.length() <= 1) {
-			SGSNERROR("No Kc found for MS in TMSI table during Attach procedure"<<si);
+//		LOG(INFO) << "Looking up Kc for imsi " << IMSI;
+//		string Kcs = gTMSITable.getKc(IMSI.c_str());
+//		if (Kcs.length() <= 1) {
+//			SGSNERROR("No Kc found for MS in TMSI table during Attach procedure"<<si);
 			// need to do authentication, send authentication request
                         //sendAuthenticationRequest(si);
-		}
-		sendAuthenticationRequest(si,IMSI);
+//		}
+//		sendAuthenticationRequest(si,IMSI);
 #else
 		// We must use the TLLI that the MS used, not the PTMSI.
 		// To do that, reset the registered status.
@@ -510,27 +511,27 @@ static void handleAttachStep(SgsnInfo *si)
 
 #if RN_UMTS
 // Called from UMTS when it receives the SecurityModeComplete or SecurityModeFailure msg.
-void MSUEAdapter::sgsnHandleSecurityModeComplete(bool success)
-{
-	SgsnInfo *si = sgsnGetSgsnInfo();
-	// The si would only be null if the UE sent us a spurious SecurityModeComplete command.
-	if (si == NULL) {
-		SGSNERROR("Received spurious SecurityMode completion command for UE:"<<msid());
-		return;
-	}
-	if (! si->mT3310FinishAttach.active()) {
-		SGSNERROR("Received security response after T3310 expiration for UE:"<<si);
-		return;
-	}
-	if (success) {
-		sendAttachAccept(si);	// happiness
-	} else {
-		SGSNERROR("Integrity Protection failed for UE:"<<si);
-		// Oops!  We could send an attach reject, but why bother?
-		// The UE already knows it failed, no recovery is possible,
-		// and it will timeout shortly anyway.
-	}
-}
+//void MSUEAdapter::sgsnHandleSecurityModeComplete(bool success)
+//{
+//	SgsnInfo *si = sgsnGetSgsnInfo();
+//	// The si would only be null if the UE sent us a spurious SecurityModeComplete command.
+//	if (si == NULL) {
+//		SGSNERROR("Received spurious SecurityMode completion command for UE:"<<msid());
+//		return;
+//	}
+//	if (! si->mT3310FinishAttach.active()) {
+//		SGSNERROR("Received security response after T3310 expiration for UE:"<<si);
+//		return;
+//	}
+//	if (success) {
+//		sendAttachAccept(si);	// happiness
+//	} else {
+//		SGSNERROR("Integrity Protection failed for UE:"<<si);
+//		// Oops!  We could send an attach reject, but why bother?
+//		// The UE already knows it failed, no recovery is possible,
+//		// and it will timeout shortly anyway.
+//	}
+//}
 #endif
 
 #if 0
@@ -592,7 +593,7 @@ static void handleAuthenticationResponse(SgsnInfo *si, L3GmmMsgAuthenticationRes
                 }
 
 #if RN_UMTS
-                SgsnAdapter::startIntegrityProtection(si->mMsHandle,Kcs);
+//                SgsnAdapter::startIntegrityProtection(si->mMsHandle,Kcs);
 #endif
 	}
 }
@@ -1151,18 +1152,18 @@ void MSUEAdapter::sgsnWriteLowSide(ByteVector &payload, uint32_t handle, unsigne
 	SgsnInfo *si = sgsnGetSgsnInfoByHandle(handle,true);	// Create if necessary.
 #if RN_UMTS
 	// No Pdcp, so just send it off.
-	si->sgsnSend2PdpLowSide(rbid, payload);
+//	si->sgsnSend2PdpLowSide(rbid, payload);
 #else
 	si->mLlcEngine->llcWriteLowSide(payload,si);
 #endif
 }
 
 #if RN_UMTS
-void MSUEAdapter::sgsnHandleL3Msg(uint32_t handle, ByteVector &msgFrame)
-{
-	SgsnInfo *si = sgsnGetSgsnInfoByHandle(handle,true);	// Create if necessary.
-	handleL3Msg(si,msgFrame);
-}
+//void MSUEAdapter::sgsnHandleL3Msg(uint32_t handle, ByteVector &msgFrame)
+//{
+//	SgsnInfo *si = sgsnGetSgsnInfoByHandle(handle,true);	// Create if necessary.
+//	handleL3Msg(si,msgFrame);
+//}
 #endif
 
 void handleL3Msg(SgsnInfo *si, ByteVector &bv)
@@ -1296,11 +1297,11 @@ static SgsnInfo *sgsnGetSgsnInfoByHandle(uint32_t mshandle, bool create)
 }
 
 #if RN_UMTS
-SgsnInfo *MSUEAdapter::sgsnGetSgsnInfo()
-{
-	uint32_t mshandle = msGetHandle();
-	return findSgsnInfoByHandle(mshandle,false);
-}
+//SgsnInfo *MSUEAdapter::sgsnGetSgsnInfo()
+//{
+//	uint32_t mshandle = msGetHandle();
+//	return findSgsnInfoByHandle(mshandle,false);
+//}
 #else
 void MSUEAdapter::sgsnSendKeepAlive()
 {
@@ -1353,28 +1354,28 @@ GmmState::state MSUEAdapter::sgsnGetRegistrationState(uint32_t mshandle)
 
 
 #if RN_UMTS
-void MSUEAdapter::sgsnHandleRabSetupResponse(unsigned rabId, bool success)
-{
-	SgsnInfo *si = sgsnGetSgsnInfo();
-	if (si == NULL) {
-		// Dont think this can happen, but be safe.
-		SGSNERROR("Received spurious RabSetupResponse for UE:"<<msid());
-		return;
-	}
-	if (success) {
-		PdpContext *pdp = si->getPdp(rabId);
-		if (pdp==NULL) return; // FIXME: Not sure what to do here
-		if (pdp->mUmtsStatePending) {
-			pdp->update(pdp->mPendingPdpr);
-			pdp->mUmtsStatePending = false;
-		}
-		sendPdpContextAccept(si,pdp);
-	} else {
-		// We do NOT want to send a RAB teardown message - we got here because
-		// the RAB setup did not work in the first place.  Just free it.
-		si->freePdp(rabId);
-	}
-}
+//void MSUEAdapter::sgsnHandleRabSetupResponse(unsigned rabId, bool success)
+//{
+//	SgsnInfo *si = sgsnGetSgsnInfo();
+//	if (si == NULL) {
+//		// Dont think this can happen, but be safe.
+//		SGSNERROR("Received spurious RabSetupResponse for UE:"<<msid());
+//		return;
+//	}
+//	if (success) {
+//		PdpContext *pdp = si->getPdp(rabId);
+//		if (pdp==NULL) return; // FIXME: Not sure what to do here
+//		if (pdp->mUmtsStatePending) {
+//			pdp->update(pdp->mPendingPdpr);
+//			pdp->mUmtsStatePending = false;
+//		}
+//		sendPdpContextAccept(si,pdp);
+//	} else {
+//		// We do NOT want to send a RAB teardown message - we got here because
+//		// the RAB setup did not work in the first place.  Just free it.
+//		si->freePdp(rabId);
+//	}
+//}
 #endif
 
 const char *GmmState::GmmState2Name(GmmState::state state)
