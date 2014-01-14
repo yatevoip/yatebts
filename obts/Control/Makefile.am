@@ -30,7 +30,6 @@ EXTRA_DIST = README.Control
 noinst_LTLIBRARIES = libcontrol.la
 
 libcontrol_la_SOURCES = \
-	TMSITable.cpp \
 	ControlCommon.cpp \
 	RadioResource.cpp \
 	DCCHDispatch.cpp \
@@ -42,7 +41,5 @@ libcontrol_la_SOURCES = \
 
 noinst_HEADERS = \
 	ControlCommon.h \
-	TMSITable.h \
 	RadioResource.h \
-	TMSITable.h \
 	RRLPServer.h

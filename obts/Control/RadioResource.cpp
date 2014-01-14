@@ -571,30 +571,34 @@ void Control::PagingResponseHandler(const L3PagingResponse* resp, LogicalChannel
 	assert(DCCH);
 	LOG(INFO) << *resp;
 
-	// If we got a TMSI, find the IMSI.
 	L3MobileIdentity mobileID = resp->mobileID();
-	if (mobileID.type()==TMSIType) {
-		char *IMSI = gTMSITable.IMSI(mobileID.TMSI());
-		if (IMSI) {
-			mobileID = L3MobileIdentity(IMSI);
-			// (pat) Whenever the MS RACHes, we need to alert the SGSN.
-			// Not sure this is necessary in this particular case, but be safe.
-			GPRS::GPRSNotifyGsmActivity(IMSI);
-			free(IMSI);
-		} else {
-			// Don't try too hard to resolve.
-			// The handset is supposed to respond with the same ID type as in the request.
-			// This could be the sign of some kind of DOS attack.
-			LOG(CRIT) << "Paging Reponse with non-valid TMSI";
-			// Cause 0x60 "Invalid mandatory information"
-			DCCH->send(L3ChannelRelease(0x60));
-			return;
-		}
-	}
-	else if(mobileID.type()==IMSIType){
-		//Cause the tmsi table to be touched
-		gTMSITable.TMSI(resp->mobileID().digits());
-	}
+
+	// FIXME YATEBTS -- This assumes that MBTS is totally agnostic as to the mobile
+	// identity type.
+
+//	// If we got a TMSI, find the IMSI.
+//	if (mobileID.type()==TMSIType) {
+//		char *IMSI = gTMSITable.IMSI(mobileID.TMSI());
+//		if (IMSI) {
+//			mobileID = L3MobileIdentity(IMSI);
+//			// (pat) Whenever the MS RACHes, we need to alert the SGSN.
+//			// Not sure this is necessary in this particular case, but be safe.
+//			GPRS::GPRSNotifyGsmActivity(IMSI);
+//			free(IMSI);
+//		} else {
+//			// Don't try too hard to resolve.
+//			// The handset is supposed to respond with the same ID type as in the request.
+//			// This could be the sign of some kind of DOS attack.
+//			LOG(CRIT) << "Paging Reponse with non-valid TMSI";
+//			// Cause 0x60 "Invalid mandatory information"
+//			DCCH->send(L3ChannelRelease(0x60));
+//			return;
+//		}
+//	}
+//	else if(mobileID.type()==IMSIType){
+//		//Cause the tmsi table to be touched
+//		gTMSITable.TMSI(resp->mobileID().digits());
+//	}
 
 	// Delete the Mobile ID from the paging list to free up CCCH bandwidth.
 	// ... if it was not deleted by a timer already ...

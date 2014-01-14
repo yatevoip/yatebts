@@ -80,7 +80,7 @@ const char* gDateTime = __DATE__ " " __TIME__;
 // be declared here.
 
 // The TMSI Table.
-Control::TMSITable gTMSITable;
+//Control::TMSITable gTMSITable;
 
 // The transaction table.
 //Control::TransactionTable gTransactionTable;
@@ -338,7 +338,7 @@ int main(int argc, char *argv[])
 	LOG(ALERT) << "M-BTS (re)starting, version " << VERSION << " build date " << __DATE__;
 
 	COUT("\n\n" << gOpenBTSWelcome << "\n");
-	gTMSITable.open(gConfig.getStr("Control.Reporting.TMSITable").c_str());
+	//gTMSITable.open(gConfig.getStr("Control.Reporting.TMSITable").c_str());
 	//gTransactionTable.init(gConfig.getStr("Control.Reporting.TransactionTable").c_str());
 	gPhysStatus.open(gConfig.getStr("Control.Reporting.PhysStatusTable").c_str());
 	gBTS.init();

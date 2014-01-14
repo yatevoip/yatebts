@@ -585,9 +585,11 @@ static void handleAuthenticationResponse(SgsnInfo *si, L3GmmMsgAuthenticationRes
 		if (!success) return;
 
                 LOG(INFO) << "Looking up Kc for imsi " << IMSI;
-                string Kcs = gTMSITable.getKc(IMSI.c_str());
+                // string Kcs = gTMSITable.getKc(IMSI.c_str());
+		string Kcs = "";	// HACK
                 if (Kcs.length() <= 1) {
                         SGSNERROR("No Kc found for MS in TMSI table during Attach procedure"<<si);
+			// FIXME YATEBTS -- This will need to be handled in the Yate module.
                         // need to do authentication, send authentication request
                         //sendAuthenticationRequest(si);
                 }

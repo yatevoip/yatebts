@@ -28,7 +28,7 @@
 #include <Configuration.h>
 #include <CLI.h>
 #include <PhysicalStatus.h>
-#include <TMSITable.h>
+//#include <TMSITable.h>
 //#include <SubscriberRegistry.h>
 #include <TRXManager.h>
 #include <Reporting.h>
@@ -58,7 +58,7 @@ extern const char *gVersionString;
 extern CommandLine::Parser gParser;
 
 /** The global TMSI table. */
-extern Control::TMSITable gTMSITable;
+//extern Control::TMSITable gTMSITable;
 
 /** The physical status reporting table */
 extern GSM::PhysicalStatus gPhysStatus;
