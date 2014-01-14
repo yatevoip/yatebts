@@ -774,6 +774,8 @@ public:
     void removeTerminatedCall(uint16_t connId);
     // Handshake done notification. Return false if state is invalid
     bool handshakeDone();
+    // Radio ready notification. Return false if state is invalid
+    bool radioReady();
     void restart(unsigned int stopIntervalMs = 0);
     void stopNoRestart();
     inline bool findChan(uint16_t connId, RefPointer<YBTSChan>& chan) {
@@ -886,6 +888,7 @@ const TokenDict YBTSMessage::s_priName[] =
     {"StartMedia",           YBTS::SigStartMedia},
     {"StopMedia",            YBTS::SigStopMedia},
     {"Handshake",            YBTS::SigHandshake},
+    {"RadioReady",           YBTS::SigRadioReady},
     {"Heartbeat",            YBTS::SigHeartbeat},
     {0,0}
 };
@@ -1242,6 +1245,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	    decodeMsg(recv->codec(),data,len,m->m_xml,reason);
 	    break;
 	case YBTS::SigHandshake:
+	case YBTS::SigRadioReady:
 	case YBTS::SigHeartbeat:
 	case YBTS::SigConnLost:
 	    break;
@@ -1897,6 +1901,8 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    return Ok;
 	case YBTS::SigHandshake:
 	    return handleHandshake(msg);
+	case YBTS::SigRadioReady:
+	    __plugin.radioReady();
 	case YBTS::SigConnLost:
 	    __plugin.signalling()->dropConn(msg.connId(),false);
 	    return Ok;
@@ -3390,6 +3396,19 @@ bool YBTSDriver::handshakeDone()
 	return false;
     }
     changeState(Running);
+    return true;
+}
+
+bool YBTSDriver::radioReady()
+{
+    Lock lck(m_stateMutex);
+    if (state() != Running) {
+	Debug(this,DebugNote,"Radio Ready in %s state !!!",stateName());
+	lck.drop();
+	restart();
+	return false;
+    }
+    changeState(RadioUp);
     return true;
 }
 

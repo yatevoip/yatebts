@@ -39,6 +39,7 @@ public:
 	SigStartMedia     =   3, // Start or assign traffic channel
 	SigStopMedia      =   4, // Stop sending media
 	SigHandshake      = 128, // Initial handshake
+	SigRadioReady     = 129, // Radio side is functioning
 	SigHeartbeat      = 255  // Idle heartbeat message
     };
     inline SigConnection(int fileDesc = -1)

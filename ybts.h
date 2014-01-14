@@ -48,6 +48,7 @@ enum YBTSSigPrimitive {
     SigStartMedia  =   3,                // Start or assign traffic channel
     SigStopMedia   =   4,                // Stop sending media
     SigHandshake   = 128,                // Handshake
+    SigRadioReady  = 129,                // Radio side is functioning
     SigHeartbeat   = 255,                // Heartbeat
 };
 
