@@ -25,6 +25,7 @@
 #include <Logger.h>
 #include <Globals.h>
 #include <GSMLogicalChannel.h>
+#include <GSML3RRMessages.h>
 #include <GSMTransfer.h>
 #include <assert.h>
 #include <string.h>
@@ -119,6 +120,21 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
 	case SigConnRelease:
 	    if (!gConnMap.unmap(id))
 		LOG(ERR) << "received SigConnRelease for unmapped id " << id;
+	    break;
+	case SigStartMedia:
+	    {
+		LogicalChannel* ch = gConnMap.find(id);
+		if (ch) {
+		    if (ch->type() == GSM::FACCHType) {
+			GSM::L3ChannelMode mode((GSM::L3ChannelMode::Mode)info);
+			ch->send(GSM::L3ChannelModeModify(ch->channelDescription(),mode));
+		    }
+		    else
+			LOG(ERR) << "Start Media is implemented only for FACCH";
+		}
+		else
+		    LOG(ERR) << "received Start Media for unmapped id " << id;
+	    }
 	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id;

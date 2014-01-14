@@ -701,6 +701,7 @@ protected:
 		m_haveTout = true;
 	    }
 	}
+    void startTraffic(uint8_t mode = 1);
     virtual void disconnected(bool final, const char *reason);
     virtual bool callRouted(Message& msg);
     virtual void callAccept(Message& msg);
@@ -721,6 +722,7 @@ protected:
     RefPointer<YBTSConn> m_conn;
     ObjList m_calls;
     String m_reason;
+    uint8_t m_traffic;
     bool m_hungup;
     bool m_haveTout;
     uint64_t m_tout;
@@ -874,6 +876,7 @@ const TokenDict YBTSMessage::s_priName[] =
     {"L3Message",            YBTS::SigL3Message},
     {"ConnLost",             YBTS::SigConnLost},
     {"ConnRelease",          YBTS::SigConnRelease},
+    {"StartMedia",           YBTS::SigStartMedia},
     {"Handshake",            YBTS::SigHandshake},
     {"Heartbeat",            YBTS::SigHeartbeat},
     {0,0}
@@ -2771,8 +2774,9 @@ void YBTSCallDesc::sendGSMRel(bool rel, const String& callRef, bool tiFlag, cons
 YBTSChan::YBTSChan(YBTSConn* conn)
     : Channel(__plugin),
     YBTSConnIdHolder(conn->connId()),
-    m_mutex(false,"YBTSChan"),
+    m_mutex(true,"YBTSChan"),
     m_conn(conn),
+    m_traffic(0),
     m_hungup(false),
     m_haveTout(false),
     m_tout(0)
@@ -2906,6 +2910,25 @@ void YBTSChan::connReleased()
     hangup();
 }
 
+void YBTSChan::startTraffic(uint8_t mode)
+{
+    if (mode == m_traffic)
+	return;
+    if (!m_conn)
+	return;
+    uint16_t cid = 0;
+    m_mutex.lock();
+    bool send = m_conn && (mode != m_traffic);
+    if (send)
+	cid = m_conn->connId();
+    m_traffic = mode;
+    m_mutex.unlock();
+    if (send) {
+	YBTSMessage m(YBTS::SigStartMedia,mode,cid);
+	__plugin.signalling()->send(m);
+    }
+}
+
 void YBTSChan::handleSetup(const XmlElement& xml, bool regular, const String* callRef)
 {
     const String* type = xml.getAttribute(s_type);
@@ -2920,6 +2943,7 @@ void YBTSChan::handleSetup(const XmlElement& xml, bool regular, const String* ca
 	call->proceeding();
 	m_calls.append(call);
 	Debug(this,DebugInfo,"Added call '%s' [%p]",call->c_str(),this);
+	startTraffic();
 	return;
     }
     lck.drop();
