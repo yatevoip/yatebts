@@ -242,26 +242,6 @@ int exit_function(int argc, char** argv, ostream& os)
 
 
 
-// Forward ref.
-int tmsis(int argc, char** argv, ostream& os);
-
-/** Dump TMSI table to a text file. */
-int dumpTMSIs(const char* filename)
-{
-	ofstream fileout;
-	fileout.open(filename, ios::out); // erases existing!
-	// FIXME -- Check that the file really opened.
-	// Fake an argument list to call printTMSIs.
-	const char* subargv[] = {"tmsis", NULL};
-	int subargc = 1;
-	// (pat) Cast makes gcc happy about const conversion.
-	return tmsis(subargc, const_cast<char**>(subargv), fileout);
-}
-
-
-
-
-
 /** Print current usage loads. */
 int printStats(int argc, char** argv, ostream& os)
 {
@@ -1149,7 +1129,6 @@ void Parser::addCommands()
 	addCommand("uptime", uptime, "-- show BTS uptime and BTS frame number.");
 	addCommand("help", showHelp, "[command] -- list available commands or gets help on a specific command.");
 	addCommand("shutdown", exit_function, "[wait] -- shut down or restart OpenBTS, either immediately, or waiting for existing calls to clear with a timeout in seconds");
-	addCommand("tmsis", tmsis, "[\"clear\"] or [\"dump\" filename] -- print/clear the TMSI table or dump it to a file.");
 	addCommand("load", printStats, "-- print the current activity loads.");
 	addCommand("cellid", cellID, "[MCC MNC LAC CI] -- get/set location area identity (MCC, MNC, LAC) and cell ID (CI)");
 	addCommand("rawconfig", rawconfig, "[] OR [patt] OR [key val(s)] -- print the current configuration, print configuration values matching a pattern, or set/change a configuration value");
