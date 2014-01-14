@@ -323,7 +323,7 @@ public:
     inline XmlElement* takeXml()
 	{ XmlElement* x = m_xml; m_xml = 0; return x; }
     // Set pending XML. Return false if another XML element is already pending
-    inline bool setXML(XmlElement* xml)
+    inline bool setXml(XmlElement* xml)
 	{ return (!m_xml) && ((m_xml = xml)); }
     // Send an L3 connection related message
     bool sendL3(XmlElement* xml, uint8_t info = 0);
@@ -557,12 +557,14 @@ public:
     void newTMSI(String& tmsi);
 
 protected:
+    void handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
     void handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleCMServiceRequest(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
     void sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t cause);
     void sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause = 0);
+    void sendIdentityRequest(YBTSConn* conn, const char* type);
     // Find UE by TMSI
     void findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi);
     // Find UE by IMSI. Create it if not found
@@ -835,6 +837,7 @@ static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
 static String s_ueFile;                  // File to save UE information
+static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
@@ -869,6 +872,7 @@ static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
 const TokenDict YBTSMessage::s_priName[] =
 {
     {"L3Message",            YBTS::SigL3Message},
+    {"ConnLost",             YBTS::SigConnLost},
     {"ConnRelease",          YBTS::SigConnRelease},
     {"Handshake",            YBTS::SigHandshake},
     {"Heartbeat",            YBTS::SigHeartbeat},
@@ -2245,10 +2249,66 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
     else if (*t == YSTRING("CMServiceRequest"))
 	handleCMServiceRequest(m,*ch,conn);
     else if (*t == YSTRING("CMServiceAbort"))
-	__plugin.signalling()->dropConn(conn,true);
+	__plugin.signalling()->dropConn(m.connId(),true);
+    else if (*t == YSTRING("IdentityResponse"))
+	handleIdentityResponse(m,*ch,conn);
     else
 	// TODO: send MM status
 	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",t->c_str(),m.name(),this);
+}
+
+void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
+{
+    if (!conn) {
+	Debug(this,DebugGoOn,"Oops! IdentityResponse conn=%u: no connection [%p]",
+	    m.connId(),this);
+	__plugin.signalling()->dropConn(m.connId(),true);
+	return;
+    }
+    XmlElement* xid = xml.findFirstChild(&s_mobileIdent);
+    if (!xid)
+	return;
+    xid = xid->findFirstChild();
+    if (!xid)
+	return;
+    const String& tag = xid->getTag();
+    const String& ident = xid->getText();
+    RefPointer<YBTSUE> ue = conn->ue();
+    if (tag == YSTRING("IMSI")) {
+	if (ue) {
+	    if (ue->imsi() != ident) {
+		Debug(this,DebugWarn,"Got IMSI change %s -> %s on conn=%u [%p]",
+		    ue->imsi().c_str(),ident.c_str(),m.connId(),this);
+		__plugin.signalling()->dropConn(conn,true);
+	    }
+	}
+	else {
+	    getUEByIMSISafe(ue,ident);
+	    conn->lock();
+	    bool ok = conn->setUE(ue);
+	    conn->unlock();
+	    if (!ok) {
+		Debug(this,DebugGoOn,"Failed to set UE in conn=%u [%p]",m.connId(),this);
+		__plugin.signalling()->dropConn(conn,true);
+	    }
+	    return;
+	}
+    }
+    else {
+	if (!ue) {
+	    Debug(this,DebugWarn,"Got identity %s=%s but have no UE attached on conn=%u [%p]",
+		tag.c_str(),ident.c_str(),m.connId(),this);
+	    __plugin.signalling()->dropConn(conn,true);
+	    return;
+	}
+    }
+    if (tag == YSTRING("IMEI"))
+	ue->m_imei = ident;
+    XmlElement* x = conn->takeXml();
+    if (x) {
+	YBTSMessage m2(YBTS::SigL3Message,m.info(),m.connId(),x);
+	handlePDU(m2,conn);
+    }
 }
 
 // Handle location updating requests
@@ -2260,57 +2320,64 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 	sendLocationUpdateReject(m,0,CauseProtoError);
 	return;
     }
-    XmlElement* laiXml = 0;
-    XmlElement* identity = 0;
-    findXmlChildren(xml,laiXml,s_locAreaIdent,identity,s_mobileIdent);
-    if (!(laiXml && identity)) {
-	Debug(this,DebugNote,
-	    "Rejecting LocationUpdatingRequest conn=%u: missing LAI or mobile identity [%p]",
-	    m.connId(),this);
-	sendLocationUpdateReject(m,conn,CauseInvalidIE);
-	return;
-    }
-    bool haveTMSI = false;
-    const String* ident = 0;
-    uint8_t cause = getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
-    if (cause) {
-	sendLocationUpdateReject(m,conn,cause);
-	return;
-    }
-    YBTSLAI lai(*laiXml);
-    bool haveLAI = (lai == __plugin.signalling()->lai());
-    Debug(this,DebugAll,"Handling LocationUpdatingRequest conn=%u: ident=%s/%s LAI=%s [%p]",
-	conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
-	ident->c_str(),lai.lai().c_str(),this);
-    // TODO: handle concurrent requests, check if we have a pending location updating
-    // This should never happen, but we should handle it
-    RefPointer<YBTSUE> ue;
-    if (haveTMSI) {
-	// Got TMSI
-	// Same LAI: check if we know the IMSI, request it if unknown
-	// Different LAI: request IMSI
-	if (haveLAI)
-	    findUEByTMSISafe(ue,*ident);
-	else
-	    lai = __plugin.signalling()->lai();
-    }
-    else {
-	// Got IMSI: Create/retrieve TMSI
-	getUEByIMSISafe(ue,*ident);
-	if (!haveLAI)
-	    lai = __plugin.signalling()->lai();
-    }
+    RefPointer<YBTSUE> ue = conn->ue();
     if (!ue) {
-	Debug(this,DebugNote,"Rejecting LocationUpdatingRequest: IMSI request not implemented [%p]",this);
-	sendLocationUpdateReject(m,conn,CauseServNotSupp);
-	return;
+	XmlElement* laiXml = 0;
+	XmlElement* identity = 0;
+	findXmlChildren(xml,laiXml,s_locAreaIdent,identity,s_mobileIdent);
+	if (!(laiXml && identity)) {
+	    Debug(this,DebugNote,
+		"Rejecting LocationUpdatingRequest conn=%u: missing LAI or mobile identity [%p]",
+		m.connId(),this);
+	    sendLocationUpdateReject(m,conn,CauseInvalidIE);
+	    return;
+	}
+	bool haveTMSI = false;
+	const String* ident = 0;
+	uint8_t cause = getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
+	if (cause) {
+	    sendLocationUpdateReject(m,conn,cause);
+	    return;
+	}
+	YBTSLAI lai(*laiXml);
+	bool haveLAI = (lai == __plugin.signalling()->lai());
+	Debug(this,DebugAll,"Handling LocationUpdatingRequest conn=%u: ident=%s/%s LAI=%s [%p]",
+	    conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
+	    ident->c_str(),lai.lai().c_str(),this);
+	// TODO: handle concurrent requests, check if we have a pending location updating
+	// This should never happen, but we should handle it
+	if (haveTMSI) {
+	    // Got TMSI
+	    // Same LAI: check if we know the IMSI, request it if unknown
+	    // Different LAI: request IMSI
+	    if (haveLAI)
+		findUEByTMSISafe(ue,*ident);
+	}
+	else
+	    // Got IMSI: Create/retrieve TMSI
+	    getUEByIMSISafe(ue,*ident);
+	if (!ue) {
+	    if (!conn->setXml(m.takeXml())) {
+		Debug(this,DebugNote,"Rejecting LocationUpdatingRequest: cannot postpone request [%p]",this);
+		sendLocationUpdateReject(m,conn,CauseServNotSupp);
+		return;
+	    }
+	    sendIdentityRequest(conn,"IMSI");
+	    return;
+	}
+	conn->lock();
+	cause = setConnUE(*conn,ue,xml);
+	conn->unlock();
+	if (cause) {
+	    sendLocationUpdateReject(m,conn,cause);
+	    return;
+	}
     }
-    conn->lock();
-    cause = setConnUE(*conn,ue,xml);
-    conn->unlock();
-    if (cause) {
-	sendLocationUpdateReject(m,conn,cause);
-	return;
+    if (s_askIMEI && ue->imei().null()) {
+	if (conn->setXml(m.takeXml())) {
+	    sendIdentityRequest(conn,"IMEI");
+	    return;
+	}
     }
     Message msg("user.register");
     msg.addParam("driver",__plugin.name());
@@ -2319,7 +2386,7 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
     msg.addParam("imei",ue->imei(),false);
     msg.addParam("tmsi",ue->tmsi(),false);
     if (!Engine::dispatch(msg)) {
-	sendLocationUpdateReject(m,conn,cause);
+	sendLocationUpdateReject(m,conn,CauseServNotSupp);
 	return;
     }
     updateExpire(ue);
@@ -2329,11 +2396,10 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
     XmlElement* ch = 0;
     XmlElement* mm = buildMM(ch,"LocationUpdatingAccept");
     if (ch) {
-	ch->addChildSafe(lai.build());
+	ch->addChildSafe(__plugin.signalling()->lai().build());
 	ch->addChildSafe(buildXmlWithChild(s_mobileIdent,s_tmsi,ue->tmsi()));
     }
     lckUE.drop();
-    ue = 0;
     conn->sendL3(mm);
 }
 
@@ -2399,57 +2465,65 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	sendCMServiceRsp(m,0,CauseProtoError);
 	return;
     }
-    XmlElement* cmServType = 0;
-    XmlElement* identity = 0;
-    findXmlChildren(xml,cmServType,s_cmServType,identity,s_mobileIdent);
-    if (!(cmServType && identity)) {
-	Debug(this,DebugNote,
-	    "Rejecting CMServiceRequest conn=%u: missing service type or mobile identity [%p]",
-	    m.connId(),this);
-	sendCMServiceRsp(m,conn,CauseInvalidIE);
-	return;
-    }
-    // TODO: Properly check service type, reject if not supported
-    const String& type = cmServType->getText();
-    if (type == s_cmMOCall)
-	;
-    else {
-	Debug(this,DebugNote,
-	    "Rejecting CMServiceRequest conn=%u: service type '%s' not supported/subscribed [%p]",
-	    m.connId(),type.c_str(),this);
-	sendCMServiceRsp(m,conn,CauseServNotSupp);
-	return;
-    }
-    bool haveTMSI = false;
-    const String* ident = 0;
-    uint8_t cause = getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
-    if (cause) {
-	sendCMServiceRsp(m,conn,cause);
-	return;
-    }
-    Debug(this,DebugAll,"Handling CMServiceRequest conn=%u: ident=%s/%s type=%s [%p]",
-	conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
-	ident->c_str(),type.c_str(),this);
-    RefPointer<YBTSUE> ue;
-    if (haveTMSI)
-	// Got TMSI
-	findUEByTMSISafe(ue,*ident);
-    else
-	// Got IMSI: Create/retrieve TMSI
-	getUEByIMSISafe(ue,*ident);
+    RefPointer<YBTSUE> ue = conn->ue();
     if (!ue) {
-	Debug(this,DebugNote,"Rejecting CMServiceRequest: IMSI request not implemented [%p]",this);
-	sendCMServiceRsp(m,conn,CauseServNotSupp);
-	return;
+	XmlElement* cmServType = 0;
+	XmlElement* identity = 0;
+	findXmlChildren(xml,cmServType,s_cmServType,identity,s_mobileIdent);
+	if (!(cmServType && identity)) {
+	    Debug(this,DebugNote,
+		"Rejecting CMServiceRequest conn=%u: missing service type or mobile identity [%p]",
+		m.connId(),this);
+	    sendCMServiceRsp(m,conn,CauseInvalidIE);
+	    return;
+	}
+	// TODO: Properly check service type, reject if not supported
+	const String& type = cmServType->getText();
+	if (type == s_cmMOCall)
+	    ;
+	else {
+	    Debug(this,DebugNote,
+		"Rejecting CMServiceRequest conn=%u: service type '%s' not supported/subscribed [%p]",
+		m.connId(),type.c_str(),this);
+	    sendCMServiceRsp(m,conn,CauseServNotSupp);
+	    return;
+	}
+	bool haveTMSI = false;
+	const String* ident = 0;
+	uint8_t cause = getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
+	if (cause) {
+	    sendCMServiceRsp(m,conn,cause);
+	    return;
+	}
+	Debug(this,DebugAll,"Handling CMServiceRequest conn=%u: ident=%s/%s type=%s [%p]",
+	    conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
+	    ident->c_str(),type.c_str(),this);
+	if (haveTMSI)
+	    // Got TMSI
+	    findUEByTMSISafe(ue,*ident);
+	else
+	    // Got IMSI: Create/retrieve TMSI
+	    getUEByIMSISafe(ue,*ident);
+	if (!ue) {
+	    if (!conn->setXml(m.takeXml())) {
+		Debug(this,DebugNote,"Rejecting CMServiceRequest: cannot postpone request [%p]",this);
+		sendCMServiceRsp(m,conn,CauseServNotSupp);
+	    }
+	    sendIdentityRequest(conn,"IMSI");
+	    return;
+	}
+	bool dropConn = false;
+	conn->lock();
+	cause = setConnUE(*conn,ue,xml,&dropConn);
+	conn->unlock();
+	if (cause) {
+	    sendCMServiceRsp(m,conn,cause);
+	    if (dropConn)
+		__plugin.signalling()->dropConn(conn,true);
+	    return;
+	}
     }
-    bool dropConn = false;
-    Lock lck(conn);
-    cause = setConnUE(*conn,ue,xml,&dropConn);
-    lck.drop();
-    ue = 0;
-    sendCMServiceRsp(m,conn,cause);
-    if (dropConn)
-	__plugin.signalling()->dropConn(conn,true);
+    sendCMServiceRsp(m,conn,0);
 }
 
 void YBTSMM::sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t cause)
@@ -2483,6 +2557,18 @@ void YBTSMM::sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause)
 	conn->sendL3(mm);
     else
 	__plugin.signalling()->sendL3Conn(msg.connId(),mm);
+}
+
+// Send an Identity Request message
+void YBTSMM::sendIdentityRequest(YBTSConn* conn, const char* type)
+{
+    if (TelEngine::null(type) || !conn)
+	return;
+    XmlElement* ch = 0;
+    XmlElement* mm = buildMM(ch,"IdentityRequest");
+    if (ch)
+	ch->addChildSafe(new XmlElement("IdentityType",type));
+    conn->sendL3(mm);
 }
 
 // Find UE by TMSI
@@ -2632,7 +2718,7 @@ void YBTSCallDesc::sendStatus(const char* cause)
 void YBTSCallDesc::sendCC(const String& tag, XmlElement* c1, XmlElement* c2)
 {
     XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,tag,*this,m_incoming);
+    XmlElement* cc = __plugin.buildCC(ch,tag,callRef(),m_incoming);
     if (ch) {
 	ch->addChildSafe(c1);
 	ch->addChildSafe(c2);
@@ -2692,20 +2778,29 @@ YBTSChan::YBTSChan(YBTSConn* conn)
 // Init incoming chan. Return false to destruct the channel
 bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* callRef)
 {
-    if (!m_conn)
+    if (!(m_conn && m_conn->ue()))
 	return false;
     Lock lck(driver());
     handleSetup(xml,regular,callRef);
     YBTSCallDesc* call = firstCall();
     if (!call)
 	return false;
+    YBTSUE* ue = m_conn->ue();
+    String caller;
+    if (ue->msisdn())
+	caller << "+" << ue->msisdn();
+    else if (ue->imsi())
+	caller << "IMSI" << ue->imsi();
+    else if (ue->imei())
+	caller << "IMEI" << ue->imei();
     Message* r = message("call.preroute");
-    r->addParam("caller",m_conn->ue()->imsi(),false);
+    r->addParam("caller",caller,false);
     r->addParam("called",call->m_called,false);
-    if (!call->m_regular)
-	r->addParam("emergency",String::boolText(true));
+    r->addParam("username",ue->imsi(),false);
+    r->addParam("imei",ue->imei(),false);
+    r->addParam("emergency",String::boolText(!call->m_regular));
     Message* s = message("chan.startup");
-    s->addParam("caller",m_conn->ue()->imsi(),false);
+    s->addParam("caller",caller,false);
     s->addParam("called",call->m_called,false);
     lck.drop();
     Engine::enqueue(s);
@@ -3523,6 +3618,7 @@ void YBTSDriver::initialize()
 	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
 	s_lai = lai;
     }
+    s_askIMEI = general.getBoolValue("imei_request",true);
     s_ueFile = general.getValue("datafile",Engine::configFile("ybtsdata"));
     Engine::runParams().replaceParams(s_ueFile);
     s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
