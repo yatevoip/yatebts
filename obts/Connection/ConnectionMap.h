@@ -24,8 +24,13 @@
 
 #include <Threads.h>
 
+#ifndef BTS_CONN_MAP_SIZE
+#define BTS_CONN_MAP_SIZE 1024
+#endif
+
 namespace GSM {
     class LogicalChannel;
+    class TCHFACCHLogicalChannel;
 };
 
 namespace Connection {
@@ -35,13 +40,16 @@ class ConnectionMap : public Mutex
 public:
     ConnectionMap();
     int map(GSM::LogicalChannel* chan);
+    void mapMedia(unsigned int id, GSM::TCHFACCHLogicalChannel* media);
     bool unmap(unsigned int id);
     bool unmap(const GSM::LogicalChannel* chan);
     int find(const GSM::LogicalChannel* chan);
     GSM::LogicalChannel* find(unsigned int id);
+    GSM::TCHFACCHLogicalChannel* findMedia(unsigned int id);
 private:
     unsigned int mIndex;
-    GSM::LogicalChannel* mMap[65536];
+    GSM::LogicalChannel* mMap[BTS_CONN_MAP_SIZE];
+    GSM::TCHFACCHLogicalChannel* mMedia[BTS_CONN_MAP_SIZE];
 };
 
 }; // namespace Connection

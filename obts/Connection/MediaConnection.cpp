@@ -53,13 +53,10 @@ void MediaConnection::process(const unsigned char* data, size_t len)
 
 void MediaConnection::process(unsigned int id, const unsigned char* data, size_t len)
 {
-    LogicalChannel* ch = gConnMap.find(id);
-    if (ch) {
-	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(ch);
+    TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
+    if (tch)
 	// TODO: check frame size and blocking operation
-	if (tch)
-	    tch->sendTCH(data);
-    }
+	tch->sendTCH(data);
     else
 	LOG(ERR) << "received media frame for unmapped id " << id;
 }

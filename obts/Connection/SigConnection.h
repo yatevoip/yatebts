@@ -37,6 +37,7 @@ public:
 	SigConnLost       =   1, // Connection to UE lost
 	SigConnRelease    =   2, // Request to release a connection
 	SigStartMedia     =   3, // Start or assign traffic channel
+	SigStopMedia      =   4, // Stop sending media
 	SigHandshake      = 128, // Initial handshake
 	SigHeartbeat      = 255  // Idle heartbeat message
     };

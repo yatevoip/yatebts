@@ -125,9 +125,11 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
 	    {
 		LogicalChannel* ch = gConnMap.find(id);
 		if (ch) {
-		    if (ch->type() == GSM::FACCHType) {
+		    TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(ch);
+		    if (tch) {
 			GSM::L3ChannelMode mode((GSM::L3ChannelMode::Mode)info);
 			ch->send(GSM::L3ChannelModeModify(ch->channelDescription(),mode));
+			gConnMap.mapMedia(id,tch);
 		    }
 		    else
 			LOG(ERR) << "Start Media is implemented only for FACCH";
@@ -135,6 +137,9 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
 		else
 		    LOG(ERR) << "received Start Media for unmapped id " << id;
 	    }
+	    break;
+	case SigStopMedia:
+	    gConnMap.mapMedia(id,0);
 	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id;
