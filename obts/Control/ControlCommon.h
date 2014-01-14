@@ -32,8 +32,6 @@
 
 
 #include <GSML3CommonElements.h>
-//#include <GSML3MMElements.h>
-//#include <GSML3CCElements.h>
 #include <GSML3RRMessages.h>
 
 #include "TMSITable.h"
@@ -53,35 +51,6 @@ class L3CMServiceRequest;
 
 /**@namespace Control This namepace is for use by the control layer. */
 namespace Control {
-
-//class TransactionEntry;
-//class TransactionTable;
-
-/**@name Call control time-out values (in ms) from ITU-T Q.931 Table 9-1 and GSM 04.08 Table 11.4. */
-//@{
-#ifndef RACETEST
-const unsigned T301ms=60000;		///< recv ALERT --> recv CONN
-const unsigned T302ms=12000;		///< send SETUP ACK --> any progress
-const unsigned T303ms=10000;		///< send SETUP --> recv CALL CONF or REL COMP
-const unsigned T304ms=20000;		///< recv SETUP ACK --> any progress
-const unsigned T305ms=30000;		///< send DISC --> recv REL or DISC
-const unsigned T308ms=30000;		///< send REL --> rev REL or REL COMP
-const unsigned T310ms=30000;		///< recv CALL CONF --> recv ALERT, CONN, or DISC
-const unsigned T313ms=30000;		///< send CONNECT --> recv CONNECT ACK
-#else
-// These are reduced values to force testing of poor network behavior.
-const unsigned T301ms=18000;		///< recv ALERT --> recv CONN
-const unsigned T302ms=1200;		///< send SETUP ACK --> any progress
-const unsigned T303ms=400;			///< send SETUP --> recv CALL CONF or REL COMP
-const unsigned T304ms=2000;		///< recv SETUP ACK --> any progress
-const unsigned T305ms=3000;		///< send DISC --> recv REL or DISC
-const unsigned T308ms=3000;		///< send REL --> rev REL or REL COMP
-const unsigned T310ms=3000;		///< recv CALL CONF --> recv ALERT, CONN, or DISC
-const unsigned T313ms=3000;		///< send CONNECT --> recv CONNECT ACK
-#endif
-//@}
-
-
 
 
 /**@name Common-use functions from the control layer. */
@@ -177,21 +146,6 @@ class UnexpectedPrimitive : public ControlLayerException {
 	{}
 };
 
-/**  Thrown when a T3xx expires */
-class Q931TimerExpired : public ControlLayerException {
-	public:
-	Q931TimerExpired(unsigned wConnectionID=0)
-		:ControlLayerException(wConnectionID)
-	{}
-};
-
-/** Thrown if we touch a removed transaction. */
-//class RemovedTransaction : public ControlLayerException {
-//	public:
-//	RemovedTransaction(unsigned wTransactionID=0)
-//		:ControlLayerException(wTransactionID)
-//	{}
-//};
 
 
 //@}

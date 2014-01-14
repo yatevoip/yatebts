@@ -22,9 +22,7 @@
 
 #include <GSMLogicalChannel.h>
 #include <GSML3Message.h>
-//#include <GSML3CCMessages.h>
 #include <GSML3RRMessages.h>
-//#include <GSML3MMMessages.h>
 #include <GSMConfig.h>
 
 #include <Sgsn.h>
