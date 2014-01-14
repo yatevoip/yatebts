@@ -333,33 +333,39 @@ int unhex(const char c)
 }
 
 
-// Given IMSI, copy Kc.  Return true iff there *is* a Kc.
-bool imsi2kc(string wIMSI, unsigned char *wKc)
-{
-	string kc = gTMSITable.getKc(wIMSI.c_str());
-	if (kc.length() == 0) return false;
-	while (kc.length() < 16) {
-		kc = '0' + kc;
-	}
-	assert(kc.length() == 16);
-	unsigned char *dst = wKc;
-	for (size_t p = 0; p < kc.length(); p += 2) {
-		*dst++ = (unhex(kc[p]) << 4) | (unhex(kc[p+1]));
-	}
-	return true;
-}
+//// FIXME YATEBTS - The Kc value needs to get here from the signaling
+//// connection though some other means, since gTMSITable is going away.
+//// Given IMSI, copy Kc.  Return true iff there *is* a Kc.
+//bool imsi2kc(string wIMSI, unsigned char *wKc)
+//{
+//	string kc = gTMSITable.getKc(wIMSI.c_str());
+//	if (kc.length() == 0) return false;
+//	while (kc.length() < 16) {
+//		kc = '0' + kc;
+//	}
+//	assert(kc.length() == 16);
+//	unsigned char *dst = wKc;
+//	for (size_t p = 0; p < kc.length(); p += 2) {
+//		*dst++ = (unhex(kc[p]) << 4) | (unhex(kc[p+1]));
+//	}
+//	return true;
+//}
+//
+//
+//// Turn on encryption phase-in, which is watching for bad frames and
+//// retrying them with encryption.
+//// Return false and leave encryption off if there's no Kc.
+//bool L1Decoder::decrypt_maybe(string wIMSI, int wA5Alg)
+//{
+//	if (!imsi2kc(wIMSI, mKc)) return false;
+//	mEncrypted = ENCRYPT_MAYBE;
+//	mEncryptionAlgorithm = wA5Alg;
+//	return true;
+//}
 
-
-// Turn on encryption phase-in, which is watching for bad frames and
-// retrying them with encryption.
-// Return false and leave encryption off if there's no Kc.
+// FIXME YATEBTS - This is a placeholder until the Kc mechanism is in place.
 bool L1Decoder::decrypt_maybe(string wIMSI, int wA5Alg)
-{
-	if (!imsi2kc(wIMSI, mKc)) return false;
-	mEncrypted = ENCRYPT_MAYBE;
-	mEncryptionAlgorithm = wA5Alg;
-	return true;
-}
+{ return true; }
 
 
 unsigned L1Decoder::ARFCN() const
