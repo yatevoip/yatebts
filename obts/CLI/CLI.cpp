@@ -261,47 +261,6 @@ int dumpTMSIs(const char* filename)
 
 
 
-/** Print or clear the TMSI table. */
-int tmsis(int argc, char** argv, ostream& os)
-{
-	if (argc>=2) {
-		// Clear?
-		if (strcmp(argv[1],"clear")==0) {
-			if (argc!=2) return BAD_NUM_ARGS;
-			os << "clearing TMSI table" << endl;
-			gTMSITable.clear();
-			return SUCCESS;
-		}
-		// Dump?
-		if (strcmp(argv[1],"dump")==0) {
-			if (argc!=3) return BAD_NUM_ARGS;
-			os << "dumping TMSI table to " << argv[2] << endl;
-			return dumpTMSIs(argv[2]);
-		}
-		return BAD_VALUE;
-	}
-
-	if (argc!=1) return BAD_NUM_ARGS;
-	os << "TMSI       IMSI            age  used" << endl;
-	gTMSITable.dump(os);
-	return SUCCESS;
-}
-
-int isIMSI(const char *imsi)
-{
-	if (!imsi)
-		return 0;
-	if (strlen(imsi) != 15)
-		return 0;
-	
-	for (unsigned i = 0; i < strlen(imsi); i++) {
-		if (!isdigit(imsi[i]))
-			return 0;
-	}
-
-	return 1;
-}
-
 
 /** Print current usage loads. */
 int printStats(int argc, char** argv, ostream& os)
@@ -361,7 +320,6 @@ int cellID(int argc, char** argv, ostream& os)
 		return BAD_VALUE;
 	}
 
-	gTMSITable.clear();
 	gConfig.set("GSM.Identity.MCC",argv[1]);
 	gConfig.set("GSM.Identity.MNC",argv[2]);
 	gConfig.set("GSM.Identity.LAC",argv[3]);
