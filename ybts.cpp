@@ -1225,7 +1225,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	    {
 		String tmp;
 		tmp.hexify(data,len,' ');
-		Debug(recv,DebugAll,"L3 message: %s",tmp.c_str());
+		Debug(recv,DebugAll,"Recv L3 message: %s",tmp.c_str());
 	    }
 #endif
 	    decodeMsg(recv->codec(),data,len,m->m_xml,reason);
@@ -1274,8 +1274,17 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
     String reason;
     switch (msg.primitive()) {
 	case YBTS::SigL3Message:
-	    if (encodeMsg(sender->codec(),msg,buf,reason))
+	    if (encodeMsg(sender->codec(),msg,buf,reason)) {
+#ifdef DEBUG
+		void* data = buf.data(4);
+		if (data) {
+		    String tmp;
+		    tmp.hexify(data,buf.length() - 4,' ');
+		    Debug(sender,DebugAll,"Send L3 message: %s",tmp.c_str());
+		}
+#endif
 		return true;
+	    }
 	    break;
 	case YBTS::SigHeartbeat:
 	case YBTS::SigConnRelease:
@@ -2828,6 +2837,7 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
     String cref;
     cref << YBTSCallDesc::prefix(tiFlag) << *callRef;
     ObjList* o = m_calls.find(cref);
+    DDebug(this,DebugAll,"Handling '%s' in call %s (%p) [%p]",type->c_str(),cref.c_str(),o,this);
     if (!o) {
 	lck.drop();
 	if (regular || emergency) {
@@ -3149,6 +3159,13 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	if (chan && chan->handleCC(*xml,callRef,tiFlag))
 	    return;
     }
+    String cref;
+    if (callRef)
+	cref << YBTSCallDesc::prefix(tiFlag) << *callRef;
+    else
+	cref = "with no reference";
+    DDebug(this,DebugAll,"Handling '%s' in call %s conn=%u [%p]",
+	type->c_str(),cref.c_str(),m.connId(),this);
     bool regular = (*type == s_ccSetup);
     bool emergency = !regular && (*type == s_ccEmergency);
     if (regular || emergency) {
@@ -3180,7 +3197,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
     // Handle pending calls
     for (ObjList* o = m_terminatedCalls.skipNull(); o; o = o->skipNext()) {
 	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
-	if (*callRef != *call || call->connId() != m.connId())
+	if (cref != *call || call->connId() != m.connId())
 	    continue;
 	if (rlc || *type == s_ccRel || *type == s_ccDisc) {
 	    Debug(this,DebugNote,"Removing terminated call '%s' conn=%u",
