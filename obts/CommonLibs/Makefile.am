@@ -40,7 +40,6 @@ libcommon_la_SOURCES = \
 	Logger.cpp \
 	Configuration.cpp \
 	sqlite3util.cpp \
-	URLEncode.cpp \
 	Utils.cpp \
 	A51.cpp
 
@@ -49,11 +48,9 @@ noinst_PROGRAMS = \
 	InterthreadTest \
 	SocketsTest \
 	TimevalTest \
-	RegexpTest \
 	VectorTest \
 	ConfigurationTest \
 	LogTest \
-	URLEncodeTest \
 	F16Test \
 	A51Test
 
@@ -66,12 +63,10 @@ noinst_HEADERS = \
 	Sockets.h \
 	Threads.h \
 	Timeval.h \
-	Regexp.h \
 	Vector.h \
 	Configuration.h \
 	Reporting.h \
 	F16.h \
-	URLEncode.h \
 	Utils.h \
 	Logger.h \
 	sqlite3util.h \
