@@ -61,6 +61,8 @@ static const String s_mobileIdent = "MobileIdentity";
 static const String s_imsi = "IMSI";
 static const String s_tmsi = "TMSI";
 static const String s_cause = "Cause";
+static const String s_causeLocation = "location";
+static const String s_causeCoding = "coding";
 static const String s_cmServType = "CMServiceType";
 static const String s_cmMOCall = "MO-call-establishment-or-PM-connection-establishment";
 static const String s_ccSetup = "Setup";
@@ -75,6 +77,11 @@ static const String s_ccRel = "Release";
 static const String s_ccRlc = "ReleaseComplete";
 static const String s_ccStatusEnq = "StatusEnquiry";
 static const String s_ccStatus = "Status";
+static const String s_ccStartDTMF = "StartDTMF";
+static const String s_ccStopDTMF = "StopDTMF";
+static const String s_ccKeypadFacility = "KeypadFacility";
+static const String s_ccHold = "Hold";
+static const String s_ccRetrieve = "Retrieve";
 static const String s_ccCallRef = "TID";
 static const String s_ccTIFlag = "TIFlag";
 static const String s_ccCalled = "CalledPartyBCDNumber";
@@ -708,6 +715,7 @@ protected:
 		m_haveTout = true;
 	    }
 	}
+    void allocTraffic();
     void startTraffic(uint8_t mode = 1);
     virtual void disconnected(bool final, const char *reason);
     virtual bool callRouted(Message& msg);
@@ -730,6 +738,8 @@ protected:
     ObjList m_calls;
     String m_reason;
     uint8_t m_traffic;
+    char m_dtmf;
+    bool m_mpty;
     bool m_hungup;
     bool m_haveTout;
     uint64_t m_tout;
@@ -882,14 +892,18 @@ static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
 
 const TokenDict YBTSMessage::s_priName[] =
 {
-    {"L3Message",            YBTS::SigL3Message},
-    {"ConnLost",             YBTS::SigConnLost},
-    {"ConnRelease",          YBTS::SigConnRelease},
-    {"StartMedia",           YBTS::SigStartMedia},
-    {"StopMedia",            YBTS::SigStopMedia},
-    {"Handshake",            YBTS::SigHandshake},
-    {"RadioReady",           YBTS::SigRadioReady},
-    {"Heartbeat",            YBTS::SigHeartbeat},
+#define MAKE_SIG(x) {#x, YBTS::Sig##x}
+    MAKE_SIG(L3Message),
+    MAKE_SIG(ConnLost),
+    MAKE_SIG(ConnRelease),
+    MAKE_SIG(StartMedia),
+    MAKE_SIG(StopMedia),
+    MAKE_SIG(AllocMedia),
+    MAKE_SIG(MediaError),
+    MAKE_SIG(Handshake),
+    MAKE_SIG(RadioReady),
+    MAKE_SIG(Heartbeat),
+#undef MAKE_SIG
     {0,0}
 };
 
@@ -1092,12 +1106,25 @@ static inline void getCCCause(String& dest, const XmlElement& xml)
     dest = xml.childText(s_cause);
 }
 
-static inline XmlElement* buildCCCause(const char* cause)
+static inline XmlElement* buildCCCause(const char* cause, const char* location = "LPN", const char* coding = "GSM-PLMN")
 {
     // TODO: check it when codec will be implemented
     if (TelEngine::null(cause))
 	cause = "normal";
-    return new XmlElement(s_cause,cause);
+    XmlElement* xml = new XmlElement(s_cause,cause);
+    if (coding)
+	xml->setAttribute(s_causeCoding,coding);
+    if (location)
+	xml->setAttribute(s_causeLocation,location);
+    return xml;
+}
+
+static inline XmlElement* buildCCCause(const String& cause)
+{
+    const char* location = "LPN";
+    if (cause == YSTRING("busy") || cause == YSTRING("noresponse") || cause == YSTRING("noanswer"))
+	location = "U";
+    return buildCCCause(cause,location,"GSM-PLMN");
 }
 
 static inline void getCCCallState(String& dest, const XmlElement& xml)
@@ -1248,6 +1275,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	case YBTS::SigRadioReady:
 	case YBTS::SigHeartbeat:
 	case YBTS::SigConnLost:
+	case YBTS::SigMediaError:
 	    break;
 	default:
 	    reason = "No decoder";
@@ -1302,8 +1330,11 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    }
 	    break;
 	case YBTS::SigHeartbeat:
-	case YBTS::SigConnRelease:
 	case YBTS::SigHandshake:
+	case YBTS::SigConnRelease:
+	case YBTS::SigStartMedia:
+	case YBTS::SigStopMedia:
+	case YBTS::SigAllocMedia:
 	    return true;
 	default:
 	    reason = "No encoder";
@@ -1903,6 +1934,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    return handleHandshake(msg);
 	case YBTS::SigRadioReady:
 	    __plugin.radioReady();
+	    return Ok;
 	case YBTS::SigConnLost:
 	    __plugin.signalling()->dropConn(msg.connId(),false);
 	    return Ok;
@@ -2842,6 +2874,8 @@ YBTSChan::YBTSChan(YBTSConn* conn)
     m_mutex(true,"YBTSChan"),
     m_conn(conn),
     m_traffic(0),
+    m_dtmf(0),
+    m_mpty(false),
     m_hungup(false),
     m_haveTout(false),
     m_tout(0)
@@ -2963,6 +2997,45 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
 	    "Received status cause='%s' call_state='%s' [%p]",
 	    cause.c_str(),cs.c_str(),this);
     }
+    else if (*type == s_ccStartDTMF) {
+	const String* dtmf = xml.childText(s_ccKeypadFacility);
+	if (m_dtmf) {
+	    Debug(this,DebugMild,"Received DTMF '%s' while still in '%c' [%p]",
+		TelEngine::c_str(dtmf),m_dtmf,this);
+	    call->sendCC(YSTRING("StartDTMFReject"),buildCCCause("wrong-state-message"));
+	}
+	else if (TelEngine::null(dtmf)) {
+	    Debug(this,DebugMild,"Received no %s in %s [%p]",
+		s_ccKeypadFacility.c_str(),s_ccStartDTMF.c_str(),this);
+	    call->sendCC(YSTRING("StartDTMFReject"),buildCCCause("missing-mandatory-ie"));
+	}
+	else {
+	    m_dtmf = dtmf->at(0);
+	    call->sendCC(YSTRING("StartDTMFAck"),new XmlElement(s_ccKeypadFacility,*dtmf));
+	    Message* msg = message("chan.dtmf");
+	    msg->addParam("text",*dtmf);
+	    msg->addParam("detected","gsm");
+	    dtmfEnqueue(msg);
+	}
+    }
+    else if (*type == s_ccStopDTMF) {
+	m_dtmf = 0;
+	call->sendCC(YSTRING("StopDTMFAck"));
+    }
+    else if (*type == s_ccHold) {
+	if (!m_mpty)
+	    call->sendCC(YSTRING("HoldReject"),buildCCCause("service-unavailable"));
+	else {
+	    // TODO
+	}
+    }
+    else if (*type == s_ccRetrieve) {
+	if (!m_mpty)
+	    call->sendCC(YSTRING("RetrieveReject"),buildCCCause("service-unavailable"));
+	else {
+	    // TODO
+	}
+    }
     else
 	call->sendStatus("unknown-message");
     return true;
@@ -2977,6 +3050,14 @@ void YBTSChan::connReleased()
     setReason("net-out-of-order");
     lck.drop();
     hangup();
+}
+
+void YBTSChan::allocTraffic()
+{
+    if (m_conn) {
+	YBTSMessage m(YBTS::SigAllocMedia,0,m_conn->connId());
+	__plugin.signalling()->send(m);
+    }
 }
 
 void YBTSChan::startTraffic(uint8_t mode)
@@ -3008,6 +3089,7 @@ void YBTSChan::handleSetup(const XmlElement& xml, bool regular, const String* ca
 	Debug(this,DebugNote,"%s with empty call ref [%p]",(type ? type->c_str() : "unknown"),this);
 	return;
     }
+    allocTraffic();
     if (!m_calls.skipNull()) {
 	call->proceeding();
 	m_calls.append(call);

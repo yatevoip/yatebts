@@ -47,6 +47,8 @@ enum YBTSSigPrimitive {
     SigConnRelease =   2,                // Request to release a connection
     SigStartMedia  =   3,                // Start or assign traffic channel
     SigStopMedia   =   4,                // Stop sending media
+    SigAllocMedia  =   5,                // Reserve a traffic channel
+    SigMediaError  =   6,                // Report an allocation of mode change failure
     SigHandshake   = 128,                // Handshake
     SigRadioReady  = 129,                // Radio side is functioning
     SigHeartbeat   = 255,                // Heartbeat
