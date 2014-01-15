@@ -112,4 +112,13 @@ GSM::TCHFACCHLogicalChannel* ConnectionMap::findMedia(unsigned int id)
     return (id < BTS_CONN_MAP_SIZE) ? mMap[id].mMedia : 0;
 }
 
+GSM::TCHFACCHLogicalChannel* ConnectionMap::findMedia(const GSM::LogicalChannel* chan)
+{
+    for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {
+	if (mMap[i].mChan == chan)
+	    return mMap[i].mMedia;
+    }
+    return 0;
+}
+
 /* vi: set ts=8 sw=4 sts=4 noet: */

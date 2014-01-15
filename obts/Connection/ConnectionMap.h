@@ -50,6 +50,7 @@ public:
     int find(const GSM::LogicalChannel* chan);
     GSM::LogicalChannel* find(unsigned int id);
     GSM::TCHFACCHLogicalChannel* findMedia(unsigned int id);
+    GSM::TCHFACCHLogicalChannel* findMedia(const GSM::LogicalChannel* chan);
 private:
     unsigned int mIndex;
     Conn mMap[BTS_CONN_MAP_SIZE];

@@ -27,6 +27,7 @@
 #include <GSMLogicalChannel.h>
 #include <GSML3RRMessages.h>
 #include <GSMTransfer.h>
+#include <GSMConfig.h>
 #include <assert.h>
 #include <string.h>
 
@@ -128,18 +129,59 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
 		    TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(ch);
 		    if (tch) {
 			GSM::L3ChannelMode mode((GSM::L3ChannelMode::Mode)info);
-			ch->send(GSM::L3ChannelModeModify(ch->channelDescription(),mode));
 			gConnMap.mapMedia(id,tch);
+			ch->send(GSM::L3ChannelModeModify(ch->channelDescription(),mode));
 		    }
-		    else
-			LOG(ERR) << "Start Media is implemented only for FACCH";
+		    else {
+			TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
+			if (!tch) {
+			    LOG(NOTICE) << "received Start Media without traffic channel on id " << id;
+			    // Interworking, unspecified
+			    send(SigMediaError,0x7f,id);
+			    break;
+			}
+			tch->open();
+			tch->setPhy(*ch);
+			GSM::L3ChannelMode mode((GSM::L3ChannelMode::Mode)info);
+			gConnMap.mapMedia(id,tch);
+			ch->send(GSM::L3AssignmentCommand(ch->channelDescription(),mode));
+		    }
 		}
 		else
 		    LOG(ERR) << "received Start Media for unmapped id " << id;
 	    }
 	    break;
 	case SigStopMedia:
-	    gConnMap.mapMedia(id,0);
+	    {
+		TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
+		if (!tch)
+		    break;
+		gConnMap.mapMedia(id,0);
+		if (static_cast<LogicalChannel*>(tch) != gConnMap.find(id))
+		    tch->send(GSM::RELEASE);
+	    }
+	    break;
+	case SigAllocMedia:
+	    {
+		TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
+		if (tch)
+		    break;
+		LogicalChannel* ch = gConnMap.find(id);
+		if (!ch) {
+		    LOG(ERR) << "received Alloc Media for unmapped id " << id;
+		    break;
+		}
+		if (dynamic_cast<TCHFACCHLogicalChannel*>(ch))
+		    break;
+		tch = gBTS.getTCH();
+		if (tch)
+		    gConnMap.mapMedia(id,tch);
+		else {
+		    LOG(WARNING) << "congestion, no TCH available for assignment";
+		    // No circuit/channel available
+		    send(SigMediaError,0x22,id);
+		}
+	    }
 	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id;
