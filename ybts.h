@@ -51,7 +51,15 @@ enum YBTSSigPrimitive {
     SigMediaError  =   6,                // Report an allocation of mode change failure
     SigHandshake   = 128,                // Handshake
     SigRadioReady  = 129,                // Radio side is functioning
-    SigHeartbeat   = 255,                // Heartbeat
+    SigStartPaging = 130,                // Start paging an UE
+    SigStopPaging  = 131,                // Stop paging an UE
+    SigHeartbeat   = 255                 // Heartbeat
+};
+
+enum YBTSPagingChanType {
+    ChanTypeVoice  = 0,
+    ChanTypeSMS    = 1,
+    ChanTypeSS     = 2,
 };
 
 }; // namespace YBTS
