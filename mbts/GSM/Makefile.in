@@ -1,0 +1,29 @@
+# Makefile
+# This file holds the make rules for the GSM lib
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+LIBTHR := @THREAD_LIB@
+INCLUDES = $(ALL_INCLUDES)
+CFLAGS := @YATE_INC@
+LDFLAGS:= @LDFLAGS@
+YATELIBS := @YATE_LNK@
+INCFILES := ../../config.h GSM610Tables.h GSMCommon.h GSMConfig.h GSML1FEC.h GSML2LAPDm.h \
+    GSML3CommonElements.h GSML3GPRSElements.h GSML3Message.h GSML3RRElements.h \
+    GSML3RRMessages.h GSMLogicalChannel.h GSMSAPMux.h GSMSMSCBL3Messages.h GSMTAPDump.h \
+    gsmtap.h GSMTDMA.h GSMTransfer.h PhysicalStatus.h PowerManager.h
+
+
+ifeq ($(BUILD_TESTS),yes)
+PROGS:= AppInfTest
+LOCALLIBS = $(SQL_LIBS)
+$(PROGS): $(SQL_DEPS)
+endif
+LIBS := libGSM.a
+OBJS := GSM610Tables.o GSMCommon.o GSMConfig.o GSML1FEC.o GSML2LAPDm.o \
+    GSML3CommonElements.o GSML3GPRSElements.o GSML3Message.o GSML3RRElements.o \
+    GSML3RRMessages.o GSMLogicalChannel.o GSMSAPMux.o GSMSMSCBL3Messages.o GSMTAPDump.o \
+    GSMTDMA.o GSMTransfer.o PhysicalStatus.o PowerManager.o

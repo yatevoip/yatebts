@@ -1,0 +1,18 @@
+# Makefile
+# This file holds the make rules for the sqlite3 lib
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+LIBTHR := @THREAD_LIB@
+INCLUDES = $(TOP_INCLUDES)
+CFLAGS := @YATE_INC@
+LDFLAGS:= @LDFLAGS@
+YATELIBS := @YATE_LNK@
+INCFILES := ../../config.h sqlite3ext.h sqlite3.h
+
+PROGS:=
+LIBS := libsqlite3.a
+OBJS := sqlite3.o

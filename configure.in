@@ -162,8 +162,6 @@ AC_SUBST(HAVE_UHD)
 
 
 # Check for required libraries
-AC_CHECK_HEADERS([a53.h], , [AC_MSG_ERROR([This header file is required.])])
-
 if [[ "x$HAVE_USB" = "xcheck" ]]; then
 AC_CHECK_HEADERS([libusb-1.0/libusb.h], , [AC_MSG_ERROR([This header file is required.])])
 HAVE_USB=yes
@@ -232,7 +230,22 @@ AC_SUBST(HAVE_SSE41)
 
 
 AC_CONFIG_FILES([yate-bts.spec
-                 Makefile])
+                 Makefile
+                 mbts/A53/Makefile:mbts/Makefile.head.in:mbts/A53/Makefile.in:mbts/Makefile.tail.in
+                 mbts/CLI/Makefile:mbts/Makefile.head.in:mbts/CLI/Makefile.in:mbts/Makefile.tail.in
+                 mbts/CommonLibs/Makefile:mbts/Makefile.head.in:mbts/CommonLibs/Makefile.in:mbts/Makefile.tail.in
+                 mbts/Connection/Makefile:mbts/Makefile.head.in:mbts/Connection/Makefile.in:mbts/Makefile.tail.in
+                 mbts/Control/Makefile:mbts/Makefile.head.in:mbts/Control/Makefile.in:mbts/Makefile.tail.in
+                 mbts/GPRS/Makefile:mbts/Makefile.head.in:mbts/GPRS/Makefile.in:mbts/Makefile.tail.in
+                 mbts/GSM/Makefile:mbts/Makefile.head.in:mbts/GSM/Makefile.in:mbts/Makefile.tail.in
+                 mbts/Globals/Makefile:mbts/Makefile.head.in:mbts/Globals/Makefile.in:mbts/Makefile.tail.in
+                 mbts/Peering/Makefile:mbts/Makefile.head.in:mbts/Peering/Makefile.in:mbts/Makefile.tail.in
+                 mbts/SGSNGGSN/Makefile:mbts/Makefile.head.in:mbts/SGSNGGSN/Makefile.in:mbts/Makefile.tail.in
+                 mbts/TRXManager/Makefile:mbts/Makefile.head.in:mbts/TRXManager/Makefile.in:mbts/Makefile.tail.in
+                 mbts/Transceiver52M/Makefile:mbts/Makefile.head.in:mbts/Transceiver52M/Makefile.in:mbts/Makefile.tail.in
+                 mbts/TransceiverRAD1/Makefile:mbts/Makefile.head.in:mbts/TransceiverRAD1/Makefile.in:mbts/Makefile.tail.in
+                 mbts/sqlite3/Makefile:mbts/Makefile.head.in:mbts/sqlite3/Makefile.in:mbts/Makefile.tail.in
+                 mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in])
 CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//'`
 AC_SUBST(CONFIGURE_FILES)
 AC_OUTPUT

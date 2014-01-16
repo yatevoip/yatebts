@@ -44,6 +44,9 @@ shrdir := @YATE_SHR@
 
 .PHONY: all debug ddebug xdebug ndebug
 all: $(PROGS)
+	$(MAKE) -C ./mbts/apps all
+	$(MAKE) -C ./mbts/Transceiver52M all
+	$(MAKE) -C ./mbts/TransceiverRAD1 all
 
 debug:
 	$(MAKE) all DEBUG=-g3 MODSTRIP=
@@ -60,8 +63,8 @@ ndebug:
 .PHONY: clean distclean cvsclean clean-config-files
 clean:
 	@-$(RM) $(CLEANS) 2>/dev/null
-	@for i in sources/*; do \
-	    test ! -f "$$i/Makefile" || $(MAKE) -C "$$i" clean ; \
+	@for i in mbts/*; do \
+	    test ! -f "$$i/Makefile" || $(MAKE) -C "$$i" clean BUILD_TESTS=yes; \
 	done
 
 check-topdir:
@@ -100,14 +103,22 @@ install: all
 		install -m 0644 "$$s" "$$d" ; \
 	    fi ; \
 	done
+	$(MAKE) -C ./mbts/apps install
+	$(MAKE) -C ./mbts/Transceiver52M install
+	$(MAKE) -C ./mbts/TransceiverRAD1 install
 
 uninstall:
+	$(MAKE) -C ./mbts/Transceiver52M uninstall
+	$(MAKE) -C ./mbts/TransceiverRAD1 uninstall
+	$(MAKE) -C ./mbts/apps uninstall
 	@-for i in $(PROGS) ; do \
-	    rm "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    rm -f "$(DESTDIR)$(moddir)/bts/$$i" ; \
 	done
-	@-rmdir "$(DESTDIR)$(moddir)/bts"
-	@-rmdir "$(DESTDIR)$(moddir)"
-	@-rmdir "$(DESTDIR)$(confdir)" || echo "Remove conf files by hand if you want so"
+	@-test -d "$(DESTDIR)$(moddir)/bts" && rmdir "$(DESTDIR)$(moddir)/bts"
+	@-test -d "$(DESTDIR)$(moddir)" && rmdir "$(DESTDIR)$(moddir)"
+	@-if [ -d "$(DESTDIR)$(confdir)" ]; then \
+	    rmdir "$(DESTDIR)$(confdir)" || echo "Remove conf files by hand if you want so"; \
+	fi
 
 .PHONY: snapshot tarball rpm
 snapshot tarball: check-topdir clean

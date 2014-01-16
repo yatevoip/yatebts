@@ -1,0 +1,37 @@
+# Makefile
+# This file holds the make rules for the RAD1 transceiver
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+LIBTHR := @THREAD_LIB@
+INCLUDES = $(GSM_INCLUDES)
+CFLAGS := @YATE_INC@
+LDFLAGS:= @LDFLAGS@
+LIBDEPS = $(GSM_DEPS)
+YATELIBS := @YATE_LNK@
+INCFILES := ad9862.h bytesex.h commands.h Complex.h DummyLoad.h FactoryCalibration.h \
+    fpga_regs.h fusb.h i2c.h ids.h interfaces.h RAD1Device.h radioDevice.h \
+    radioInterface.h rnrad1Core.h rnrad1.h sigProcLib.h spi.h Transceiver.h
+
+PROGS:=
+FILES:=
+ifneq (@HAVE_RAD1@,no)
+PROGS:= $(PROGS) transceiver-rad1
+FILES:= $(FILES) ezusb.ihx fpga.rbf
+ifeq ($(BUILD_TESTS),yes)
+PROGS:= $(PROGS) RAD1ping RAD1RxRawPower RAD1RxRawPowerSweep RAD1Cmd RAD1SN sigProcLibTest
+endif
+LOCALLIBS = $(GSM_LIBS) -lusb-1.0
+$(PROGS): ../sqlite3/libsqlite3.a
+endif
+LIBS := libtransceiver.a
+OBJS := DummyLoad.o FactoryCalibration.o fusb.o RAD1Device.o radioInterface.o \
+    rnrad1Core.o rnrad1Rx.o rnrad1Tx.o sigProcLib.o Transceiver.o
+
+all:
+
+transceiver-rad1: runTransceiver.cpp $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)

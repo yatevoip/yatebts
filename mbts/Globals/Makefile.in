@@ -1,0 +1,18 @@
+# Makefile
+# This file holds the make rules for the globals lib
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+LIBTHR := @THREAD_LIB@
+INCLUDES = $(ALL_INCLUDES)
+CFLAGS := @YATE_INC@ -DPACKAGE_REVISION='"@PACKAGE_REVISION@"'
+LDFLAGS:= @LDFLAGS@
+YATELIBS := @YATE_LNK@
+INCFILES := ../../config.h Defines.h Globals.h
+
+PROGS:=
+LIBS := libGlobals.a
+OBJS := Globals.o

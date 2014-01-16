@@ -39,7 +39,7 @@ using namespace YBTS;
 namespace { // anonymous
 
 #define BTS_DIR "bts"
-#define BTS_CMD "obts"
+#define BTS_CMD "mbts"
 
 // Handshake interval (timeout)
 #define YBTS_HK_INTERVAL_DEF 60000

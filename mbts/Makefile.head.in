@@ -1,0 +1,30 @@
+
+# Makefile.head start
+
+TOP_INCLUDES := -I@top_srcdir@ -I../.. -I@srcdir@
+GSM_INCLUDES := $(TOP_INCLUDES) -I@srcdir@/../CommonLibs -I@srcdir@/../A53 \
+    -I@srcdir@/../Connection -I@srcdir@/../GSM -I@srcdir@/../Globals -I@srcdir@/../sqlite3
+ALL_INCLUDES := $(GSM_INCLUDES) -I@srcdir@/../Control -I@srcdir@/../CLI -I@srcdir@/../GPRS \
+    -I@srcdir@/../Peering -I@srcdir@/../SGSNGGSN -I@srcdir@/../TRXManager
+
+SQL_LIBS := -L../sqlite3 -lsqlite3
+GSM_LIBS := -L../GSM -lGSM -L../Connection -lConnection -L../CommonLibs -lCommonLibs \
+    -L../Globals -lGlobals $(SQL_LIBS)
+ALL_LIBS := -L../CLI -lCLI -L../Control -lControl -L../GPRS -lGPRS -L../Peering -lPeering \
+    -L../SGSNGGSN -lSGSNGGSN -L../TRXManager -lTRXManager $(GSM_LIBS)
+A53_LIBS := -L../A53 -lA53
+
+SQL_DEPS := ../sqlite3/libsqlite3.a
+GSM_DEPS := $(SQL_DEPS) ../CommonLibs/libCommonLibs.a ../Connection/libConnection.a \
+    ../GSM/libGSM.a ../Globals/libGlobals.a
+ALL_DEPS := $(GSM_DEPS) ../CLI/libCLI.a ../Control/libControl.a ../GPRS/libGPRS.a \
+    ../Peering/libPeering.a ../SGSNGGSN/libSGSNGGSN.a ../SGSNGGSN/libSGSNGGSN.a \
+    ../TRXManager/libTRXManager.a
+A53_DEPS := ../A53/libA53.a
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+moddir = @libdir@/yate
+
+# Makefile.head end
+

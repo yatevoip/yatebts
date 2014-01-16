@@ -1,0 +1,70 @@
+
+# Makefile.tail start
+
+COMPILE = $(CXX) $(DEFS) $(DEBUG) $(INCLUDES) $(CFLAGS)
+CCOMPILE = $(CC) -std=gnu99 -march=native -DHAVE_CONFIG_H $(DEFS) $(DEBUG) $(INCLUDES)
+LINK = $(CXX) $(LDFLAGS)
+
+# include optional local make rules
+-include YateLocal.mak
+
+.PHONY: all debug ddebug xdebug tests
+all: $(PROGS) $(LIBS)
+
+debug:
+	$(MAKE) all DEBUG=-g3 MODSTRIP=
+
+ddebug:
+	$(MAKE) all DEBUG='-g3 -DDEBUG' MODSTRIP=
+
+xdebug:
+	$(MAKE) all DEBUG='-g3 -DXDEBUG' MODSTRIP=
+
+tests:
+	$(MAKE) all BUILD_TESTS=yes
+
+.PHONY: strip clean install uninstall
+strip: all
+	strip --strip-debug --discard-locals $(PROGS)
+
+clean:
+	@-$(RM) $(PROGS) $(LIBS) $(OBJS) $(EXTRACLEAN) core 2>/dev/null
+
+install: $(PROGS)
+	@mkdir -p "$(DESTDIR)$(moddir)/bts" && \
+	for i in $(PROGS) ; do \
+	    install -D "$$i" "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	done
+	for i in $(FILES) ; do \
+	    install -m 0644 "$$i" "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	done
+
+uninstall:
+	@-for i in $(FILES) ; do \
+	    rm -f "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	done
+	@-for i in $(PROGS) ; do \
+	    rm -f "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	done
+	@-test -d "$(DESTDIR)$(moddir)/bts" && rmdir "$(DESTDIR)$(moddir)/bts"
+
+%.o: @srcdir@/%.cpp $(INCFILES)
+	$(COMPILE) -c $<
+
+%.o: @srcdir@/%.c $(INCFILES)
+	$(CCOMPILE) -c $<
+
+Makefile: @srcdir@/Makefile.in ../../config.status
+	cd ../.. && ./config.status
+
+$(LIBS): $(OBJS)
+	$(AR) rcs $@ $^
+
+%: %.cpp $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+
+../%.a:
+	$(MAKE) -C `dirname $@`
+
+# Makefile.tail end
+

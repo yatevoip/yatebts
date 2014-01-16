@@ -1,0 +1,56 @@
+# Makefile
+# This file holds the make rules for the RAD1 transceiver
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+LIBTHR := @THREAD_LIB@
+INCLUDES = $(GSM_INCLUDES)
+CFLAGS := @YATE_INC@
+LDFLAGS:= @LDFLAGS@ -L../GSM -lGSM -L../CommonLibs -lcommon -lusb-1.0
+LIBDEPS:= ../GSM/libGSM.a ../CommonLibs/libcommon.a
+YATELIBS := @YATE_LNK@
+INCFILES := Complex.h convert.h convolve.h DummyLoad.h radioClock.h radioDevice.h \
+    radioInterface.h radioVector.h rcvLPF_651.h Resampler.h sendLPF_961.h \
+    sigProcLib.h Transceiver.h
+
+PROGS:=
+FILES:=
+ifneq (@HAVE_UHD@,no)
+PROGS:= $(PROGS) transceiver-uhd
+ifeq ($(BUILD_TESTS),yes)
+PROGS:= $(PROGS) USRPping-uhd
+endif
+endif
+ifneq (@HAVE_USRP1@,no)
+PROGS:= $(PROGS) transceiver-usrp1
+FILES:= $(FILES) std_inband.rbf
+ifeq ($(BUILD_TESTS),yes)
+PROGS:= $(PROGS) USRPping-usrp1
+endif
+LOCALLIBS = -L../sqlite3 -lsqlite3
+$(PROGS): ../sqlite3/libsqlite3.a
+endif
+ifeq ($(BUILD_TESTS),yes)
+PROGS:= $(PROGS) sigProcLibTest
+endif
+LIBS := libtransceiver.a
+OBJS := DummyLoad.o radioClock.o radioInterface.o radioInterfaceResamp.o radioVector.o \
+    Resampler.o sigProcLib.o Transceiver.o convolve.o convert.o
+EXTRACLEAN := runTransceiver.o USRPDevice.o UHDDevice.o
+
+all:
+
+transceiver-usrp1: USRPDevice.cpp USRPDevice.h runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+
+transceiver-uhd: UHDDevice.cpp runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+
+USRPping-usrp1: USRPDevice.cpp USRPDevice.h USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+
+USRPping-uhd: UHDDevice.cpp USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)

@@ -1,0 +1,18 @@
+# Makefile
+# This file holds the make rules for the control lib
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+LIBTHR := @THREAD_LIB@
+INCLUDES = $(ALL_INCLUDES)
+CFLAGS := @YATE_INC@
+LDFLAGS:= @LDFLAGS@
+YATELIBS := @YATE_LNK@
+INCFILES := ../../config.h ControlCommon.h RadioResource.h RRLPServer.h
+
+PROGS:=
+LIBS := libControl.a
+OBJS := ControlCommon.o DCCHDispatch.o RadioResource.o RRLPServer.o SMSCB.o
