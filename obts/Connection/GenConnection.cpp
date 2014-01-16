@@ -118,8 +118,11 @@ void GenConnection::run()
 	    LOG(DEBUG) << "received EOF on socket";
 	    break;
 	}
-	if (len > 0)
+	if (len > 0) {
+	    if (len < mBufSize)
+		buf[len] = 0;
 	    process(buf,len);
+	}
 	else if (errno != EAGAIN && errno != EINTR) {
 	    LOG(ERR) << "recv() error " << errno << ": " << strerror(errno);
 	    break;

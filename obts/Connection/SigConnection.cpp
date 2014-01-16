@@ -24,10 +24,12 @@
 
 #include <Logger.h>
 #include <Globals.h>
+#include <GSML3CommonElements.h>
 #include <GSMLogicalChannel.h>
 #include <GSML3RRMessages.h>
 #include <GSMTransfer.h>
 #include <GSMConfig.h>
+#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 
@@ -37,6 +39,42 @@ using namespace GSM;
 #define PROTO_VER 1
 #define HB_MAXTIME 30000
 #define HB_TIMEOUT 60000
+
+static void processPaging(L3MobileIdentity& ident, uint8_t type)
+{
+    switch (type) {
+	case SigConnection::ChanTypeVoice:
+	    gBTS.pager().addID(ident,GSM::TCHFType);
+	    break;
+	case SigConnection::ChanTypeSMS:
+	case SigConnection::ChanTypeSS:
+	    gBTS.pager().addID(ident,GSM::SDCCHType);
+	    break;
+	default:
+	    gBTS.pager().removeID(ident);
+    }
+}
+
+static void processPaging(const char* ident, uint8_t type)
+{
+    if (!::strncmp(ident,"TMSI",4)) {
+	char* err = 0;
+	unsigned int tmsi = (unsigned int)::strtol(ident + 4,&err,16);
+	if (err && !*err) {
+	    L3MobileIdentity id(tmsi);
+	    processPaging(id,type);
+	}
+	else
+	    LOG(ERR) << "received invalid Paging TMSI " << (ident + 4);
+    }
+    else if (!::strncmp(ident,"IMSI",4)) {
+	L3MobileIdentity id(ident + 4);
+	processPaging(id,type);
+    }
+    else
+	LOG(ERR) << "received unknown Paging identity " << ident;
+}
+
 
 bool SigConnection::send(Primitive prim, unsigned char info)
 {
@@ -112,7 +150,22 @@ void SigConnection::process(Primitive prim, unsigned char info)
 
 void SigConnection::process(Primitive prim, unsigned char info, const unsigned char* data, size_t len)
 {
-    LOG(ERR) << "unexpected primitive " << prim << " with data";
+    switch (prim) {
+	case SigStartPaging:
+	    if (len >= 12)
+		processPaging((const char*)data,info);
+	    else
+		LOG(ERR) << "received short Start Paging of length " << len;
+	    break;
+	case SigStopPaging:
+	    if (len >= 12)
+		processPaging((const char*)data,0xff);
+	    else
+		LOG(ERR) << "received short Stop Paging of length " << len;
+	    break;
+	default:
+	    LOG(ERR) << "unexpected primitive " << prim << " with data";
+    }
 }
 
 void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)

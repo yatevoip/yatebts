@@ -42,7 +42,14 @@ public:
 	SigMediaError     =   6, // Report an allocation of mode change failure
 	SigHandshake      = 128, // Initial handshake
 	SigRadioReady     = 129, // Radio side is functioning
+	SigStartPaging    = 130, // Start paging an UE
+	SigStopPaging     = 131, // Stop paging an UE
 	SigHeartbeat      = 255  // Idle heartbeat message
+    };
+    enum PagingChanType {
+	ChanTypeVoice     = 0,
+	ChanTypeSMS       = 1,
+	ChanTypeSS        = 2,
     };
     inline SigConnection(int fileDesc = -1)
 	: GenConnection(fileDesc), mHbRecv(0,0), mHbSend(0,0)
