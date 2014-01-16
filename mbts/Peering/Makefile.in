@@ -1,18 +1,8 @@
 # Makefile
 # This file holds the make rules for the peering lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h NeighborTable.h Peering.h
 
-PROGS:=
 LIBS := libPeering.a
 OBJS := NeighborTable.o Peering.o

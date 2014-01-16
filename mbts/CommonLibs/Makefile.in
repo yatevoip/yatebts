@@ -1,16 +1,7 @@
 # Makefile
 # This file holds the make rules for the common libs
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(TOP_INCLUDES) -I@srcdir@/../sqlite3
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(TOP_INCLUDES) -I@srcdir@/../sqlite3
 INCFILES := ../../config.h A51.h BitVector.h Configuration.h F16.h Interthread.h \
     LinkedLists.h Logger.h MemoryLeak.h Reporting.h ScalarTypes.h Sockets.h \
     Threads.h Timeval.h Utils.h Vector.h sqlite3util.h
@@ -18,8 +9,8 @@ INCFILES := ../../config.h A51.h BitVector.h Configuration.h F16.h Interthread.h
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= A51Test BitVectorTest ConfigurationTest F16Test InterthreadTest LogTest \
     SocketsTest TimevalTest URLEncodeTest VectorTest
-LOCALLIBS = -L../sqlite3 -lsqlite3
-$(PROGS): ../sqlite3/libsqlite3.a
+LOCALLIBS = $(SQL_LIBS)
+$(PROGS): $(SQL_DEPS)
 EXTRACLEAN = testSource testDestination
 endif
 LIBS := libCommonLibs.a

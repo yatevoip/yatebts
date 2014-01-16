@@ -1,20 +1,10 @@
 # Makefile
 # This file holds the make rules for the local BSS helper
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES :=
 
 PROGS:= mbts
-LIBS :=
 OBJS := GetConfigurationKeys.o
 LOCALLIBS = $(ALL_LIBS) $(A53_LIBS)
 

@@ -1,18 +1,8 @@
 # Makefile
 # This file holds the make rules for the A53 lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(TOP_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(TOP_INCLUDES)
 INCFILES := ../../config.h a5.h bits.h gea.h gprs_cipher.h kasumi.h linuxlist.h utils.h
 
-PROGS:=
 LIBS := libA53.a
 OBJS := a5.o bits.o gea.o kasumi.o utils.o ifc.o

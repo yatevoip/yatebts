@@ -1,18 +1,8 @@
 # Makefile
 # This file holds the make rules for the CLI lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h CLI.h
 
-PROGS:=
 LIBS := libCLI.a
 OBJS := CLI.o

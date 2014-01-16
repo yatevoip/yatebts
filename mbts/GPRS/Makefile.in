@@ -1,21 +1,11 @@
 # Makefile
 # This file holds the make rules for the GPRS lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h BSSG.h BSSGMessages.h ByteVector.h FEC.h GPRSExport.h \
     GPRSInternal.h GPRSRLC.h GPRSTDMA.h MAC.h MsgBase.h MSInfo.h RLCEngine.h RLCHdr.h \
     RLCMessages.h RList.h ScalarTypes.h TBF.h
 
-PROGS:=
 LIBS := libGPRS.a
 OBJS := BSSG.o BSSGMessages.o ByteVector.o FEC.o GPRSCLI.o MAC.o MsgBase.o MSInfo.o \
     RLC.o RLCEngine.o RLCMessages.o TBF.o

@@ -1,18 +1,8 @@
 # Makefile
 # This file holds the make rules for the SGSN/GGSN lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h Ggsn.h GPRSL3Messages.h LLC.h miniggsn.h SgsnBase.h SgsnExport.h Sgsn.h
 
-PROGS:=
 LIBS := libSGSNGGSN.a
 OBJS := Ggsn.o GPRSL3Messages.o iputils.o LLC.o miniggsn.o SgsnCli.o Sgsn.o

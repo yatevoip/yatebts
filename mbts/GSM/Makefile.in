@@ -1,16 +1,7 @@
 # Makefile
 # This file holds the make rules for the GSM lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h GSM610Tables.h GSMCommon.h GSMConfig.h GSML1FEC.h GSML2LAPDm.h \
     GSML3CommonElements.h GSML3GPRSElements.h GSML3Message.h GSML3RRElements.h \
     GSML3RRMessages.h GSMLogicalChannel.h GSMSAPMux.h GSMSMSCBL3Messages.h GSMTAPDump.h \

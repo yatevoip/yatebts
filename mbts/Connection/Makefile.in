@@ -1,16 +1,7 @@
 # Makefile
 # This file holds the make rules for the connection lib
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(ALL_INCLUDES)
-CFLAGS := @YATE_INC@
-LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
+INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h CmdConnection.h ConnectionMap.h GenConnection.h \
     LogConnection.h MediaConnection.h SigConnection.h
 

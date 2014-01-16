@@ -26,5 +26,18 @@ prefix = @prefix@
 exec_prefix = @exec_prefix@
 moddir = @libdir@/yate
 
+DEBUG :=
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+OBJS :=
+LIBS :=
+PROGS:=
+FILES:=
+LIBTHR := @THREAD_LIB@
+CFLAGS := @YATE_INC@
+LDFLAGS:= @LDFLAGS@
+YATELIBS := @YATE_LNK@
+
 # Makefile.head end
 

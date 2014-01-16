@@ -1,23 +1,13 @@
 # Makefile
 # This file holds the make rules for the RAD1 transceiver
 
-DEBUG :=
-
-CXX  := @CXX@ -Wall
-AR  := ar
-DEFS :=
-LIBTHR := @THREAD_LIB@
-INCLUDES = $(GSM_INCLUDES)
-CFLAGS := @YATE_INC@
+INCLUDES := $(GSM_INCLUDES)
 LDFLAGS:= @LDFLAGS@ -L../GSM -lGSM -L../CommonLibs -lcommon -lusb-1.0
-LIBDEPS:= ../GSM/libGSM.a ../CommonLibs/libcommon.a
-YATELIBS := @YATE_LNK@
+LIBDEPS:= $(GSM_DEPS)
 INCFILES := Complex.h convert.h convolve.h DummyLoad.h radioClock.h radioDevice.h \
     radioInterface.h radioVector.h rcvLPF_651.h Resampler.h sendLPF_961.h \
     sigProcLib.h Transceiver.h
 
-PROGS:=
-FILES:=
 ifneq (@HAVE_UHD@,no)
 PROGS:= $(PROGS) transceiver-uhd
 ifeq ($(BUILD_TESTS),yes)
@@ -30,8 +20,7 @@ FILES:= $(FILES) std_inband.rbf
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= $(PROGS) USRPping-usrp1
 endif
-LOCALLIBS = -L../sqlite3 -lsqlite3
-$(PROGS): ../sqlite3/libsqlite3.a
+LOCALLIBS = $(SQL_LIBS)
 endif
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= $(PROGS) sigProcLibTest
