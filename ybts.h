@@ -22,11 +22,9 @@
 #ifndef __YBTS_H
 #define __YBTS_H
 
-namespace YBTS {
-
 // File descriptors for sockets
 // The enum is used as index starting from STDERR_FILENO + 1
-enum YBTSFileDesc
+enum BtsFileDesc
 {
     FDLogTransceiver = 0,
     FDLogBts,
@@ -41,7 +39,7 @@ enum YBTSFileDesc
  * Signalling interface protocol
  *
  */
-enum YBTSSigPrimitive {
+enum BtsPrimitive {
     SigL3Message   =   0,                // Connection related L3 message
     SigConnLost    =   1,                // Connection to UE lost
     SigConnRelease =   2,                // Request to release a connection
@@ -56,13 +54,11 @@ enum YBTSSigPrimitive {
     SigHeartbeat   = 255                 // Heartbeat
 };
 
-enum YBTSPagingChanType {
+enum BtsPagingChanType {
     ChanTypeVoice  = 0,
     ChanTypeSMS    = 1,
     ChanTypeSS     = 2,
 };
-
-}; // namespace YBTS
 
 #endif // __YBTS_H
 

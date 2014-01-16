@@ -129,7 +129,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 		break;
 	}
 	if (gConnMap.find(id) == chan)
-		gSigConn.send(SigConnection::SigConnLost,0,id);
+		gSigConn.send(Connection::SigConnLost,0,id);
 	LOG(INFO) << "ending dispatch loop for connection " << id;
 }
 

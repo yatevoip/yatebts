@@ -21,7 +21,6 @@
 
 #include <yatephone.h>
 #include <yategsm.h>
-#include "ybts.h"
 
 #ifdef _WINDOWS
 #error This module is not for Windows
@@ -35,8 +34,9 @@
 #include <stdio.h>
 
 using namespace TelEngine;
-using namespace YBTS;
 namespace { // anonymous
+
+#include "ybts.h"
 
 #define BTS_DIR "bts"
 #define BTS_CMD "mbts"
@@ -539,7 +539,7 @@ public:
 	{ return m_registered; }
     inline uint32_t expires() const
 	{ return m_expires; }
-    bool startPaging(YBTSPagingChanType type);
+    bool startPaging(BtsPagingChanType type);
     void stopPaging();
     void stopPagingNow();
 
@@ -2217,7 +2217,7 @@ YBTSDataSource* YBTSMedia::find(unsigned int connId)
 //
 
 // Start paging, return true if already paging
-bool YBTSUE::startPaging(YBTSPagingChanType type)
+bool YBTSUE::startPaging(BtsPagingChanType type)
 {
     Lock lck(this);
     m_pageCnt++;

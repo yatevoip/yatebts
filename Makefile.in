@@ -160,7 +160,7 @@ rpm: tarball
 %.yate: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
 	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS)
 
-ybts.yate: ybts.cpp
+ybts.yate: ybts.cpp ybts.h
 ybts.yate: LOCALLIBS = -lyategsm
 
 @srcdir@/configure: @srcdir@/configure.in

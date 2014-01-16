@@ -2,7 +2,7 @@
 # This file holds the make rules for the connection lib
 
 INCLUDES := $(ALL_INCLUDES)
-INCFILES := ../../config.h CmdConnection.h ConnectionMap.h GenConnection.h \
+INCFILES := ../../config.h @top_srcdir@/ybts.h CmdConnection.h ConnectionMap.h GenConnection.h \
     LogConnection.h MediaConnection.h SigConnection.h
 
 LIBS := libConnection.a

@@ -43,11 +43,11 @@ using namespace GSM;
 static void processPaging(L3MobileIdentity& ident, uint8_t type)
 {
     switch (type) {
-	case SigConnection::ChanTypeVoice:
+	case ChanTypeVoice:
 	    gBTS.pager().addID(ident,GSM::TCHFType);
 	    break;
-	case SigConnection::ChanTypeSMS:
-	case SigConnection::ChanTypeSS:
+	case ChanTypeSMS:
+	case ChanTypeSS:
 	    gBTS.pager().addID(ident,GSM::SDCCHType);
 	    break;
 	default:
@@ -76,7 +76,7 @@ static void processPaging(const char* ident, uint8_t type)
 }
 
 
-bool SigConnection::send(Primitive prim, unsigned char info)
+bool SigConnection::send(BtsPrimitive prim, unsigned char info)
 {
     assert((prim & 0x80) != 0);
     if (!valid())
@@ -87,7 +87,7 @@ bool SigConnection::send(Primitive prim, unsigned char info)
     return send(buf,2);
 }
 
-bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id)
+bool SigConnection::send(BtsPrimitive prim, unsigned char info, unsigned int id)
 {
     assert((prim & 0x80) == 0);
     if (!valid())
@@ -100,7 +100,7 @@ bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id)
     return send(buf,4);
 }
 
-bool SigConnection::send(Primitive prim, unsigned char info, unsigned int id, const void* data, size_t len)
+bool SigConnection::send(BtsPrimitive prim, unsigned char info, unsigned int id, const void* data, size_t len)
 {
     assert((prim & 0x80) == 0);
     if (!valid())
@@ -134,7 +134,7 @@ bool SigConnection::send(const void* buffer, size_t len)
     return true;
 }
 
-void SigConnection::process(Primitive prim, unsigned char info)
+void SigConnection::process(BtsPrimitive prim, unsigned char info)
 {
     switch (prim) {
 	case SigHandshake:
@@ -148,7 +148,7 @@ void SigConnection::process(Primitive prim, unsigned char info)
     }
 }
 
-void SigConnection::process(Primitive prim, unsigned char info, const unsigned char* data, size_t len)
+void SigConnection::process(BtsPrimitive prim, unsigned char info, const unsigned char* data, size_t len)
 {
     switch (prim) {
 	case SigStartPaging:
@@ -168,7 +168,7 @@ void SigConnection::process(Primitive prim, unsigned char info, const unsigned c
     }
 }
 
-void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
+void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int id)
 {
     switch (prim) {
 	case SigConnRelease:
@@ -241,7 +241,7 @@ void SigConnection::process(Primitive prim, unsigned char info, unsigned int id)
     }
 }
 
-void SigConnection::process(Primitive prim, unsigned char info, unsigned int id, const unsigned char* data, size_t len)
+void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int id, const unsigned char* data, size_t len)
 {
     switch (prim) {
 	case SigL3Message:
@@ -271,9 +271,9 @@ void SigConnection::process(const unsigned char* data, size_t len)
     if (data[0] & 0x80) {
 	len -= 2;
 	if (len)
-	    process((Primitive)data[0],data[1],data + 2,len);
+	    process((BtsPrimitive)data[0],data[1],data + 2,len);
 	else
-	    process((Primitive)data[0],data[1]);
+	    process((BtsPrimitive)data[0],data[1]);
     }
     else {
 	if (len < 4) {
@@ -283,9 +283,9 @@ void SigConnection::process(const unsigned char* data, size_t len)
 	unsigned int id = (((unsigned int)data[2]) << 8) | data[3];
 	len -= 4;
 	if (len)
-	    process((Primitive)data[0],data[1],id,data + 4,len);
+	    process((BtsPrimitive)data[0],data[1],id,data + 4,len);
 	else
-	    process((Primitive)data[0],data[1],id);
+	    process((BtsPrimitive)data[0],data[1],id);
     }
 }
 
