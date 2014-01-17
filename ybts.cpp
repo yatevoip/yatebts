@@ -4264,8 +4264,8 @@ bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const Str
 	itemComplete(msg.retValue(),YSTRING("transceiver"),partWord);
     if ((partLine == YSTRING("debug")) || (partLine == YSTRING("status")))
 	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
-    if (m_command && (partLine == YSTRING(BTS_CMD))) {
-	if (!m_helpCache && lock(100000)) {
+    if (m_command && ((partLine == YSTRING(BTS_CMD)) || (partLine == YSTRING(BTS_CMD " help")))) {
+	if (!m_helpCache && (m_state >= Running) && lock(100000)) {
 	    String tmp;
 	    if (m_command->send("help") && m_command->recv(tmp) && tmp.trimBlanks()) {
 		ObjList* help = new ObjList;
