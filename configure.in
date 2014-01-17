@@ -48,6 +48,10 @@ AC_TYPE_SIZE_T
 AC_HEADER_TIME
 AC_C_BIGENDIAN
 
+# Check for mandatory features
+AC_CHECK_HEADERS([sys/socket.h sys/time.h pthread.h syslog.h], , [AC_MSG_ERROR([This header file is required.])])
+AC_CHECK_FUNCS([openlog syslog], , [AC_MSG_ERROR([This function is required.])])
+
 # Check for less critical stuff
 AC_CHECK_HEADERS([byteswap.h])
 
