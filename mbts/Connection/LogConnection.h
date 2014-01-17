@@ -32,9 +32,13 @@ public:
     inline LogConnection(int fileDesc = -1)
 	: GenConnection(fileDesc)
 	{ }
-    bool write(const char* text);
+    inline bool write(const char* text)
+	{ return writeLog(0xff,text); }
+    inline bool write(unsigned char level, const char* text)
+	{ return writeLog(0x07 & level,text); }
 private:
     virtual void process(const unsigned char* data, size_t len);
+    bool writeLog(unsigned char level, const char* text);
 };
 
 }; // namespace Connection

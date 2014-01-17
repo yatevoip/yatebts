@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
+#include <syslog.h>
 
 using namespace TelEngine;
 namespace { // anonymous
@@ -1618,10 +1619,34 @@ void YBTSLog::processLoop()
 {
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
-	if (rd > 0) {
-	    // TODO: decode data, output the debug message
-	    Debug(this,DebugStub,"process recv not implemented: %s",
-		(const char*)m_transport.readBuf().data());
+	if (rd > 1) {
+	    int level = -1;
+	    switch (m_transport.readBuf().at(0)) {
+		case LOG_EMERG:
+		    level = DebugGoOn;
+		    break;
+		case LOG_ALERT:
+		case LOG_CRIT:
+		    level = DebugWarn;
+		    break;
+		case LOG_ERR:
+		case LOG_WARNING:
+		    level = DebugMild;
+		    break;
+		case LOG_NOTICE:
+		    level = DebugNote;
+		    break;
+		case LOG_INFO:
+		    level = DebugInfo;
+		    break;
+		case LOG_DEBUG:
+		    level = DebugAll;
+		    break;
+	    }
+	    if (level >= 0)
+		Debug(this,level,"%s",(const char*)m_transport.readBuf().data(1));
+	    else
+		Output("%s",(const char*)m_transport.readBuf().data(1));
 	    continue;
 	}
 	if (!rd) {

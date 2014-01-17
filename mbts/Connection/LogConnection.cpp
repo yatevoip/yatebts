@@ -25,16 +25,26 @@
 
 #include <unistd.h>
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 
 using namespace Connection;
 
-bool LogConnection::write(const char* text)
+bool LogConnection::writeLog(unsigned char level, const char* text)
 {
     if (!text)
 	return false;
     size_t len = ::strlen(text);
-    return len && send(text,len);
+    if (!len)
+	return false;
+    char* buf = (char*)::malloc(len + 1);
+    if (!buf)
+	return false;
+    buf[0] = level;
+    ::memcpy(buf + 1,text,len);
+    bool ok = send(buf,len + 1);
+    ::free(buf);
+    return ok;
 }
 
 void LogConnection::process(const unsigned char* data, size_t len)

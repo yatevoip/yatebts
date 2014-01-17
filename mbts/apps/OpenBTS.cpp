@@ -597,7 +597,7 @@ int main(int argc, char *argv[])
 	if (gCmdConn.valid()) {
 		close(sock);
 		gSigConn.send(Connection::SigRadioReady);
-		gLogConn.write("OpenBTS ready");
+		gLogConn.write("MBTS ready");
 		while (gLogConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
 			char* line = gCmdConn.read();
 			if (!line)
