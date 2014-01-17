@@ -47,7 +47,6 @@ void MediaConnection::process(const unsigned char* data, size_t len)
 	return;
     }
     unsigned int id = (((unsigned int)data[0]) << 8) | data[1];
-    LOG(DEBUG) << "received message id " << id << " length " << len;
     process(id,data + 2,len - 2);
 }
 

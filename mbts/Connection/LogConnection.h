@@ -31,14 +31,18 @@ class LogConnection : public GenConnection
 public:
     inline LogConnection(int fileDesc = -1)
 	: GenConnection(fileDesc)
-	{ }
+	{ if (!gSelf) gSelf = this; }
     inline bool write(const char* text)
 	{ return writeLog(0xff,text); }
     inline bool write(unsigned char level, const char* text)
 	{ return writeLog(0x07 & level,text); }
+    inline static LogConnection* self()
+	{ return gSelf; }
+    static bool hook(int level, const char* text, int offset);
 private:
     virtual void process(const unsigned char* data, size_t len);
     bool writeLog(unsigned char level, const char* text);
+    static LogConnection* gSelf;
 };
 
 }; // namespace Connection

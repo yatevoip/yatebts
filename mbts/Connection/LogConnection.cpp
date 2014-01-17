@@ -30,6 +30,8 @@
 
 using namespace Connection;
 
+LogConnection* LogConnection::gSelf = 0;
+
 bool LogConnection::writeLog(unsigned char level, const char* text)
 {
     if (!text)
@@ -50,6 +52,11 @@ bool LogConnection::writeLog(unsigned char level, const char* text)
 void LogConnection::process(const unsigned char* data, size_t len)
 {
     assert(false);
+}
+
+bool LogConnection::hook(int level, const char* text, int offset)
+{
+    return self() && self()->write(level,text + offset);
 }
 
 /* vi: set ts=8 sw=4 sts=4 noet: */

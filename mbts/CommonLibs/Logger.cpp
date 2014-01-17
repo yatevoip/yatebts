@@ -187,6 +187,8 @@ void addAlarm(const string& s)
 }
 
 
+bool (*Log::gHook)(int,const char*,int) = 0;
+
 Log::~Log()
 {
 	if (mDummyInit) return;
@@ -198,7 +200,8 @@ Log::~Log()
 	}
 	// Current logging level was already checked by the macro.
 	// So just log.
-	syslog(mPriority, "%s", mStream.str().c_str());
+	if (!(gHook && gHook(mPriority,mStream.str().c_str(),mPrefixLen)))
+		syslog(mPriority, "%s", mStream.str().c_str());
 	// pat added for easy debugging.
 	if (gLogToConsole||gLogToFile) {
 		int mlen = mStream.str().size();
@@ -230,7 +233,10 @@ Log::Log(const char* name, const char* level, int facility)
 ostringstream& Log::get()
 {
 	assert(mPriority<numLevels);
-	mStream << levelNames[mPriority] <<  ' ';
+	mStream << levelNames[mPriority] << ' ' << pthread_self() << timestr() << ' ';
+	mPrefixLen = mStream.tellp();
+	if (mPrefixLen < 0)
+		mPrefixLen = 0;
 	return mStream;
 }
 

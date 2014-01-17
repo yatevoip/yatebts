@@ -52,6 +52,9 @@ static const char *cOpenBTSConfigEnv = "OpenBTSConfigFile";
 // Load configuration from a file.
 ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):CONFIGDB,"transceiver", getConfigurationKeys());
 
+/** Connection to YBTS */
+Connection::LogConnection gLogConn(STDERR_FILENO + 1);
+
 volatile bool gbShutdown = false;
 
 static void ctrlCHandler(int signo)
@@ -151,6 +154,8 @@ int main(int argc, char *argv[])
     std::cout << "Using internal clock reference" << std::endl;
 
   gLogInit("transceiver", logLevel.c_str(), LOG_LOCAL7);
+  if (gLogConn.valid())
+    Log::gHook = Connection::LogConnection::hook;
 
   srandom(time(NULL));
 
@@ -187,6 +192,7 @@ int main(int argc, char *argv[])
     goto shutdown;
   }
   trx->receiveFIFO(radio->receiveFIFO());
+  gLogConn.write("Starting transceiver");
   trx->start();
 
   while (!gbShutdown)

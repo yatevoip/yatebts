@@ -41,8 +41,7 @@
 #include <string>
 
 #define _LOG(level) \
-	Log(LOG_##level).get() << pthread_self() \
-	<< timestr() << " " __FILE__  ":"  << __LINE__ << ":" << __FUNCTION__ << ": "
+	Log(LOG_##level).get() << __FILE__  ":"  << __LINE__ << ":" << __FUNCTION__ << ": "
 
 #define IS_LOG_LEVEL(wLevel) (gGetLoggingLevel(__FILE__)>=LOG_##wLevel)
 
@@ -99,7 +98,8 @@ class Log {
 	protected:
 
 	std::ostringstream mStream;		///< This is where we buffer up the log entry.
-	int mPriority;					///< Priority of current report.
+	int mPriority;				///< Priority of current report.
+	int mPrefixLen;				///< Length of prefix added in get()
 	bool mDummyInit;
 
 	public:
@@ -115,6 +115,8 @@ class Log {
 	~Log();
 
 	std::ostringstream& get();
+
+	static bool (*gHook)(int,const char*,int);
 };
 extern bool gLogToConsole;	// Pat added for easy debugging.
 

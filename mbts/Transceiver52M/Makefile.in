@@ -2,11 +2,11 @@
 # This file holds the make rules for the RAD1 transceiver
 
 INCLUDES := $(GSM_INCLUDES)
-LDFLAGS:= @LDFLAGS@ -L../GSM -lGSM -L../CommonLibs -lcommon -lusb-1.0
-LIBDEPS:= $(GSM_DEPS)
+LIBDEPS  := $(GSM_DEPS)
 INCFILES := Complex.h convert.h convolve.h DummyLoad.h radioClock.h radioDevice.h \
     radioInterface.h radioVector.h rcvLPF_651.h Resampler.h sendLPF_961.h \
     sigProcLib.h Transceiver.h
+LOCALLIBS = $(GSM_LIBS)
 
 ifneq (@HAVE_UHD@,no)
 PROGS:= $(PROGS) transceiver-uhd
@@ -20,7 +20,7 @@ FILES:= $(FILES) std_inband.rbf
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= $(PROGS) USRPping-usrp1
 endif
-LOCALLIBS = $(SQL_LIBS)
+LOCALLIBS := $(LOCALLIBS) -lusb-1.0
 endif
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= $(PROGS) sigProcLibTest

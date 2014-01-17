@@ -346,8 +346,9 @@ int main(int argc, char *argv[])
 	//gSubscriberRegistry.init();
 	gParser.addCommands();
 
-	if (/* gLogConn.valid() && gCmdConn.valid() && */ gSigConn.valid() && gMediaConn.valid()) {
+	if (gLogConn.valid() && gCmdConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
 		COUT("\nConnected to YBTS\n");
+		Log::gHook = Connection::LogConnection::hook;
 		gSigConn.start();
 		gMediaConn.start();
 	}

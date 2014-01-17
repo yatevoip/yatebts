@@ -65,6 +65,8 @@ int main(int argc, char *argv[])
   }
   // Configure logger.
   gLogInit("transceiver",gConfig.getStr("Log.Level").c_str(),LOG_LOCAL7);
+  if (gLogConn.valid())
+    Log::gHook = Connection::LogConnection::hook;
 
   int numARFCN=1;
   if (argc>1) numARFCN = atoi(argv[1]);
