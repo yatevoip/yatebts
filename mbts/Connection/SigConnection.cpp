@@ -189,15 +189,14 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 			TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
 			if (!tch) {
 			    LOG(NOTICE) << "received Start Media without traffic channel on id " << id;
-			    // Interworking, unspecified
-			    send(SigMediaError,0x7f,id);
+			    send(SigMediaError,ErrInterworking,id);
 			    break;
 			}
 			tch->open();
 			tch->setPhy(*ch);
 			GSM::L3ChannelMode mode((GSM::L3ChannelMode::Mode)info);
 			gConnMap.mapMedia(id,tch);
-			ch->send(GSM::L3AssignmentCommand(ch->channelDescription(),mode));
+			ch->send(GSM::L3AssignmentCommand(tch->channelDescription(),mode));
 		    }
 		}
 		else
@@ -231,8 +230,7 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		    gConnMap.mapMedia(id,tch);
 		else {
 		    LOG(WARNING) << "congestion, no TCH available for assignment";
-		    // No circuit/channel available
-		    send(SigMediaError,0x22,id);
+		    send(SigMediaError,ErrCongestion,id);
 		}
 	    }
 	    break;

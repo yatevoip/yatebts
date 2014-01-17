@@ -943,6 +943,7 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(StopMedia),
     MAKE_SIG(AllocMedia),
     MAKE_SIG(MediaError),
+    MAKE_SIG(MediaStarted),
     MAKE_SIG(Handshake),
     MAKE_SIG(RadioReady),
     MAKE_SIG(StartPaging),
@@ -1321,6 +1322,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	case SigHeartbeat:
 	case SigConnLost:
 	case SigMediaError:
+	case SigMediaStarted:
 	    break;
 	default:
 	    reason = "No decoder";

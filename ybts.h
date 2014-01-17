@@ -34,30 +34,34 @@ enum BtsFileDesc
     FDCount                              // Number of file descriptors
 };
 
-
-/*
- * Signalling interface protocol
- *
- */
+// Signalling interface protocol
 enum BtsPrimitive {
-    SigL3Message   =   0,                // Connection related L3 message
-    SigConnLost    =   1,                // Connection to UE lost
-    SigConnRelease =   2,                // Request to release a connection
-    SigStartMedia  =   3,                // Start or assign traffic channel
-    SigStopMedia   =   4,                // Stop sending media
-    SigAllocMedia  =   5,                // Reserve a traffic channel
-    SigMediaError  =   6,                // Report an allocation of mode change failure
-    SigHandshake   = 128,                // Handshake
-    SigRadioReady  = 129,                // Radio side is functioning
-    SigStartPaging = 130,                // Start paging an UE
-    SigStopPaging  = 131,                // Stop paging an UE
-    SigHeartbeat   = 255                 // Heartbeat
+    SigL3Message        =   0,           // Connection related L3 message
+    SigConnLost         =   1,           // Connection to UE lost
+    SigConnRelease      =   2,           // Request to release a connection
+    SigStartMedia       =   3,           // Start or assign traffic channel
+    SigStopMedia        =   4,           // Stop sending media
+    SigAllocMedia       =   5,           // Reserve a traffic channel
+    SigMediaError       =   6,           // Report an allocation of mode change failure
+    SigMediaStarted     =   7,           // Notify that the traffic channel has started
+    SigHandshake        = 128,           // Handshake
+    SigRadioReady       = 129,           // Radio side is functioning
+    SigStartPaging      = 130,           // Start paging an UE
+    SigStopPaging       = 131,           // Stop paging an UE
+    SigHeartbeat        = 255            // Heartbeat
 };
 
+// Paging channel types
 enum BtsPagingChanType {
     ChanTypeVoice  = 0,
     ChanTypeSMS    = 1,
     ChanTypeSS     = 2,
+};
+
+// Traffic channel errors (subset of CC)
+enum BtsErrors {
+    ErrCongestion       = 0x22,          // No circuit/channel available
+    ErrInterworking     = 0x7f           // Interworking, unspecified
 };
 
 #endif // __YBTS_H

@@ -93,6 +93,24 @@ bool ConnectionMap::unmap(const GSM::LogicalChannel* chan)
     return false;
 }
 
+int ConnectionMap::remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media)
+{
+    int id = -1;
+    lock();
+    for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {
+	Conn& c = mMap[i];
+	if (c.mMedia == media) {
+	    if (chan != c.mChan) {
+		c.mChan = chan;
+		id = i;
+	    }
+	    break;
+	}
+    }
+    unlock();
+    return id;
+}
+
 int ConnectionMap::find(const GSM::LogicalChannel* chan)
 {
     for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {

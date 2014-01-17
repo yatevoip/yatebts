@@ -47,6 +47,7 @@ public:
     void mapMedia(unsigned int id, GSM::TCHFACCHLogicalChannel* media);
     bool unmap(unsigned int id);
     bool unmap(const GSM::LogicalChannel* chan);
+    int remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media);
     int find(const GSM::LogicalChannel* chan);
     GSM::LogicalChannel* find(unsigned int id);
     GSM::TCHFACCHLogicalChannel* findMedia(unsigned int id);

@@ -38,57 +38,25 @@ using namespace Control;
 using namespace Connection;
 
 
-
-
-
-/**
-	Dispatch the appropriate controller for a Radio Resource message.
-	@param req A pointer to the initial message.
-	@param DCCH A pointer to the logical channel for the transaction.
-*/
-void DCCHDispatchRR(const L3RRMessage* req, LogicalChannel *DCCH)
+// Attempt to dispatch locally a single RR message, return true if handled
+static bool connDispatchRR(LogicalChannel* chan, unsigned int id, L3Frame* frame)
 {
-	LOG(DEBUG) << "checking MTI"<< (L3RRMessage::MessageType)req->MTI();
-
-	assert(req);
-	L3RRMessage::MessageType MTI = (L3RRMessage::MessageType)req->MTI();
-	switch (MTI) {
-		case L3RRMessage::PagingResponse:
-			PagingResponseHandler(dynamic_cast<const L3PagingResponse*>(req),DCCH);
-			break;
-		// Use VEA to avoid the need for AssignmentComplete.
-		//case L3RRMessage::AssignmentComplete:
-		//	AssignmentCompleteHandler(
-		//		dynamic_cast<const L3AssignmentComplete*>(req),
-		//		dynamic_cast<TCHFACCHLogicalChannel*>(DCCH));
-		//	break;
-		default:
-			LOG(NOTICE) << "unhandled RR message " << MTI << " on " << *DCCH;
-			throw UnsupportedMessage();
+	if (frame->PD() != GSM::L3RadioResourcePD)
+		return false;
+	switch (frame->MTI()) {
+		case L3RRMessage::ChannelModeModifyAcknowledge:
+			// TODO: check reported channel mode
+		case L3RRMessage::AssignmentComplete:
+			gSigConn.send(SigMediaStarted,0,id);
+			return true;
+		case L3RRMessage::AssignmentFailure:
+			gSigConn.send(SigMediaError,ErrInterworking,id);
+			return true;
 	}
+	return false;
 }
 
-
-#if 0
-void DCCHDispatchMessage(const L3Message* msg, LogicalChannel* DCCH)
-{
-	// Each protocol has it's own sub-dispatcher.
-	switch (msg->PD()) {
-		case L3MobilityManagementPD:
-			DCCHDispatchMM(dynamic_cast<const L3MMMessage*>(msg),DCCH);
-			break;
-		case L3RadioResourcePD:
-			DCCHDispatchRR(dynamic_cast<const L3RRMessage*>(msg),DCCH);
-			break;
-		default:
-			LOG(NOTICE) << "unhandled protocol " << msg->PD() << " on " << *DCCH;
-			throw UnsupportedMessage();
-	}
-}
-#endif
-
-
-
+// Dispatching loop, runs for the lifetime of the connection
 static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 {
 	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(chan);
@@ -114,7 +82,8 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 				break;
 			case DATA:
 			case UNIT_DATA:
-				gSigConn.send(0,id,frame);
+				if (!connDispatchRR(chan,id,frame))
+					gSigConn.send(0,id,frame);
 				delete frame;
 				continue;
 			case RELEASE:
@@ -128,11 +97,50 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 		delete frame;
 		break;
 	}
-	if (gConnMap.find(id) == chan)
+	const LogicalChannel* ch = gConnMap.find(id);
+	if (ch == chan)
 		gSigConn.send(Connection::SigConnLost,0,id);
-	LOG(INFO) << "ending dispatch loop for connection " << id;
+	LOG(INFO) << "ending dispatch loop for connection " << id <<
+		(ch ? ((ch == chan) ? " (remote release)" : " (reassigned)") : " (local close)");
 }
 
+// Dispatch new channel establishing frame
+static void connDispatchChannel(LogicalChannel* chan, L3Frame* frame)
+{
+	int id = gConnMap.map(chan);
+	if (id < 0) {
+		LOG(ERR) << "failed to map channel " << *chan;
+		return;
+	}
+	if (id >= 0) {
+		if (connDispatchRR(chan,id,frame) || gSigConn.send(0,id,frame))
+			connDispatchLoop(chan,id);
+		gConnMap.unmap(chan);
+	}
+}
+
+// Dispatch reassigned channel establishing frame
+static void connDispatchReassigned(LogicalChannel* chan, L3Frame* frame)
+{
+	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(chan);
+	if (!tch) {
+		LOG(ERR) << "reassigned to non-traffic channel " << *chan;
+		return;
+	}
+	int id = gConnMap.remap(chan,tch);
+	if (id < 0) {
+		LOG(ERR) << "failed to remap channel " << *chan;
+		return;
+	}
+	LOG(INFO) << "channel " << *chan << " reallocated to connection " << id;
+	if (id >= 0) {
+		if (connDispatchRR(chan,id,frame) || gSigConn.send(0,id,frame))
+			connDispatchLoop(chan,id);
+		gConnMap.unmap(chan);
+	}
+}
+
+// Dispatch channel establishment
 static bool connDispatchEstablish(LogicalChannel* chan)
 {
 	if (!gSigConn.valid())
@@ -148,25 +156,25 @@ static bool connDispatchEstablish(LogicalChannel* chan)
 			throw UnexpectedPrimitive();
 		}
 		if (frame->PD() == GSM::L3RadioResourcePD) {
-			L3RRMessage* req = GSM::parseL3RR(*frame);
-			delete frame;
-			LOG(INFO) << *chan << " received RR establishing message " << *req;
-			DCCHDispatchRR(req,chan);
-			delete req;
-		}
-		else {
-			int id = gConnMap.map(chan);
-			if (id >= 0) {
-				if (gSigConn.send(0,id,frame))
-					connDispatchLoop(chan,id);
-				gConnMap.unmap(id);
+			switch (frame->MTI()) {
+				case L3RRMessage::AssignmentComplete:
+					connDispatchReassigned(chan,frame);
+					break;
+				case L3RRMessage::PagingResponse:
+					connDispatchChannel(chan,frame);
+					break;
+				default:
+					LOG(INFO) << *chan <<
+						" unexpected RR establishing frame " << *frame;
 			}
-			delete frame;
 		}
+		else
+			connDispatchChannel(chan,frame);
+		delete frame;
 	}
 	else
 		LOG(NOTICE) << "L3 read timeout";
-
+	gConnMap.unmap(chan);
 	return true;
 }
 
