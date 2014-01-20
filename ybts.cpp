@@ -258,6 +258,8 @@ public:
 	{ return m_readBuf; }
     inline HANDLE detachRemote()
 	{ return m_remoteSocket.detach(); }
+    inline bool canSelect() const
+	{ return m_socket.canSelect(); }
 
 protected:
     bool send(const void* buf, unsigned int len);
@@ -267,6 +269,7 @@ protected:
     int recv();
     bool initTransport(bool stream, unsigned int buflen, bool reserveNull);
     void resetTransport();
+    void alarmError(Socket& sock, const char* oper);
 
     Socket m_socket;
     Socket m_readSocket;
@@ -1436,12 +1439,8 @@ bool YBTSTransport::send(const void* buf, unsigned int len)
 	return true;
     if (wr >= 0)
 	Debug(m_enabler,DebugNote,"Sent %d/%u [%p]",wr,len,m_ptr);
-    else if (!m_writeSocket.canRetry()) {
-	String tmp;
-	addLastError(tmp,m_writeSocket.error());
-	Alarm(m_enabler,"socket",DebugWarn,"Socket send error%s [%p]",
-	    tmp.c_str(),m_ptr);
-    }
+    else if (!m_writeSocket.canRetry())
+	alarmError(m_writeSocket,"send");
     return false;
 }
 
@@ -1450,6 +1449,17 @@ int YBTSTransport::recv()
 {
     if (!m_readSocket.valid())
 	return 0;
+    if (canSelect()) {
+	bool ok = false;
+	if (!m_readSocket.select(&ok,0,0,Thread::idleUsec())) {
+	    if (m_readSocket.canRetry())
+		return 0;
+	    alarmError(m_readSocket,"select");
+	    return -1;
+	}
+	if (!ok)
+	    return 0;
+    }
     uint8_t* buf = (uint8_t*)m_readBuf.data();
     int rd = m_readSocket.recv(buf,m_maxRead);
     if (rd >= 0) {
@@ -1466,10 +1476,7 @@ int YBTSTransport::recv()
     }
     if (m_readSocket.canRetry())
 	return 0;
-    String tmp;
-    addLastError(tmp,m_readSocket.error());
-    Alarm(m_enabler,"socket",DebugWarn,"Socket read error%s [%p]",
-	tmp.c_str(),m_ptr);
+    alarmError(m_readSocket,"read");
     return -1;
 }
 
@@ -1509,6 +1516,14 @@ void YBTSTransport::resetTransport()
     m_readSocket.detach();
     m_writeSocket.detach();
     m_remoteSocket.terminate();
+}
+
+void YBTSTransport::alarmError(Socket& sock, const char* oper)
+{
+    String tmp;
+    addLastError(tmp,sock.error());
+    Alarm(m_enabler,"socket",DebugWarn,"Socket %s error%s [%p]",
+	oper,tmp.c_str(),m_ptr);
 }
 
 
@@ -1650,7 +1665,8 @@ void YBTSLog::processLoop()
 	    continue;
 	}
 	if (!rd) {
-	    Thread::idle();
+	    if (!m_transport.canSelect())
+		Thread::idle();
 	    continue;
 	}
 	// Socket non retryable error
@@ -1709,7 +1725,8 @@ bool YBTSCommand::recv(String& str)
 	    return true;
 	}
 	if (!rd) {
-	    Thread::idle();
+	    if (!m_transport.canSelect())
+		Thread::idle();
 	    if (Time::secNow() < t)
 		continue;
 	}
@@ -1893,8 +1910,8 @@ void YBTSSignalling::processLoop()
 	    __plugin.restart();
 	    break;
 	}
-	Thread::idle();
-	continue;
+	if (!m_transport.canSelect())
+	    Thread::idle();
     }
 }
 
@@ -2213,8 +2230,10 @@ void YBTSMedia::processLoop()
 	    tmp.clear(false);
 	    TelEngine::destruct(src);
 	}
-	else if (!rd)
-	    Thread::idle();
+	else if (!rd) {
+	    if (!m_transport.canSelect())
+		Thread::idle();
+	}
 	else {
 	    // Socket non retryable error
 	    __plugin.restart();
