@@ -52,6 +52,8 @@ namespace { // anonymous
 #define YBTS_RESTART_DEF 120000
 #define YBTS_RESTART_MIN 30000
 #define YBTS_RESTART_MAX 600000
+// Peer check
+#define YBTS_PEERCHECK_DEF 3000
 
 // Constant strings
 static const String s_message = "Message";
@@ -804,6 +806,10 @@ public:
 	{ return m_state; }
     inline const char* stateName() const
 	{ return lookup(m_state,s_stateName); }
+    inline bool isPeerCheckState() const
+	{ return m_state >= WaitHandshake && m_peerPid; }
+    inline void setPeerAlive()
+	{ m_peerAlive = true; }
     inline YBTSMedia* media()
 	{ return m_media; }
     inline YBTSSignalling* signalling()
@@ -827,7 +833,7 @@ public:
     bool handshakeDone();
     // Radio ready notification. Return false if state is invalid
     bool radioReady();
-    void restart(unsigned int stopIntervalMs = 0);
+    void restart(unsigned int restartMs = 1, unsigned int stopIntervalMs = 0);
     void stopNoRestart();
     inline bool findChan(uint16_t connId, RefPointer<YBTSChan>& chan) {
 	    Lock lck(this);
@@ -858,7 +864,7 @@ protected:
     YBTSChan* findChanConnId(uint16_t connId);
     YBTSChan* findChanUE(const YBTSUE* ue);
     void changeState(int newStat);
-    void setRestart(int resFlag, bool on = true);
+    void setRestart(int resFlag, bool on = true, unsigned int interval = 0);
     void checkStop(const Time& time);
     void checkRestart(const Time& time);
     inline void setStop(unsigned int stopIntervalMs) {
@@ -879,6 +885,9 @@ protected:
     int m_state;
     Mutex m_stateMutex;
     pid_t m_peerPid;                     // Peer PID
+    bool m_peerAlive;
+    uint64_t m_peerCheckTime;
+    unsigned int m_peerCheckIntervalMs;
     bool m_error;                        // Error flag, ignore restart
     bool m_stop;                         // Stop flag
     uint64_t m_stopTime;                 // Stop time
@@ -1464,6 +1473,7 @@ int YBTSTransport::recv()
     int rd = m_readSocket.recv(buf,m_maxRead);
     if (rd >= 0) {
 	if (rd) {
+	    __plugin.setPeerAlive();
 	    if (m_maxRead < m_readBuf.length())
 		buf[rd] = 0;
 #ifdef XDEBUG
@@ -3563,6 +3573,9 @@ YBTSDriver::YBTSDriver()
     m_state(Idle),
     m_stateMutex(false,"YBTSState"),
     m_peerPid(0),
+    m_peerAlive(false),
+    m_peerCheckTime(0),
+    m_peerCheckIntervalMs(YBTS_PEERCHECK_DEF),
     m_stop(false),
     m_stopTime(0),
     m_restart(false),
@@ -3808,15 +3821,15 @@ bool YBTSDriver::radioReady()
     return true;
 }
 
-void YBTSDriver::restart(unsigned int stopIntervalMs)
+void YBTSDriver::restart(unsigned int restartMs, unsigned int stopIntervalMs)
 {
     Lock lck(m_stateMutex);
     if (m_error)
 	return;
-    if (m_restartTime)
+    if (m_restartTime && !restartMs)
 	m_restart = true;
     else
-	setRestart(1);
+	setRestart(1,true,restartMs);
     if (state() != Idle)
 	setStop(stopIntervalMs);
 }
@@ -3860,7 +3873,7 @@ void YBTSDriver::start()
 	setRestart(0);
 	return;
     }
-    setRestart(1);
+    setRestart(0,1);
     Alarm(this,"system",DebugWarn,"Failed to start the BTS");
     lck.drop();
     stop();
@@ -3897,6 +3910,8 @@ void YBTSDriver::stop()
     m_command->stop();
     m_logTrans->stop();
     m_logBts->stop();
+    m_peerAlive = false;
+    m_peerCheckTime = 0;
     changeState(Idle);
     lck.drop();
     channels().clear();
@@ -4049,13 +4064,15 @@ void YBTSDriver::changeState(int newStat)
     m_state = newStat;
 }
 
-void YBTSDriver::setRestart(int resFlag, bool on)
+void YBTSDriver::setRestart(int resFlag, bool on, unsigned int intervalMs)
 {
     if (resFlag >= 0)
 	m_restart = (resFlag > 0);
     if (on) {
-	m_restartTime = Time::now() + (uint64_t)s_restartMs * 1000;
-	Debug(this,DebugAll,"Restart scheduled in %ums [%p]",s_restartMs,this);
+	if (!intervalMs)
+	    intervalMs = s_restartMs;
+	m_restartTime = Time::now() + (uint64_t)intervalMs  * 1000;
+	Debug(this,DebugAll,"Restart scheduled in %ums [%p]",intervalMs,this);
     }
     else if (m_restartTime) {
 	m_restartTime = 0;
@@ -4260,6 +4277,29 @@ bool YBTSDriver::received(Message& msg, int id)
 		checkTerminatedCalls(msg.msgTime());
 	    if (m_mm)
 		m_mm->checkTimers(msg.msgTime());
+	    if (isPeerCheckState()) {
+		pid_t pid = 0;
+		Lock lck(m_stateMutex);
+		if (isPeerCheckState()) {
+		    if (m_peerAlive || !m_peerCheckTime)
+			m_peerCheckTime = msg.msgTime() +
+			    (uint64_t)m_peerCheckIntervalMs * 1000;
+		    else if (m_peerCheckTime <= msg.msgTime())
+			pid = m_peerPid;
+		    m_peerAlive = false;
+		}
+		lck.drop();
+		int res = pid ? ::waitpid(pid,0,WNOHANG) : 0;
+		if (res > 0 || (res < 0 && errno == ECHILD)) {
+		    lck.acquire(m_stateMutex);
+		    if (pid == m_peerPid) {
+			Debug(this,DebugInfo,"Peer pid %d vanished",m_peerPid);
+			m_restartTime = 0;
+			lck.drop();
+			restart();
+		    }
+		}
+	    }
 	    break;
 	case Status:
 	    {
