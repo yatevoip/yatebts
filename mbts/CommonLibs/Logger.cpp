@@ -276,7 +276,14 @@ void gLogEarly(int level, const char *fmt, ...)
 	va_list args;
  
 	va_start(args, fmt);
-	vsyslog(level | LOG_USER, fmt, args);
+	if (Log::gHook) {
+		char buf[256];
+		vsnprintf(buf, sizeof(buf), fmt, args);
+		buf[sizeof(buf) - 1] = 0;
+		Log::gHook(level, buf, 0);
+	}
+	else
+		vsyslog(level | LOG_USER, fmt, args);
 	va_end(args);
 }
 
