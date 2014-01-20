@@ -314,6 +314,17 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+	if (gLogConn.valid() && gCmdConn.valid() && gSigConn.valid() &&
+			gMediaConn.valid() && gLogConn.write("M-BTS connected to YBTS"))
+		Log::gHook = Connection::LogConnection::hook;
+	else {
+		COUT("\nNot started by YBTS\n");
+		gLogConn.clear();
+		gCmdConn.clear();
+		gSigConn.clear();
+		gMediaConn.clear();
+	}
+
 	createStats();
 
 	gConfig.setCrossCheckHook(&configurationCrossCheck);
@@ -346,21 +357,12 @@ int main(int argc, char *argv[])
 	//gSubscriberRegistry.init();
 	gParser.addCommands();
 
-	if (gLogConn.valid() && gCmdConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
-		COUT("\nConnected to YBTS\n");
-		Log::gHook = Connection::LogConnection::hook;
+	if (gCmdConn.valid()) {
 		gSigConn.start();
-		gMediaConn.start();
+		gLogConn.write("Starting M-BTS...");
 	}
-	else {
-		COUT("\nNot started by YBTS\n");
-		gLogConn.clear();
-		gCmdConn.clear();
-		gSigConn.clear();
-		gMediaConn.clear();
-	}
-
-	COUT("\nStarting the system...");
+	else
+		COUT("\nStarting the system...");
 
 	// is the radio running?
 	// Start the transceiver interface.
@@ -597,8 +599,9 @@ int main(int argc, char *argv[])
 
 	if (gCmdConn.valid()) {
 		close(sock);
+		gMediaConn.start();
+		gLogConn.write("M-BTS ready");
 		gSigConn.send(Connection::SigRadioReady);
-		gLogConn.write("MBTS ready");
 		while (gLogConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
 			char* line = gCmdConn.read();
 			if (!line)
