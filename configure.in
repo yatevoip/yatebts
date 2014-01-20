@@ -159,7 +159,7 @@ AC_MSG_RESULT([no (old $ver)])
 fi
 else
 AC_MSG_RESULT([no])
-AC_CHECK_HEADERS([udh/device.h], [HAVE_UHD=yes])
+AC_CHECK_HEADERS([uhd/device.h], [HAVE_UHD=yes])
 fi
 fi
 AC_SUBST(HAVE_UHD)

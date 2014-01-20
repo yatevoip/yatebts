@@ -36,6 +36,9 @@
 #include <Logger.h>
 #include <Configuration.h>
 
+#include "../Connection/GenConnection.h"
+#include "../Connection/LogConnection.h"
+
 #define CONFIGDB            "/etc/OpenBTS/OpenBTS.db"
 
 /* Samples-per-symbol for downlink path
