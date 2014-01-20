@@ -146,6 +146,13 @@ void startTransceiver()
 	// If the path is not defined, the transceiver must be started by some other process.
 	char TRXnumARFCN[4];
 	sprintf(TRXnumARFCN,"%1d",(int)gConfig.getNum("GSM.Radio.ARFCNs"));
+	std::string trx_path = transceiverPath;
+	try {
+		trx_path = gConfig.getStr("TRX.Path");
+		if (!trx_path.empty())
+			transceiverPath = trx_path.c_str();
+	}
+	catch (ConfigurationTableKeyNotFound e) { }
 	std::string extra_args = gConfig.getStr("TRX.Args");
 	LOG(NOTICE) << "starting transceiver " << transceiverPath << " w/ " << TRXnumARFCN << " ARFCNs and Args:" << extra_args;
 	gTransceiverPid = vfork();
