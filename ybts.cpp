@@ -122,6 +122,7 @@ enum RejectCause {
     CauseServNotSupp = 32,               // Service option not implemented
     CauseInvalidIE = 96,                 // Invalid mandatory IE
     CauseUnknownMsg = 97,                // Unknown or not implemented message
+    CauseUnexpectedMsg = 98,             // Message not compatible with protocol state
     CauseProtoError = 111,               // Protocol error, unspecified
 };
 
@@ -433,6 +434,8 @@ public:
 	    YBTSMessage m(SigL3Message,info,connId,xml);
 	    return send(m);
 	}
+    // Send L3 RR Status
+    bool sendRRMStatus(uint16_t connId, uint8_t code);
     bool start();
     void stop();
     // Drop a connection
@@ -448,6 +451,12 @@ public:
 	    Lock lck(m_connsMutex);
 	    return findConnInternal(conn,connId,create);
 	}
+    inline bool findConnCreate(RefPointer<YBTSConn>& conn, uint16_t connId,
+	bool& created) {
+	    Lock lck(m_connsMutex);
+	    created = !findConnInternal(conn,connId,false);
+	    return created ? findConnInternal(conn,connId,true) : false;
+	}
     inline bool findConn(RefPointer<YBTSConn>& conn, const YBTSUE* ue) {
 	    Lock lck(m_connsMutex);
 	    return findConnInternal(conn,ue);
@@ -459,6 +468,7 @@ protected:
     bool findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* ue);
     void changeState(int newStat);
     int handlePDU(YBTSMessage& msg);
+    void handleRRM(YBTSMessage& msg);
     int handleHandshake(YBTSMessage& msg);
     void printMsg(YBTSMessage& msg, bool recv);
     void setTimer(uint64_t& dest, const char* name, unsigned int intervalMs,
@@ -588,6 +598,7 @@ public:
     inline void saveUEs()
 	{ m_saveUEs = true; }
     void handlePDU(YBTSMessage& msg, YBTSConn* conn);
+    bool handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rsp);
     void newTMSI(String& tmsi);
 
 protected:
@@ -601,6 +612,8 @@ protected:
     void sendIdentityRequest(YBTSConn* conn, const char* type);
     // Find UE by target identity
     bool findUESafe(RefPointer<YBTSUE>& ue, const String& dest);
+    // Find UE by paging identity
+    bool findUEPagingSafe(RefPointer<YBTSUE>& ue, const String& paging);
     // Find UE by TMSI
     void findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi);
     // Find UE by IMEI
@@ -655,7 +668,7 @@ public:
     // Incoming (MO)
     YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef);
     // Outgoing (MT)
-    YBTSCallDesc(YBTSChan* chan, const XmlElement* xml, const String& callRef);
+    YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& callRef);
     inline bool incoming() const
 	{ return m_incoming; }
     inline const String& callRef() const
@@ -666,6 +679,12 @@ public:
 	{ return stateName(m_state); }
     inline const char* reason()
 	{ return m_reason.safe("normal"); }
+    inline bool setup(ObjList& children) {
+	    if (!sendCC(s_ccSetup,children))
+		return false;
+	    changeState(CallPresent);
+	    return true;
+	}
     void proceeding();
     void progressing(XmlElement* indicator);
     void alert(XmlElement* indicator);
@@ -683,7 +702,8 @@ public:
 	    changeState(Null);
 	    sendGSMRel(false,reason(),connId());
 	}
-    void sendCC(const String& tag, XmlElement* c1 = 0, XmlElement* c2 = 0);
+    bool sendCC(const String& tag, XmlElement* c1 = 0, XmlElement* c2 = 0);
+    bool sendCC(const String& tag, ObjList& children);
     void changeState(int newState);
     inline void setTimeout(unsigned int intervalMs, const Time& time = Time())
 	{ m_timeout = time + (uint64_t)intervalMs * 1000; }
@@ -731,7 +751,7 @@ public:
     // Check if MT call can be accepted
     bool canAcceptMT();
     // Start a MT call after UE connected
-    void startMT(YBTSConn* conn = 0);
+    void startMT(YBTSConn* conn = 0, bool pagingRsp = false);
     // BTS stopping notification
     inline void stop()
 	{ hangup("interworking"); }
@@ -759,6 +779,7 @@ protected:
 	}
     void allocTraffic();
     void startTraffic(uint8_t mode = 1);
+    void stopPaging();
     virtual void disconnected(bool final, const char *reason);
     virtual bool callRouted(Message& msg);
     virtual void callAccept(Message& msg);
@@ -789,7 +810,7 @@ protected:
     bool m_haveTout;
     uint64_t m_tout;
     YBTSCallDesc* m_activeCall;
-    XmlElement* m_pending;
+    ObjList* m_pending;
 };
 
 class YBTSDriver : public Driver
@@ -828,7 +849,7 @@ public:
     // Handle call control messages
     void handleCC(YBTSMessage& m, YBTSConn* conn);
     // Check if a MT service is pending for new connection and start it
-    void checkMtService(YBTSUE* ue, YBTSConn* conn);
+    void checkMtService(YBTSUE* ue, YBTSConn* conn, bool pagingRsp = false);
     // Add a pending (wait termination) call
     void addTerminatedCall(YBTSCallDesc* call);
     // Check terminated calls timeout
@@ -1056,6 +1077,16 @@ static const TokenDict s_ccErrorDict[] = {
   {"interworking",                  127}, // Interworking, unspecified
   {0,0}
 };
+
+// Append an xml element from list parameter
+static inline bool addXmlFromParam(ObjList& dest, const NamedList& list,
+    const char* tag, const String& param)
+{
+    const String& p = list[param];
+    if (p)
+	dest.append(new XmlElement(tag,p));
+    return !p.null();
+}
 
 // safely retrieve a global string
 static inline void getGlobalStr(String& buf, const String& value)
@@ -1824,6 +1855,15 @@ int YBTSSignalling::checkTimers(const Time& time)
     return Ok;
 }
 
+bool YBTSSignalling::sendRRMStatus(uint16_t connId, uint8_t code)
+{
+    XmlElement* rrm = new XmlElement("RRM");
+    XmlElement* ch =  new XmlElement(s_message);
+    ch->setAttribute(s_type,"RRStatus");
+    ch->addChildSafe(new XmlElement("RRCause",String(code)));
+    return sendL3Conn(connId,rrm);
+}
+
 bool YBTSSignalling::start()
 {
     stop();
@@ -2045,6 +2085,8 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		    findConn(conn,msg.connId(),false);
 		    __plugin.handleCC(msg,conn);
 		}
+    		else if (proto == YSTRING("RRM"))
+		    handleRRM(msg);
 		else
 		    Debug(this,DebugNote,"Unknown '%s' protocol in %s [%p]",
 			proto.c_str(),msg.name(),this);
@@ -2067,6 +2109,27 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
     return Ok;
+}
+
+void YBTSSignalling::handleRRM(YBTSMessage& m)
+{
+    XmlElement* ch = m.xml() ? m.xml()->findFirstChild(&s_message) : 0;
+    if (!ch) {
+	Debug(this,DebugNote,"Empty xml in %s [%p]",m.name(),this);
+	return;
+    }
+    const String* t = ch->getAttribute(s_type);
+    if (!t)
+	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
+    else if (*t == YSTRING("PagingResponse")) {
+	RefPointer<YBTSConn> conn;
+	bool newConn = false;
+	findConnCreate(conn,m.connId(),newConn);
+	if (!__plugin.mm()->handlePagingResponse(m,conn,*ch) && newConn)
+	    dropConn(m.connId(),true);
+    }
+    else
+	Debug(this,DebugMild,"Unhandled '%s' in %s [%p]",t->c_str(),m.name(),this);
 }
 
 int YBTSSignalling::handleHandshake(YBTSMessage& msg)
@@ -2526,6 +2589,51 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
     }
 }
 
+bool YBTSMM::handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rsp)
+{
+    XmlElement* x = rsp.findFirstChild(&s_mobileIdent);
+    x = x ? x->findFirstChild() : 0;
+    if (!x) {
+	Debug(this,DebugInfo,"PagingResponse with no identity on conn=%u [%p]",
+	    m.connId(),this);
+	__plugin.signalling()->sendRRMStatus(m.connId(),CauseInvalidIE);
+	return false;
+    }
+    const String& type = x->getTag();
+    const String& ident = x->getText();
+    if (!ident) {
+	Debug(this,DebugNote,"PagingResponse with empty identity '%s' conn=%u [%p]",
+	    type.c_str(),m.connId(),this);
+	__plugin.signalling()->sendRRMStatus(m.connId(),CauseInvalidIE);
+	return false;
+    }
+    String paging = type + ident;
+    RefPointer<YBTSUE> ue;
+    if (!findUEPagingSafe(ue,paging)) {
+	Debug(this,DebugNote,"PagingResponse %s=%s conn=%u for unknown UE [%p]",
+	    type.c_str(),ident.c_str(),m.connId(),this);
+	__plugin.signalling()->sendRRMStatus(m.connId(),CauseUnexpectedMsg);
+	return false;
+    }
+    Debug(this,DebugAll,"PagingResponse with %s=%s conn=%u [%p]",
+	type.c_str(),ident.c_str(),m.connId(),this);
+    Lock lck(ue);
+    if (paging != ue->paging()) {
+	// Paging done meanwhile
+	return false;
+    }
+    ue->m_paging.clear();
+    lck.drop();
+    if (conn)
+	setConnUE(*conn,ue,rsp);
+    __plugin.checkMtService(ue,conn,true);
+    // Reset UE paging counter if not restarted
+    lck.acquire(ue);
+    if (!ue->paging())
+	ue->m_pageCnt = 0;
+    return true;
+}
+
 void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
@@ -2860,6 +2968,26 @@ bool YBTSMM::findUESafe(RefPointer<YBTSUE>& ue, const String& dest)
     return ue != 0;
 }
 
+// Find UE by paging identity
+bool YBTSMM::findUEPagingSafe(RefPointer<YBTSUE>& ue, const String& paging)
+{
+    if (!paging)
+	return false;
+    Lock lck(m_ueMutex);
+    for (unsigned int n = 0; n < m_ueHashLen; n++) {
+	ObjList& list = m_ueTMSI[n];
+	for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
+	    YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	    Lock lckUE(u);
+	    if (paging == u->paging()) {
+		ue = u;
+		return (ue != 0);
+	    }
+	}
+    }
+    return false;
+}
+
 // Find UE by TMSI
 void YBTSMM::findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi)
 {
@@ -3007,7 +3135,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, 
 }
 
 // Outgoing
-YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement* xml, const String& callRef)
+YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& callRef)
     : YBTSConnIdHolder(chan->connId()),
     m_state(Null),
     m_incoming(false),
@@ -3017,9 +3145,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement* xml, const String& 
     m_chan(chan),
     m_callRef(callRef)
 {
-    if (!xml)
-	return;
-    // TODO: pick relevant info from XML
+    // TODO: pick relevant info from XML list
 }
 
 void YBTSCallDesc::proceeding()
@@ -3056,7 +3182,7 @@ void YBTSCallDesc::sendStatus(const char* cause)
     sendCC(s_ccStatus,buildCCCause(cause),buildCCCallState(m_state));
 }
 
-void YBTSCallDesc::sendCC(const String& tag, XmlElement* c1, XmlElement* c2)
+bool YBTSCallDesc::sendCC(const String& tag, XmlElement* c1, XmlElement* c2)
 {
     XmlElement* ch = 0;
     XmlElement* cc = __plugin.buildCC(ch,tag,callRef(),m_incoming);
@@ -3068,7 +3194,18 @@ void YBTSCallDesc::sendCC(const String& tag, XmlElement* c1, XmlElement* c2)
 	TelEngine::destruct(c1);
 	TelEngine::destruct(c2);
     }
-    __plugin.signalling()->sendL3Conn(connId(),cc);
+    return __plugin.signalling()->sendL3Conn(connId(),cc);
+}
+
+bool YBTSCallDesc::sendCC(const String& tag, ObjList& children)
+{
+    XmlElement* ch = 0;
+    XmlElement* cc = __plugin.buildCC(ch,tag,callRef(),m_incoming);
+    for (ObjList* o = ch ? children.skipNull() : 0; o; o = o->skipNull()) {
+	XmlElement* x = static_cast<XmlElement*>(o->remove(false));
+	ch->addChildSafe(x);
+    }
+    return __plugin.signalling()->sendL3Conn(connId(),cc);
 }
 
 void YBTSCallDesc::changeState(int newState)
@@ -3186,16 +3323,12 @@ bool YBTSChan::initOutgoing(Message& msg)
 {
     if (m_pending || !ue())
 	return false;
-/*
-    XmlElement* xml = 
-    Lock lck(this);
-    if (m_pending) {
-	TelEngine::destruct(xml);
+    Lock lck(m_mutex);
+    if (m_pending)
 	return false;
-    }
-    m_pending = xml;
+    m_pending = new ObjList;
+    addXmlFromParam(*m_pending,msg,"CallingPartyBCDNumber",YSTRING("caller"));
     lck.drop();
-*/
     if (!m_conn)
 	m_paging = ue()->startPaging(ChanTypeVoice);
     initChan();
@@ -3346,31 +3479,49 @@ bool YBTSChan::canAcceptMT()
 }
 
 // Start a pending MT call
-void YBTSChan::startMT(YBTSConn* conn)
+void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 {
+    if (pagingRsp)
+	stopPaging();
     Lock lck(m_mutex);
     if (conn && !m_conn)
 	m_conn = conn;
     else
 	conn = m_conn;
-    if (!conn)
-	return;
-    XmlElement* xml = m_pending;
-    m_pending = 0;
-    if (!xml)
-	return;
-    if (m_cref >= 7) {
-	Debug(this,DebugWarn,"Could not allocate new call ref [%p]",this);
+    if (!conn) {
+	if (pagingRsp || !m_paging) {
+	    lck.drop();
+	    hangup("failure");
+	}
 	return;
     }
     String cref;
-    cref << YBTSCallDesc::prefix(true) << (uint16_t)m_cref++;
-    YBTSCallDesc* call = new YBTSCallDesc(this,xml,cref);
-    m_calls.append(call);
+    ObjList* xml = m_pending;
+    m_pending = 0;
+    if (xml) {
+	if (m_cref < 7)
+	    cref << YBTSCallDesc::prefix(true) << (uint16_t)m_cref++;
+	else
+	    Debug(this,DebugWarn,"Could not allocate new call ref [%p]",this);
+    }
+    if (!cref) {
+	TelEngine::destruct(xml);
+	if ((pagingRsp || !m_paging) && !m_calls.skipNull()) {
+	    lck.drop();
+	    hangup("failure");
+	}
+	return;
+    }
+    YBTSCallDesc* call = new YBTSCallDesc(this,*xml,cref);
+    if (call->setup(*xml)) {
+	m_calls.append(call);
+	return;
+    }
+    TelEngine::destruct(call);
+    bool done = (m_calls.skipNull() == 0);
     lck.drop();
-    call->sendCC(s_ccSetup,xml);
-    YBTSMessage m(SigL3Message,0,conn->connId(),xml);
-    __plugin.signalling()->send(m);
+    if (done)
+	hangup("failure");
 }
 
 void YBTSChan::allocTraffic()
@@ -3398,6 +3549,20 @@ void YBTSChan::startTraffic(uint8_t mode)
 	YBTSMessage m(SigStartMedia,mode,cid);
 	__plugin.signalling()->send(m);
     }
+}
+
+void YBTSChan::stopPaging()
+{
+    if (!m_paging)
+	return;
+    Lock lck(m_mutex);
+    if (!m_paging)
+	return;
+    RefPointer<YBTSUE> u = ue();
+    lck.drop();
+    if (u)
+	u->stopPaging();
+    u = 0;
 }
 
 YBTSCallDesc* YBTSChan::handleSetup(const XmlElement& xml, bool regular, const String* callRef)
@@ -3576,8 +3741,8 @@ void YBTSChan::checkTimers(Message& msg, const Time& tmr)
 void YBTSChan::destroyed()
 {
     hangup(0,true);
-    if (m_paging && ue())
-	ue()->stopPaging();
+    stopPaging();
+    TelEngine::destruct(m_pending);
     Debug(this,DebugCall,"Destroyed [%p]",this);
     Channel::destroyed();
 }
@@ -3736,13 +3901,13 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 }
 
 // Check and start pending MT services for new connection
-void YBTSDriver::checkMtService(YBTSUE* ue, YBTSConn* conn)
+void YBTSDriver::checkMtService(YBTSUE* ue, YBTSConn* conn, bool pagingRsp)
 {
     if (!ue || !conn)
 	return;
     RefPointer<YBTSChan> chan;
     if (findChan(ue,chan)) {
-	chan->startMT(conn);
+	chan->startMT(conn,pagingRsp);
 	return;
     }
     // TODO: check other MT services
