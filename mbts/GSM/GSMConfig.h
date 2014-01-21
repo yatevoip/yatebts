@@ -65,6 +65,7 @@ class GSMConfig {
 	PowerManager mPowerManager;
 
 	mutable Mutex mLock;						///< multithread access control
+	mutable Mutex mInfoLock;	///< protect SIx for multithread access
 
 	/**@name Groups of CCCH subchannels -- may intersect. */
 	//@{
@@ -143,7 +144,10 @@ class GSMConfig {
 
 	/** Start the internal control loops. */
 	void start();
-	
+
+	/** Mutex that must be locked during any SI access */
+	Mutex& infoLock() const { return mInfoLock; }
+
 	/**@name Get references to L2 frames for BCCH SI messages. */
 	//@{
 	const L2Frame& SI1Frame() const { return mSI1Frame; }

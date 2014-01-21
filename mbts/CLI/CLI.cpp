@@ -1043,6 +1043,7 @@ int sysinfo(int argc, char** argv, ostream& os)
 {
         if (argc!=1) return BAD_NUM_ARGS;
 
+	ScopedLock lock(gBTS.infoLock());
 	const GSM::L3SystemInformationType1 *SI1 = gBTS.SI1();
 	if (SI1) os << *SI1 << endl;
 	const GSM::L3SystemInformationType2 *SI2 = gBTS.SI2();

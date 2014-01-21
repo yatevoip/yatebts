@@ -67,6 +67,8 @@ void GSMConfig::start()
 
 void GSMConfig::regenerateBeacon()
 {
+	ScopedLock lock(mInfoLock);
+
 	// FIXME -- Need to implement BCCH_CHANGE_MARK
 
 	gReports.incr("OpenBTS.GSM.RR.BeaconRegenerated");
@@ -168,6 +170,7 @@ void GSMConfig::regenerateBeacon()
 
 void GSMConfig::regenerateSI5()
 {
+	ScopedLock lock(mInfoLock);
 	std::vector<unsigned> neighbors = gNeighborTable.ARFCNList();
 	// if the neighbor list is emtpy, put ourselves on it
 	if (neighbors.size()==0) neighbors.push_back(gConfig.getNum("GSM.Radio.C0"));
