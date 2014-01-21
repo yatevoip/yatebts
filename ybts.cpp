@@ -338,9 +338,14 @@ public:
     // Take out the pending XML element
     inline XmlElement* takeXml()
 	{ XmlElement* x = m_xml; m_xml = 0; return x; }
-    // Set pending XML. Return false if another XML element is already pending
-    inline bool setXml(XmlElement* xml)
-	{ return (!m_xml) && ((m_xml = xml)); }
+    // Set pending XML. Consume given pointer
+    // Return false if another XML element is already pending
+    inline bool setXml(XmlElement* xml) {
+	    if (!m_xml)
+		return ((m_xml = xml) != 0);
+	    TelEngine::destruct(xml);
+	    return false;
+	}
     // Send an L3 connection related message
     bool sendL3(XmlElement* xml, uint8_t info = 0);
 protected:
