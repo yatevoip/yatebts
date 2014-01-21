@@ -121,6 +121,7 @@ class YBTSDriver;
 enum RejectCause {
     CauseServNotSupp = 32,               // Service option not implemented
     CauseInvalidIE = 96,                 // Invalid mandatory IE
+    CauseUnknownMsg = 97,                // Unknown or not implemented message
     CauseProtoError = 111,               // Protocol error, unspecified
 };
 
@@ -2508,9 +2509,21 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
 	__plugin.signalling()->dropConn(m.connId(),true);
     else if (*t == YSTRING("IdentityResponse"))
 	handleIdentityResponse(m,*ch,conn);
-    else
-	// TODO: send MM status
-	Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",t->c_str(),m.name(),this);
+    else {
+	if (*t != YSTRING("MMStatus")) {
+	    Debug(this,DebugNote,"Unhandled '%s' in %s [%p]",t->c_str(),m.name(),this);
+	    XmlElement* ch = 0;
+	    XmlElement* mm = buildMM(ch,"MMStatus");
+	    if (ch)
+		ch->addChildSafe(new XmlElement("RejectCause",String(CauseUnknownMsg)));
+	    __plugin.signalling()->sendL3Conn(m.connId(),mm);
+	}
+	else {
+	    const String* cause = ch->childText(YSTRING("RejectCause"));
+	    Debug(this,DebugInfo,"Received %s cause='%s' [%p]",
+		t->c_str(),TelEngine::c_safe(cause),this);
+	}
+    }
 }
 
 void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
