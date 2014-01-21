@@ -4293,7 +4293,7 @@ bool YBTSDriver::received(Message& msg, int id)
 		if (res > 0 || (res < 0 && errno == ECHILD)) {
 		    lck.acquire(m_stateMutex);
 		    if (pid == m_peerPid) {
-			Debug(this,DebugInfo,"Peer pid %d vanished",m_peerPid);
+			Debug(this,DebugNote,"Peer pid %d vanished",m_peerPid);
 			m_restartTime = 0;
 			lck.drop();
 			restart();
