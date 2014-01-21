@@ -2541,8 +2541,8 @@ void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    if (!ok) {
 		Debug(this,DebugGoOn,"Failed to set UE in conn=%u [%p]",m.connId(),this);
 		__plugin.signalling()->dropConn(conn,true);
+		return;
 	    }
-	    return;
 	}
     }
     else {
