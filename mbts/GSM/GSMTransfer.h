@@ -503,6 +503,10 @@ class L2Frame : public BitVector {
 	*/
 	L2Frame(const L2Header&);
 
+	/** Assignment operator */
+	L2Frame& operator=(const L2Frame& other)
+	{ BitVector::operator=(other); mPrimitive=other.primitive(); return *this; }
+
 	/** Get the LPD from the L2 header.  Assumes address byte is first. */
 	unsigned LPD() const;
 
@@ -624,6 +628,10 @@ class L3Frame : public BitVector {
 
 	/** Get a frame from raw binary. */
 	L3Frame(const char*, size_t len);
+
+	/** Assignment operator */
+	L3Frame& operator=(const L3Frame& other)
+	{ BitVector::operator=(other); mPrimitive=other.primitive(); mL2Length=other.L2Length(); return *this; }
 
 	/** Protocol Discriminator, GSM 04.08 10.2. */
 	L3PD PD() const { return (L3PD)peekField(4,4); }

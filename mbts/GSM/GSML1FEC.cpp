@@ -1281,22 +1281,27 @@ void NDCCHL1Encoder::serviceLoop()
 void BCCHL1Encoder::generate()
 {
 	OBJLOG(DEBUG) << "BCCHL1Encoder " << mNextWriteTime;
+	// Make a copy of the desired frame with the system information locked
+	L2Frame frame;
+	gBTS.infoLock().lock();
 	// BCCH mapping, GSM 05.02 6.3.1.3
 	// Since we're not doing GPRS or VGCS, it's just SI1-4 over and over.
 	// pat 8-2011: If we are doing GPRS, the SI13 must be in slot 4.
 	switch (mNextWriteTime.TC()) {
 		// (pat) Maps to: XCCHL1Encoder::writeHighSide.
-		case 0: writeHighSide(gBTS.SI1Frame()); return;
-		case 1: writeHighSide(gBTS.SI2Frame()); return;
-		case 2: writeHighSide(gBTS.SI3Frame()); return;
-		case 3: writeHighSide(gBTS.SI4Frame()); return;
-		case 4: writeHighSide(GPRS::GPRSConfig::IsEnabled() ? gBTS.SI13Frame() : gBTS.SI3Frame());
-			return;
-		case 5: writeHighSide(gBTS.SI2Frame()); return;
-		case 6: writeHighSide(gBTS.SI3Frame()); return;
-		case 7: writeHighSide(gBTS.SI4Frame()); return;
+		case 0: frame = gBTS.SI1Frame(); break;
+		case 1: frame = gBTS.SI2Frame(); break;
+		case 2: frame = gBTS.SI3Frame(); break;
+		case 3: frame = gBTS.SI4Frame(); break;
+		case 4: frame = GPRS::GPRSConfig::IsEnabled() ? gBTS.SI13Frame() : gBTS.SI3Frame();
+			break;
+		case 5: frame = gBTS.SI2Frame(); break;
+		case 6: frame = gBTS.SI3Frame(); break;
+		case 7: frame = gBTS.SI4Frame(); break;
 		default: assert(0);
 	}
+	gBTS.infoLock().unlock();
+	writeHighSide(frame);
 }
 
 

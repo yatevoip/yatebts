@@ -374,11 +374,16 @@ void SACCHLogicalChannel::serviceLoop()
 		// Send alternating SI5/SI6.
 		// These L3Frames were created with the UNIT_DATA primivitive.
 		OBJLOG(DEBUG) << "sending SI5/6 on SACCH";
+		// To be thread safe make a copy with the system information locked
+		L3Frame frame;
+		gBTS.infoLock().lock();
 		if (count%2) {
 			gBTS.regenerateSI5();
-			LogicalChannel::send(gBTS.SI5Frame());
+			frame = gBTS.SI5Frame();
 		}
-		else LogicalChannel::send(gBTS.SI6Frame());
+		else frame = gBTS.SI6Frame();
+		gBTS.infoLock().unlock();
+		LogicalChannel::send(frame);
 		count++;
 
 		// Receive inbound messages.
