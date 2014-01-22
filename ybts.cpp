@@ -880,7 +880,7 @@ protected:
     void start();
     inline void startIdle() {
 	    Lock lck(m_stateMutex);
-	    if (!m_engineStart || m_state != Idle || Engine::exiting())
+	    if (m_stopped || !m_engineStart || m_state != Idle || Engine::exiting())
 		return;
 	    lck.drop();
 	    start();
@@ -917,6 +917,7 @@ protected:
     uint64_t m_peerCheckTime;
     unsigned int m_peerCheckIntervalMs;
     bool m_error;                        // Error flag, ignore restart
+    bool m_stopped;                      // Stopped by command, don't restart 
     bool m_stop;                         // Stop flag
     uint64_t m_stopTime;                 // Stop time
     bool m_restart;                      // Restart flag
@@ -956,6 +957,10 @@ static unsigned int s_t308 = 5000;       // REL sent (operator specific, no defa
 static unsigned int s_t313 = 5000;       // Send Connect, expect Connect Ack, clear call on expire
 
 static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
+
+static const String s_startCmd = "start";
+static const String s_stopCmd = "stop";
+static const String s_restartCmd = "restart";
 
 #define YBTS_MAKENAME(x) {#x, x}
 #define YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag,ptr) \
@@ -3786,6 +3791,8 @@ YBTSDriver::YBTSDriver()
     m_peerAlive(false),
     m_peerCheckTime(0),
     m_peerCheckIntervalMs(YBTS_PEERCHECK_DEF),
+    m_error(false),
+    m_stopped(false),
     m_stop(false),
     m_stopTime(0),
     m_restart(false),
@@ -4057,6 +4064,8 @@ void YBTSDriver::start()
 {
     stop();
     Lock lck(m_stateMutex);
+    if (m_stopped)
+	return;
     changeState(Starting);
     while (true) {
 	// Log interface
@@ -4109,7 +4118,8 @@ void YBTSDriver::stop()
     m_haveCalls = false;
     unlock();
     Lock lck(m_stateMutex);
-    if (state() != Idle)
+    bool stopped = (state() != Idle);
+    if (stopped)
 	Debug(this,DebugAll,"Stopping ...");
     m_stop = false;
     m_stopTime = 0;
@@ -4125,6 +4135,8 @@ void YBTSDriver::stop()
     changeState(Idle);
     lck.drop();
     channels().clear();
+    if (stopped && m_stopped)
+	Debug(this,DebugNote,"Stopped, waiting for command to start");
 }
 
 bool YBTSDriver::startPeer()
@@ -4528,6 +4540,23 @@ bool YBTSDriver::received(Message& msg, int id)
 bool YBTSDriver::commandExecute(String& retVal, const String& line)
 {
     String tmp = line;
+    if (tmp.startSkip(name())) {
+	if (tmp.startSkip(s_startCmd)) {
+	    m_stopped = false;
+	    startIdle();
+	}
+	else if (tmp.startSkip(s_stopCmd)) {
+	    m_stopped = true;
+	    stopNoRestart();
+	}
+	else if (tmp.startSkip(s_restartCmd)) {
+	    m_stopped = false;
+	    restart(tmp.toInteger(1,0,0));
+	}
+	else
+	    return Driver::commandExecute(retVal,line);
+	return true;
+    }
     if (m_command && tmp.startSkip(BTS_CMD)) {
 	if (tmp.trimSpaces().null())
 	    return false;
@@ -4552,8 +4581,15 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
 
 bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const String& partWord)
 {
-    if (partLine.null())
+    if (partLine.null()) {
 	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
+	itemComplete(msg.retValue(),name(),partWord);
+    }
+    else if (partLine == name()) {
+	itemComplete(msg.retValue(),s_startCmd,partWord);
+	itemComplete(msg.retValue(),s_stopCmd,partWord);
+	itemComplete(msg.retValue(),s_restartCmd,partWord);
+    }
     if (partLine == YSTRING("debug"))
 	itemComplete(msg.retValue(),YSTRING("transceiver"),partWord);
     if ((partLine == YSTRING("debug")) || (partLine == YSTRING("status")))
