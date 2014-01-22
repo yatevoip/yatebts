@@ -3477,8 +3477,10 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
     Lock lck(m_mutex);
     if (pagingRsp)
 	m_paging = false;
-    if (conn && !m_conn)
+    if (conn && !m_conn) {
 	m_conn = conn;
+	m_connId = conn->connId();
+    }
     else
 	conn = m_conn;
     if (!conn) {
