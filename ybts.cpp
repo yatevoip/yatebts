@@ -3137,6 +3137,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& cal
     m_chan(chan),
     m_callRef(callRef)
 {
+    *this << prefix(true) << m_callRef;
     // TODO: pick relevant info from XML list
 }
 
@@ -3492,7 +3493,7 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
     m_pending = 0;
     if (xml) {
 	if (m_cref < 7)
-	    cref << YBTSCallDesc::prefix(true) << (uint16_t)m_cref++;
+	    cref << (uint16_t)m_cref++;
 	else
 	    Debug(this,DebugWarn,"Could not allocate new call ref [%p]",this);
     }
