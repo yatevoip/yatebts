@@ -2618,7 +2618,7 @@ bool YBTSMM::handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rs
     Debug(this,DebugAll,"PagingResponse with %s=%s conn=%u [%p]",
 	type.c_str(),ident.c_str(),m.connId(),this);
     ue->stopPagingNow();
-    if (conn && !setConnUE(*conn,ue,rsp))
+    if (conn && setConnUE(*conn,ue,rsp) != 0)
 	conn = 0;
     // Always notify paging response even if something wetn wrong with the connection
     // This will allow entities waiting for paging response to stop waiting
