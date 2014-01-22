@@ -747,6 +747,8 @@ public:
     bool initOutgoing(Message& msg);
     // Handle CC messages
     bool handleCC(const XmlElement& xml, const String* callRef, bool tiFlag);
+    // Handle media start/alloc response
+    void handleMediaStartRsp(bool ok);
     // Connection released notification
     void connReleased();
     // Check if MT call can be accepted
@@ -803,6 +805,7 @@ protected:
     ObjList m_calls;
     String m_reason;
     uint8_t m_traffic;
+    bool m_waitForTraffic;
     uint8_t m_cref;
     char m_dtmf;
     bool m_mpty;
@@ -851,6 +854,8 @@ public:
     void handleCC(YBTSMessage& m, YBTSConn* conn);
     // Check if a MT service is pending for new connection and start it
     void checkMtService(YBTSUE* ue, YBTSConn* conn, bool pagingRsp = false);
+    // Handle media start/alloc response
+    void handleMediaStartRsp(YBTSConn* conn, bool ok);
     // Add a pending (wait termination) call
     void addTerminatedCall(YBTSCallDesc* call);
     // Check terminated calls timeout
@@ -2104,6 +2109,14 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		// TODO: put some error
 	    }
 	    return Ok;
+	case SigMediaStarted:
+	case SigMediaError:
+	    if (msg.connId()) {
+		RefPointer<YBTSConn> conn;
+		findConn(conn,msg.connId(),false);
+		__plugin.handleMediaStartRsp(conn,msg.primitive() == SigMediaStarted);
+	    }
+	    break;
 	case SigHandshake:
 	    return handleHandshake(msg);
 	case SigRadioReady:
@@ -3242,6 +3255,7 @@ YBTSChan::YBTSChan(YBTSConn* conn)
     m_mutex(true,"YBTSChan"),
     m_conn(conn),
     m_traffic(0),
+    m_waitForTraffic(false),
     m_cref(0),
     m_dtmf(0),
     m_mpty(false),
@@ -3483,6 +3497,26 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
     return true;
 }
 
+// Handle media start/alloc response
+void YBTSChan::handleMediaStartRsp(bool ok)
+{
+    if (!ok) {
+	Debug(this,DebugNote,"Got media error notification [%p]",this);
+	m_waitForTraffic = false;
+	hangup("nomedia");
+	return;
+    }
+    Debug(this,DebugAll,"Got media started notification [%p]",this);
+    if (m_waitForTraffic) {
+	Lock lck(m_mutex);
+	bool start = m_waitForTraffic && m_pending;
+	m_waitForTraffic = false;
+	lck.drop();
+	if (start)
+	    startMT();
+    }
+}
+
 // Connection released notification
 void YBTSChan::connReleased()
 {
@@ -3526,33 +3560,23 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 	}
 	return;
     }
-    String cref;
-    ObjList* xml = m_pending;
-    m_pending = 0;
-    if (xml) {
-	if (m_cref < 7)
-	    cref << (uint16_t)m_cref++;
-	else
+    if (m_cref >= 7 || !m_pending) {
+	if (m_cref >= 7)
 	    Debug(this,DebugWarn,"Could not allocate new call ref [%p]",this);
-    }
-    if (!cref) {
-	TelEngine::destruct(xml);
 	if ((pagingRsp || !m_paging) && !m_calls.skipNull()) {
 	    lck.drop();
 	    hangup("failure");
 	}
 	return;
     }
-    YBTSCallDesc* call = new YBTSCallDesc(this,*xml,cref);
-    if (call->setup(*xml)) {
-	m_calls.append(call);
+    startTraffic();
+    if (m_waitForTraffic)
 	return;
-    }
-    TelEngine::destruct(call);
-    bool done = (m_calls.skipNull() == 0);
-    lck.drop();
-    if (done)
-	hangup("failure");
+    String cref((uint16_t)m_cref++);
+    YBTSCallDesc* call = new YBTSCallDesc(this,*m_pending,cref);
+    m_calls.append(call);
+    call->setup(*m_pending);
+    TelEngine::destruct(m_pending);
 }
 
 void YBTSChan::allocTraffic()
@@ -3572,13 +3596,16 @@ void YBTSChan::startTraffic(uint8_t mode)
     uint16_t cid = 0;
     m_mutex.lock();
     bool send = m_conn && (mode != m_traffic);
-    if (send)
+    if (send) {
 	cid = m_conn->connId();
+	m_waitForTraffic = true;
+    }
     m_traffic = mode;
     m_mutex.unlock();
     if (send) {
 	YBTSMessage m(SigStartMedia,mode,cid);
 	__plugin.signalling()->send(m);
+	Debug(this,DebugAll,"Waiting for traffic channel allocation... [%p]",this);
     }
 }
 
@@ -3945,6 +3972,18 @@ void YBTSDriver::checkMtService(YBTSUE* ue, YBTSConn* conn, bool pagingRsp)
 	return;
     }
     // TODO: check other MT services
+}
+
+// Handle media start/alloc response
+void YBTSDriver::handleMediaStartRsp(YBTSConn* conn, bool ok)
+{
+    if (!conn)
+	return;
+    RefPointer<YBTSChan> chan;
+    if (findChan(conn->connId(),chan)) {
+	chan->handleMediaStartRsp(ok);
+	chan = 0;
+    }
 }
 
 // Add a pending (wait termination) call
