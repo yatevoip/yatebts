@@ -2116,7 +2116,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		findConn(conn,msg.connId(),false);
 		__plugin.handleMediaStartRsp(conn,msg.primitive() == SigMediaStarted);
 	    }
-	    break;
+	    return Ok;
 	case SigHandshake:
 	    return handleHandshake(msg);
 	case SigRadioReady:
