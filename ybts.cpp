@@ -2376,7 +2376,7 @@ bool YBTSUE::startPaging(BtsPagingChanType type)
 void YBTSUE::stopPaging()
 {
     lock();
-    bool stop = !--m_pageCnt;
+    bool stop = m_pageCnt && !--m_pageCnt;
     unlock();
     if (stop)
 	stopPagingNow();
@@ -2617,20 +2617,12 @@ bool YBTSMM::handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rs
     }
     Debug(this,DebugAll,"PagingResponse with %s=%s conn=%u [%p]",
 	type.c_str(),ident.c_str(),m.connId(),this);
-    Lock lck(ue);
-    if (paging != ue->paging()) {
-	// Paging done meanwhile
-	return false;
-    }
-    ue->m_paging.clear();
-    lck.drop();
-    if (conn)
-	setConnUE(*conn,ue,rsp);
+    ue->stopPagingNow();
+    if (conn && !setConnUE(*conn,ue,rsp))
+	conn = 0;
+    // Always notify paging response even if something wetn wrong with the connection
+    // This will allow entities waiting for paging response to stop waiting
     __plugin.checkMtService(ue,conn,true);
-    // Reset UE paging counter if not restarted
-    lck.acquire(ue);
-    if (!ue->paging())
-	ue->m_pageCnt = 0;
     return true;
 }
 
@@ -3481,9 +3473,9 @@ bool YBTSChan::canAcceptMT()
 // Start a pending MT call
 void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 {
-    if (pagingRsp)
-	stopPaging();
     Lock lck(m_mutex);
+    if (pagingRsp)
+	m_paging = false;
     if (conn && !m_conn)
 	m_conn = conn;
     else
@@ -3558,6 +3550,7 @@ void YBTSChan::stopPaging()
     Lock lck(m_mutex);
     if (!m_paging)
 	return;
+    m_paging = false;
     RefPointer<YBTSUE> u = ue();
     lck.drop();
     if (u)
