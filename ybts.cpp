@@ -217,6 +217,8 @@ public:
 
     static const TokenDict s_priName[];
 
+    DataBlock m_data;
+
 protected:
     uint8_t m_primitive;
     uint8_t m_info;
@@ -412,6 +414,8 @@ public:
     YBTSSignalling();
     inline int state() const
 	{ return m_state; }
+    inline bool dumpData() const
+	{ return m_printMsg > 0; }
     inline YBTSTransport& transport()
 	{ return m_transport; }
     inline GSML3Codec& codec()
@@ -494,7 +498,7 @@ protected:
 
     String m_name;
     int m_state;
-    bool m_printMsg;
+    int m_printMsg;
     int m_printMsgData;
     YBTSTransport m_transport;
     GSML3Codec m_codec;
@@ -1351,6 +1355,8 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	return 0;
     }
     YBTSMessage* m = new YBTSMessage;
+    if (recv->dumpData())
+	m->m_data.assign(data,len);
     m->m_primitive = *data++;
     m->m_info = *data++;
     len -= 2;
@@ -1819,7 +1825,7 @@ void YBTSCommand::stop()
 YBTSSignalling::YBTSSignalling()
     : Mutex(false,"YBTSSignalling"),
     m_state(Idle),
-    m_printMsg(true),
+    m_printMsg(-1),
     m_printMsgData(1),
     m_codec(0),
     m_connsMutex(false,"YBTSConns"),
@@ -1982,21 +1988,28 @@ void YBTSSignalling::processLoop()
     }
 }
 
+static inline int getPrintData(const NamedList& list, const String& param, int defVal)
+{
+    const String& s = list[param];
+    if (!s)
+	return defVal;
+    if (!s.isBoolean())
+	return 1;
+    return s.toBoolean() ? -1 : 0;
+}
+
 void YBTSSignalling::init(Configuration& cfg)
 {
     const NamedList& sect = safeSect(cfg,"signalling");
-    m_printMsg = sect.getBoolValue(YSTRING("print_msg"),true);
-    const String& md = sect[YSTRING("print_msg_data")];
-    if (!md.isBoolean())
-	m_printMsgData = 1;
-    else
-	m_printMsgData = md.toBoolean() ? -1 : 0;
+    m_printMsg = getPrintData(sect,YSTRING("print_msg"),-1);
+    m_printMsgData = getPrintData(sect,YSTRING("print_msg_data"),1);
 #ifdef DEBUG
     // Allow changing some data for debug purposes
     m_hkIntervalMs = sect.getIntValue("handshake_timeout",60000,5000,120000);
 
     String s;
-    s << "\r\nprint_msg=" << String::boolText(m_printMsg);
+    s << "\r\nprint_msg=" <<
+	(m_printMsg > 0 ? "dump" : String::boolText(m_printMsg < 0));
     s << "\r\nprint_msg_data=" <<
 	(m_printMsgData > 0 ? "verbose" : String::boolText(m_printMsgData < 0));
     s << "\r\nhandshake_timeout=" << m_hkIntervalMs;
@@ -2010,11 +2023,10 @@ void YBTSSignalling::init(Configuration& cfg)
 // Send a message
 bool YBTSSignalling::sendInternal(YBTSMessage& msg)
 {
+    YBTSMessage::build(this,msg.m_data,msg);
     if (m_printMsg && debugAt(DebugInfo))
 	printMsg(msg,false);
-    DataBlock tmp;
-    YBTSMessage::build(this,tmp,msg);
-    if (!m_transport.send(tmp))
+    if (!m_transport.send(msg.m_data))
 	return false;
     setHeartbeatTime();
     return true;
@@ -2182,6 +2194,11 @@ void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
 {
     String s;
     s << "\r\n-----";
+    if (dumpData() && msg.m_data.length()) {
+	String tmp;
+	tmp.hexify((void*)msg.m_data.data(),msg.m_data.length(),' ');
+	s << "\r\n" << tmp;
+    }
     const char* tmp = msg.name();
     s << "\r\nPrimitive: ";
     if (tmp)
