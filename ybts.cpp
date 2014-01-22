@@ -86,6 +86,7 @@ static const String s_ccStopDTMF = "StopDTMF";
 static const String s_ccKeypadFacility = "KeypadFacility";
 static const String s_ccHold = "Hold";
 static const String s_ccRetrieve = "Retrieve";
+static const String s_ccConfirmed = "CallConfirmed";
 static const String s_ccCallRef = "TID";
 static const String s_ccTIFlag = "TIFlag";
 static const String s_ccCalled = "CalledPartyBCDNumber";
@@ -3360,6 +3361,34 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
     YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->get());
     if (regular || emergency)
 	call->sendWrongState();
+    else if (*type == s_ccConnect) {
+	if (call->m_state == YBTSCallDesc::CallConfirmed ||
+	    call->m_state == YBTSCallDesc::CallReceived) {
+	    call->sendCC(s_ccConnectAck);
+	    call->changeState(YBTSCallDesc::Active);
+	    Engine::enqueue(message("call.answered"));
+	}
+	else
+	    call->sendWrongState();
+    }
+    else if (*type == s_ccAlerting) {
+	if (call->m_state == YBTSCallDesc::CallConfirmed) {
+	    call->changeState(YBTSCallDesc::CallReceived);
+	    Message* m = message("call.ringing");
+	    // TODO: set early media
+	    Engine::enqueue(m);
+	}
+	else
+	    call->sendWrongState();
+    }
+    else if (*type == s_ccConfirmed) {
+	if (call->m_state == YBTSCallDesc::CallPresent) {
+	    call->changeState(YBTSCallDesc::CallConfirmed);
+	    Engine::enqueue(message("call.progress"));
+	}
+	else
+	    call->sendWrongState();
+    }
     else if (*type == s_ccRel || *type == s_ccRlc || *type == s_ccDisc) {
 	Debug(this,DebugInfo,"Removing call '%s' [%p]",call->c_str(),this);
 	if (m_activeCall == call)
@@ -3442,6 +3471,8 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
 	    // TODO
 	}
     }
+    else if (*type == s_ccProceeding || *type == s_ccProgress)
+	call->sendWrongState();
     else
 	call->sendStatus("unknown-message");
     return true;
