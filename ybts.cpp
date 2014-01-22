@@ -3532,6 +3532,12 @@ void YBTSChan::handleMediaStartRsp(bool ok)
 	if (start)
 	    startMT();
     }
+    if (__plugin.media()) {
+	if (!getSource())
+	    setSource(__plugin.media()->buildSource(connId()));
+	if (!getConsumer())
+	    setConsumer(__plugin.media()->buildConsumer(connId()));
+    }
 }
 
 // Connection released notification
