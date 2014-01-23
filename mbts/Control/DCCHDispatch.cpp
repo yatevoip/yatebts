@@ -27,6 +27,8 @@
 //#include <GSML3MMMessages.h>
 #include <GSML3RRMessages.h>
 
+#include <Sgsn.h>
+
 #include <Logger.h>
 #undef WARNING
 #include <Reporting.h>
@@ -34,6 +36,7 @@
 
 using namespace std;
 using namespace GSM;
+using namespace SGSN;
 using namespace Control;
 using namespace Connection;
 
@@ -51,6 +54,16 @@ static bool connDispatchRR(LogicalChannel* chan, unsigned int id, L3Frame* frame
 			return true;
 		case L3RRMessage::AssignmentFailure:
 			gSigConn.send(SigMediaError,ErrInterworking,id);
+			return true;
+		case L3RRMessage::GPRSSuspensionRequest:
+			{
+				L3GPRSSuspensionRequest* msg = static_cast<L3GPRSSuspensionRequest*>(parseL3RR(*frame));
+				if (msg) {
+					if (!Sgsn::handleGprsSuspensionRequest(msg->mTLLI,msg->mRaId))
+						LOG(NOTICE) << "ignoring GPRS suspension request on connection " << id;
+					delete msg;
+				}
+			}
 			return true;
 	}
 	return false;
