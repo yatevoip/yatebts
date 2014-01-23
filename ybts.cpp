@@ -787,6 +787,22 @@ protected:
     void allocTraffic();
     void startTraffic(uint8_t mode = 1);
     void stopPaging();
+    inline Message* takeRoute() {
+	    Lock lck(driver());
+	    Message* m = m_route;
+	    m_route = 0;
+	    return m;
+	}
+    inline bool route() {
+	    Message* m = takeRoute();
+	    if (!m)
+		return true;
+	    m->userData(0);
+	    return startRouter(m);
+	}
+    // Release route message.
+    // Deref if we have a pending message and not final and not connected
+    bool releaseRoute(bool final = false);
     virtual void disconnected(bool final, const char *reason);
     virtual bool callRouted(Message& msg);
     virtual void callAccept(Message& msg);
@@ -795,10 +811,10 @@ protected:
     virtual bool msgRinging(Message& msg);
     virtual bool msgAnswered(Message& msg);
     virtual void checkTimers(Message& msg, const Time& tmr);
+    virtual bool msgDrop(Message& msg, const char* reason);
 #if 0
     virtual bool msgTone(Message& msg, const char* tone);
     virtual bool msgText(Message& msg, const char* text);
-    virtual bool msgDrop(Message& msg, const char* reason);
     virtual bool msgUpdate(Message& msg);
 #endif
     virtual void destroyed();
@@ -819,6 +835,7 @@ protected:
     uint64_t m_tout;
     YBTSCallDesc* m_activeCall;
     ObjList* m_pending;
+    Message* m_route;
 };
 
 class YBTSDriver : public Driver
@@ -2197,7 +2214,7 @@ void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
     if (dumpData() && msg.m_data.length()) {
 	String tmp;
 	tmp.hexify((void*)msg.m_data.data(),msg.m_data.length(),' ');
-	s << "\r\n" << tmp;
+	s << "\r\nBUFFER: " << tmp;
     }
     const char* tmp = msg.name();
     s << "\r\nPrimitive: ";
@@ -3281,7 +3298,8 @@ YBTSChan::YBTSChan(YBTSConn* conn)
     m_haveTout(false),
     m_tout(0),
     m_activeCall(0),
-    m_pending(0)
+    m_pending(0),
+    m_route(0)
 {
     if (!m_conn)
 	return;
@@ -3305,7 +3323,8 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
     m_haveTout(false),
     m_tout(0),
     m_activeCall(0),
-    m_pending(0)
+    m_pending(0),
+    m_route(0)
 {
     if (!m_ue)
 	return;
@@ -3329,23 +3348,26 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
 	caller << "IMSI" << ue()->imsi();
     else if (ue()->imei())
 	caller << "IMEI" << ue()->imei();
-    Message* r = message("call.preroute");
-    r->addParam("caller",caller,false);
-    r->addParam("called",call->m_called,false);
-    r->addParam("username",ue()->imsi(),false);
-    r->addParam("imei",ue()->imei(),false);
-    r->addParam("emergency",String::boolText(!call->m_regular));
+    m_route = message("call.preroute");
+    // Keep the channel alive if not routing
+    if (m_waitForTraffic)
+	m_route->userData(this);
+    m_route->addParam("caller",caller,false);
+    m_route->addParam("called",call->m_called,false);
+    m_route->addParam("username",ue()->imsi(),false);
+    m_route->addParam("imei",ue()->imei(),false);
+    m_route->addParam("emergency",String::boolText(!call->m_regular));
     if (xml.findFirstChild(&s_ccSsCLIR))
-	r->addParam("privacy",String::boolText(true));
+	m_route->addParam("privacy",String::boolText(true));
     else if (xml.findFirstChild(&s_ccSsCLIP))
-	r->addParam("privacy",String::boolText(false));
+	m_route->addParam("privacy",String::boolText(false));
     Message* s = message("chan.startup");
     s->addParam("caller",caller,false);
     s->addParam("called",call->m_called,false);
     lck.drop();
     Engine::enqueue(s);
     initChan();
-    return startRouter(r);
+    return m_waitForTraffic ? true : route();
 }
 
 // Init outgoing chan. Return false to destruct the channel
@@ -3524,9 +3546,15 @@ void YBTSChan::handleMediaStartRsp(bool ok)
 	return;
     }
     Debug(this,DebugAll,"Got media started notification [%p]",this);
+    if (isIncoming()) {
+	m_waitForTraffic = false;
+	if (m_route && !route())
+	    deref();
+	return;
+    }
     if (m_waitForTraffic) {
 	Lock lck(m_mutex);
-	bool start = m_waitForTraffic && m_pending;
+	bool start = (m_pending != 0);
 	m_waitForTraffic = false;
 	lck.drop();
 	if (start)
@@ -3667,15 +3695,18 @@ YBTSCallDesc* YBTSChan::handleSetup(const XmlElement& xml, bool regular, const S
 	startTraffic();
 	return call;
     }
+    bool rlc = !m_waitForTraffic;
     lck.drop();
     Debug(this,DebugNote,"Refusing subsequent call '%s' [%p]",call->c_str(),this);
-    call->releaseComplete();
+    if (rlc)
+	call->releaseComplete();
     TelEngine::destruct(call);
     return 0;
 }
 
 void YBTSChan::hangup(const char* reason, bool final)
 {
+    releaseRoute();
     ObjList calls;
     Lock lck(m_mutex);
     setReason(reason);
@@ -3706,8 +3737,25 @@ void YBTSChan::hangup(const char* reason, bool final)
     if (res)
 	m->setParam("reason",res);
     Engine::enqueue(m);
-    if (!final)
-	disconnect(res,parameters());
+    if (final)
+	return;
+    paramMutex().lock();
+    NamedList tmp(parameters());
+    paramMutex().unlock();
+    disconnect(res,tmp);
+}
+
+// Release route message.
+// Deref if we have a pending message and not final and not connected
+bool YBTSChan::releaseRoute(bool final)
+{
+    Message* m = takeRoute();
+    if (!m)
+	return false;
+    if (!(final || getPeer()))
+	deref();
+    TelEngine::destruct(m);
+    return true;
 }
 
 void YBTSChan::disconnected(bool final, const char *reason)
@@ -3820,11 +3868,19 @@ void YBTSChan::checkTimers(Message& msg, const Time& tmr)
     }
 }
 
+bool YBTSChan::msgDrop(Message& msg, const char* reason)
+{
+    releaseRoute();
+    setReason(TelEngine::null(reason) ? "dropped" : reason,&m_mutex);
+    return Channel::msgDrop(msg,reason);
+}
+
 void YBTSChan::destroyed()
 {
     hangup(0,true);
     stopPaging();
     TelEngine::destruct(m_pending);
+    releaseRoute(true);
     Debug(this,DebugCall,"Destroyed [%p]",this);
     Channel::destroyed();
 }
