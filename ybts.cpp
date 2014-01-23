@@ -361,6 +361,9 @@ protected:
     YBTSSignalling* m_owner;
     XmlElement* m_xml;
     RefPointer<YBTSUE> m_ue;
+    // The following data is used by YBTSSignalling and protected by conns list mutex
+    uint64_t m_timeout;                  // Connection timeout
+    unsigned int m_calls;                // Calls using this connection
 };
 
 class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
@@ -449,6 +452,11 @@ public:
 	    if (conn)
 		dropConn(conn->connId(),notifyPeer);
 	}
+    // Increase/decrease connection usage. Update its timeout
+    // Return false if connection is not found
+    bool setConnUsage(uint16_t connId, bool on, bool call);
+    inline bool setConnUsageCall(uint16_t connId, bool on)
+	{ return setConnUsage(connId,on,true); }
     // Read socket. Parse and handle received data
     virtual void processLoop();
     void init(Configuration& cfg);
@@ -469,6 +477,7 @@ public:
 
 protected:
     bool sendInternal(YBTSMessage& msg);
+    YBTSConn* findConnInternal(uint16_t connId);
     bool findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create);
     bool findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* ue);
     void changeState(int newStat);
@@ -510,6 +519,10 @@ protected:
     unsigned int m_hkIntervalMs;         // Time (in miliseconds) to wait for handshake
     unsigned int m_hbIntervalMs;         // Heartbeat interval in miliseconds
     unsigned int m_hbTimeoutMs;          // Heartbeat timeout in miliseconds
+    // Connection timeout: protected by m_connsMutex
+    bool m_haveConnTout;                 // Flag indicating we have connections to timeout
+    uint64_t m_connsTimeout;             // Minimum connections timeout
+    unsigned int m_connNoCallIntervalMs; // Interval to timeout a connection after all calls terminate
 };
 
 class YBTSMedia : public GenObject, public DebugEnabler, public Mutex,
@@ -674,6 +687,7 @@ public:
     YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef);
     // Outgoing (MT)
     YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& callRef);
+    ~YBTSCallDesc();
     inline bool incoming() const
 	{ return m_incoming; }
     inline const String& callRef() const
@@ -1638,7 +1652,8 @@ XmlElement* YBTSLAI::build() const
 YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     : Mutex(false,"YBTSConn"),
     YBTSConnIdHolder(connId),
-    m_owner(owner), m_xml(0)
+    m_owner(owner), m_xml(0),
+    m_timeout(0), m_calls(0)
 {
 }
 
@@ -1850,7 +1865,10 @@ YBTSSignalling::YBTSSignalling()
     m_hbTime(0),
     m_hkIntervalMs(YBTS_HK_INTERVAL_DEF),
     m_hbIntervalMs(YBTS_HB_INTERVAL_DEF),
-    m_hbTimeoutMs(YBTS_HB_TIMEOUT_DEF)
+    m_hbTimeoutMs(YBTS_HB_TIMEOUT_DEF),
+    m_haveConnTout(false),
+    m_connsTimeout(0),
+    m_connNoCallIntervalMs(2000)
 {
     m_name = "ybts-signalling";
     debugName(m_name);
@@ -1884,6 +1902,30 @@ int YBTSSignalling::checkTimers(const Time& time)
 	else if (m_state == Running) {
 	    changeState(Closing);
 	    return Error;
+	}
+    }
+    lck.drop();
+    if (m_haveConnTout) {
+	ObjList remove;
+	m_connsMutex.lock();
+	if (m_connsTimeout && m_connsTimeout <= time) {
+	    m_connsTimeout = 0;
+	    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
+		YBTSConn* c = static_cast<YBTSConn*>(o->get());
+		if (!c->m_timeout)
+		    continue;
+		if (c->m_timeout <= time)
+		    remove.append(new String(c->connId()));
+		else if (!m_connsTimeout || m_connsTimeout > c->m_timeout)
+		    m_connsTimeout = c->m_timeout;
+	    }
+	}
+	m_haveConnTout = (m_connsTimeout != 0);
+	m_connsMutex.unlock();
+	for (ObjList* o = remove.skipNull(); o; o = o->skipNext()) {
+	    String* s = static_cast<String*>(o->get());
+	    Debug(this,DebugAll,"Connection %s idle timeout [%p]",s->c_str(),this);
+	    dropConn(s->toInteger(),true);
 	}
     }
     return Ok;
@@ -1965,6 +2007,36 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
     // TODO:
     // Drop pending location update
     Debug(this,DebugStub,"dropConn() incomplete");
+}
+
+// Increase/decrease connection usage. Update its timeout
+// Return false if connection is not found
+bool YBTSSignalling::setConnUsage(uint16_t connId, bool on, bool call)
+{
+    if (!call)
+	return false;
+    Lock lck(m_connsMutex);
+    YBTSConn* conn = findConnInternal(connId);
+    if (!conn)
+	return false;
+    if (call) {
+	if (on)
+	    conn->m_calls++;
+	else if (conn->m_calls)
+	    conn->m_calls--;
+    }
+    uint64_t tout = 0;
+    if (conn->m_calls)
+	conn->m_timeout = 0;
+    else if (!conn->m_timeout) {
+	conn->m_timeout = Time::now() + (uint64_t)m_connNoCallIntervalMs * 1000;
+	tout = conn->m_timeout;
+    }
+    if (tout && (!m_connsTimeout || tout < m_connsTimeout)) {
+	m_haveConnTout = true;
+	m_connsTimeout = tout;
+    }
+    return true;
 }
 
 // Read socket. Parse and handle received data
@@ -2049,15 +2121,23 @@ bool YBTSSignalling::sendInternal(YBTSMessage& msg)
     return true;
 }
 
+YBTSConn* YBTSSignalling::findConnInternal(uint16_t connId)
+{
+    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
+	YBTSConn* c = static_cast<YBTSConn*>(o->get());
+	if (c->connId() == connId)
+	    return c;
+    }
+    return 0;
+}
+
 bool YBTSSignalling::findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create)
 {
     conn = 0;
-    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
-	YBTSConn* c = static_cast<YBTSConn*>(o->get());
-	if (c->connId() == connId) {
-	    conn = c;
-	    return true;
-	}
+    YBTSConn* c = findConnInternal(connId);
+    if (c) {
+	conn = c;
+	return true;
     }
     if (create) {
 	conn = new YBTSConn(this,connId);
@@ -3165,6 +3245,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, 
     m_relSent(0),
     m_chan(chan)
 {
+    __plugin.signalling()->setConnUsageCall(connId(),true);
     if (callRef) {
 	m_callRef = *callRef;
 	*this << prefix(false) << m_callRef;
@@ -3190,8 +3271,15 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& cal
     m_chan(chan),
     m_callRef(callRef)
 {
+    __plugin.signalling()->setConnUsageCall(connId(),true);
     *this << prefix(true) << m_callRef;
     // TODO: pick relevant info from XML list
+}
+
+YBTSCallDesc::~YBTSCallDesc()
+{
+    if (__plugin.signalling())
+	__plugin.signalling()->setConnUsageCall(connId(),false);
 }
 
 void YBTSCallDesc::proceeding()
@@ -3303,6 +3391,7 @@ YBTSChan::YBTSChan(YBTSConn* conn)
 {
     if (!m_conn)
 	return;
+    __plugin.signalling()->setConnUsageCall(connId(),true);
     m_address = m_conn->ue()->imsi();
     Debug(this,DebugCall,"Incoming imsi=%s conn=%u [%p]",
 	m_address.c_str(),connId(),this);
@@ -3326,6 +3415,8 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
     m_pending(0),
     m_route(0)
 {
+    if (m_conn)
+	__plugin.signalling()->setConnUsageCall(connId(),true);
     if (!m_ue)
 	return;
     m_address = ue->imsi();
@@ -3601,6 +3692,7 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
     if (conn && !m_conn) {
 	m_conn = conn;
 	m_connId = conn->connId();
+	__plugin.signalling()->setConnUsageCall(m_connId,true);
     }
     else
 	conn = m_conn;
@@ -3881,6 +3973,8 @@ void YBTSChan::destroyed()
     stopPaging();
     TelEngine::destruct(m_pending);
     releaseRoute(true);
+    if (m_conn && __plugin.signalling())
+	__plugin.signalling()->setConnUsageCall(m_conn->connId(),false);
     Debug(this,DebugCall,"Destroyed [%p]",this);
     Channel::destroyed();
 }
