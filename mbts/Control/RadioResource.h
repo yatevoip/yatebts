@@ -29,8 +29,6 @@ namespace GSM {
 class Time;
 class TCHFACCHLogicalChannel;
 class SACCHLogicalChannel;
-class L3PagingResponse;
-class L3AssignmentComplete;
 class L3HandoverComplete;
 class L3HandoverAccess;
 };
@@ -48,13 +46,6 @@ namespace Control {
 	@param SACCH The SACCH in question.
 */
 void HandoverDetermination(const GSM::L3MeasurementResults &measurements, GSM::SACCHLogicalChannel* SACCH);
-
-
-/** Find and complete the in-process transaction associated with a paging repsonse. */
-void PagingResponseHandler(const GSM::L3PagingResponse*, GSM::LogicalChannel*);
-
-/** Find and compelte the in-process transaction associated with a completed assignment. */
-void AssignmentCompleteHandler(const GSM::L3AssignmentComplete*, GSM::TCHFACCHLogicalChannel*);
 
 /** Save handover parameters from L1 in the proper transaction record. */
 bool SaveHandoverAccess(unsigned handoverReference, float RSSI, float timingError, const GSM::Time& timestamp);
