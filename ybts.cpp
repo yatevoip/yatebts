@@ -102,6 +102,7 @@ class YBTSThread;
 class YBTSThreadOwner;
 class YBTSMessage;                       // YBTS <-> BTS PDU
 class YBTSTransport;
+class YBTSGlobalThread;                  // GenObject and Thread descendent
 class YBTSLAI;                           // Holds local area id
 class YBTSConn;                          // A logical connection
 class YBTSLog;                           // Log interface
@@ -109,7 +110,7 @@ class YBTSCommand;                       // Command interface
 class YBTSSignalling;                    // Signalling interface
 class YBTSMedia;                         // Media interface
 class YBTSUE;                            // A registered equipment
-class YBTSLocationUpd;                   // Pending location update from UE
+class YBTSLocationUpd;                   // Running location update from UE
 class YBTSMM;                            // Mobility management entity
 class YBTSDataSource;
 class YBTSDataConsumer;
@@ -284,6 +285,31 @@ protected:
     Socket m_remoteSocket;
     DataBlock m_readBuf;
     unsigned int m_maxRead;
+};
+
+class YBTSGlobalThread : public Thread, public GenObject
+{
+public:
+    inline YBTSGlobalThread(const char* name, Priority prio = Normal)
+	: Thread(name,prio)
+	{}
+    ~YBTSGlobalThread()
+	{ set(this,false); }
+    inline void set(YBTSGlobalThread* th, bool add) {
+	    if (!th)
+		return;
+	    Lock lck(s_threadsMutex);
+	    if (add)
+		s_threads.append(th)->setDelete(false);
+	    else
+		s_threads.remove(th,false);
+	}
+    // Cancel all threads, wait to terminate if requested
+    // Return true if there are no running threads
+    static bool cancelAll(bool hard = false, unsigned int waitMs = 0);
+
+    static ObjList s_threads;
+    static Mutex s_threadsMutex;
 };
 
 // Holds local area id
@@ -586,10 +612,12 @@ public:
 protected:
     inline YBTSUE(const char* imsi, const char* tmsi)
 	: Mutex(false,"YBTSUE"),
-	  m_registered(false), m_expires(0), m_pageCnt(0),
+	  m_registered(false), m_imsiDetached(false), m_expires(0), m_pageCnt(0),
 	  m_imsi(imsi), m_tmsi(tmsi)
 	{ }
+
     bool m_registered;
+    bool m_imsiDetached;                 // Unregistered due to IMSI detached
     uint32_t m_expires;
     uint32_t m_pageCnt;
     String m_imsi;
@@ -597,6 +625,25 @@ protected:
     String m_imei;
     String m_msisdn;
     String m_paging;
+};
+
+class YBTSLocationUpd : public YBTSGlobalThread, public YBTSConnIdHolder
+{
+public:
+    YBTSLocationUpd(YBTSUE& ue, uint16_t connid);
+    ~YBTSLocationUpd()
+	{ notify(); }
+    inline uint64_t startTime() const
+	{ return m_startTime; }
+    virtual void cleanup()
+	{ notify(); }
+protected:
+    virtual void run();
+    void notify(bool final = true, bool ok = false);
+
+    String m_imsi;                       // UE imsi, empty if already notified termination
+    Message m_msg;                       // The message to dispatch
+    uint64_t m_startTime;
 };
 
 class YBTSMM : public GenObject, public DebugEnabler, public Mutex
@@ -618,7 +665,8 @@ public:
     void handlePDU(YBTSMessage& msg, YBTSConn* conn);
     bool handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rsp);
     void newTMSI(String& tmsi);
-
+    void locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t connId,
+	bool ok, const NamedList& params);
 protected:
     void handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
@@ -652,6 +700,7 @@ protected:
     void checkTimers(const Time& time = Time());
     void loadUElist();
     void saveUElist();
+    Message* buildUnregister(const String& imsi, YBTSUE* ue = 0);
 
     String m_name;
     Mutex m_ueMutex;
@@ -977,6 +1026,7 @@ protected:
 
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
+static uint64_t s_startTime = 0;
 static YBTSLAI s_lai;
 static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
@@ -1001,6 +1051,9 @@ static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
 static const String s_startCmd = "start";
 static const String s_stopCmd = "stop";
 static const String s_restartCmd = "restart";
+
+ObjList YBTSGlobalThread::s_threads;
+Mutex YBTSGlobalThread::s_threadsMutex(false,"YBTSGlobalThread");
 
 #define YBTS_MAKENAME(x) {#x, x}
 #define YBTS_XML_GETCHILD_PTR_CONTINUE(x,tag,ptr) \
@@ -1134,11 +1187,26 @@ static inline bool addXmlFromParam(ObjList& dest, const NamedList& list,
     return !p.null();
 }
 
-// safely retrieve a global string
+// Safely retrieve a global string
 static inline void getGlobalStr(String& buf, const String& value)
 {
     Lock lck(s_globalMutex);
     buf = value;
+}
+
+// Safely retrieve global uint64_t
+// Safely retrieve a global string
+static inline void getGlobalUInt64(uint64_t& buf, const uint64_t& value)
+{
+    Lock lck(s_globalMutex);
+    buf = value;
+}
+
+static inline bool isValidStartTime(uint64_t val)
+{
+    uint64_t cmp = 0;
+    getGlobalUInt64(cmp,s_startTime);
+    return cmp && cmp <= val;
 }
 
 // Add a socket error to a buffer
@@ -1625,6 +1693,39 @@ void YBTSTransport::alarmError(Socket& sock, const char* oper)
 //
 // YBTSLAI
 //
+// Cancel all threads, wait to terminate if requested
+// Return true if there are no running threads
+bool YBTSGlobalThread::cancelAll(bool hard, unsigned int waitMs)
+{
+    Lock lck(s_threadsMutex);
+    ObjList* o = s_threads.skipNull();
+    if (!o)
+	return true;
+    Debug(&__plugin,hard ? DebugWarn : DebugAll,
+	"Cancelling%s %u global threads",hard ? " hard" : "",o->count());
+    for (; o; o = o->skipNext())
+	static_cast<YBTSGlobalThread*>(o->get())->cancel(hard);
+    if (hard) {
+	s_threads.clear();
+	return true;
+    }
+    if (!waitMs)
+	return false;
+    unsigned int n = threadIdleIntervals(waitMs);
+    while (n--) {
+	lck.drop();
+	Thread::idle();
+	lck.acquire(s_threadsMutex);
+	if (!s_threads.skipNull())
+	    return true;
+    }
+    return false;
+}
+
+
+//
+// YBTSLAI
+//
 YBTSLAI::YBTSLAI(const XmlElement& xml)
 {
     const String* mnc_mcc = &String::empty();
@@ -2004,9 +2105,6 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 	chan = 0;
     }
     __plugin.removeTerminatedCall(connId);
-    // TODO:
-    // Drop pending location update
-    Debug(this,DebugStub,"dropConn() incomplete");
 }
 
 // Increase/decrease connection usage. Update its timeout
@@ -2538,6 +2636,58 @@ void YBTSUE::stopPagingNow()
 
 
 //
+// YBTSLocationUpd
+//
+YBTSLocationUpd::YBTSLocationUpd(YBTSUE& ue, uint16_t connid)
+    : YBTSGlobalThread("YBTSLocUpd"),
+    YBTSConnIdHolder(connid),
+    m_msg("user.register"),
+    m_startTime(Time::now())
+{
+    m_imsi = ue.imsi();
+    m_msg.addParam("driver",__plugin.name());
+    m_msg.addParam("username",ue.imsi());
+    m_msg.addParam("number",ue.msisdn(),false);
+    m_msg.addParam("imei",ue.imei(),false);
+    m_msg.addParam("tmsi",ue.tmsi(),false);
+}
+
+void YBTSLocationUpd::run()
+{
+    set(this,true);
+    if (!m_imsi)
+	return;
+    Debug(&__plugin,DebugAll,"Started location updating thread for IMSI=%s [%p]",
+	m_imsi.c_str(),this);
+    bool ok = Engine::dispatch(m_msg);
+    if (Thread::check(false) || Engine::exiting())
+	m_imsi.clear();
+    notify(false,ok);
+}
+
+void YBTSLocationUpd::notify(bool final, bool ok)
+{
+    if (!m_imsi)
+	return;
+    String imsi = m_imsi;
+    m_imsi.clear();
+    if (!final)
+	Debug(&__plugin,DebugAll,"Location updating thread for IMSI=%s terminated [%p]",
+	    imsi.c_str(),this);
+    else {
+	ok = false;
+	m_msg.setParam("error",String(CauseProtoError));
+	if (!Engine::exiting())
+	    Alarm(&__plugin,"system",DebugWarn,
+		"Location updating thread for IMSI=%s abnormally terminated [%p]",
+		imsi.c_str(),this);
+    }
+    if (__plugin.mm())
+	__plugin.mm()->locUpdTerminated(m_startTime,imsi,connId(),ok,m_msg);
+}
+
+
+//
 // YBTSMM
 //
 YBTSMM::YBTSMM(unsigned int hashLen)
@@ -2581,6 +2731,69 @@ void YBTSMM::newTMSI(String& tmsi)
 	tmsi.hexify(buf,4);
     } while (m_ueTMSI[hashList(tmsi)].find(tmsi));
     saveUEs();
+}
+
+void YBTSMM::locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t connId,
+    bool ok, const NamedList& params)
+{
+    if (!imsi)
+	return;
+    RefPointer<YBTSUE> ue;
+    getUEByIMSISafe(ue,imsi,false);
+    if (!ue) {
+	if (ok)
+	    Engine::enqueue(buildUnregister(imsi));
+	return;
+    }
+    bool valid = isValidStartTime(startTime);
+    Lock lckUE(ue);
+    // IMSI already detached: revert succesful registration
+    if (ue->m_imsiDetached) {
+	if (ok)
+	    Engine::enqueue(buildUnregister(imsi,ue));
+	return;
+    }
+    int level = DebugAll;
+    if (ue->m_registered != ok)
+	level = (!ok ? DebugNote : DebugInfo);
+    Debug(this,level,"IMSI=%s register %s [%p]",
+	    ue->imsi().c_str(),ok ? "succeeded" : "failed",this);
+    ue->m_registered = ok;
+    // TODO: Update data from parameters
+    XmlElement* ch = 0;
+    const char* what = ok ? "LocationUpdatingAccept" : "LocationUpdatingReject";
+    XmlElement* mm = valid ? buildMM(ch,what) : 0;
+    if (ch) {
+	if (ok) {
+	    ch->addChildSafe(__plugin.signalling()->lai().build());
+	    ch->addChildSafe(buildXmlWithChild(s_mobileIdent,s_tmsi,ue->tmsi()));
+	}
+	else {
+	    const char* cause = params.getValue(YSTRING("error"),
+		params.getValue(YSTRING("reason")));
+	    ch->addChildSafe(new XmlElement("RejectCause",
+		cause ? cause : String(CauseProtoError).c_str()));
+	}
+    }
+    lckUE.drop();
+    updateExpire(ue);
+    saveUEs();
+    RefPointer<YBTSConn> conn;
+    if (valid && __plugin.signalling())
+        __plugin.signalling()->findConn(conn,connId,false);
+    if (conn) {
+	conn->sendL3(mm);
+	if (!ok)
+	    __plugin.signalling()->dropConn(connId,true);
+	return;
+    }
+    if (valid)
+	Debug(this,DebugNote,"Can't send '%s' for IMSI=%s: connection %u vanished [%p]",
+	    what,imsi.c_str(),connId,this);
+    else
+	Debug(this,DebugNote,"Can't send '%s' for IMSI=%s: restarted meanwhile [%p]",
+	    what,imsi.c_str(),this);
+    TelEngine::destruct(mm);
 }
 
 void YBTSMM::loadUElist()
@@ -2648,17 +2861,34 @@ void YBTSMM::saveUElist()
     Debug(this,DebugNote,"Saved %d TMSI records, index=%u",cnt,m_tmsiIndex);
 }
 
+Message* YBTSMM::buildUnregister(const String& imsi, YBTSUE* ue)
+{
+    if (!imsi)
+	return 0;
+    Message* m = new Message("user.unregister");
+    m->addParam("driver",__plugin.name());
+    m->addParam("username",imsi);
+    if (ue) {
+	m->addParam("number",ue->msisdn(),false);
+	m->addParam("imei",ue->imei(),false);
+	m->addParam("tmsi",ue->tmsi(),false);
+    }
+    return m;
+}
+
 void YBTSMM::updateExpire(YBTSUE* ue)
 {
     uint32_t exp = s_tmsiExpire;
     if (!ue || !exp)
 	return;
     exp += Time::secNow();
+    Lock lck(ue);
     if (exp <= ue->expires())
 	return;
     ue->m_expires = exp;
-    saveUEs();
     DDebug(this,DebugAll,"Updated TMSI=%s IMSI=%s expiration time",ue->tmsi().c_str(),ue->imsi().c_str());
+    lck.drop();
+    saveUEs();
 }
 
 void YBTSMM::checkTimers(const Time& time)
@@ -2875,34 +3105,27 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 	    return;
 	}
     }
+    Lock lckUE(ue);
     if (s_askIMEI && ue->imei().null()) {
 	if (conn->setXml(m.takeXml())) {
+	    lckUE.drop();
 	    sendIdentityRequest(conn,"IMEI");
 	    return;
 	}
     }
-    Message msg("user.register");
-    msg.addParam("driver",__plugin.name());
-    msg.addParam("username",ue->imsi());
-    msg.addParam("number",ue->msisdn(),false);
-    msg.addParam("imei",ue->imei(),false);
-    msg.addParam("tmsi",ue->tmsi(),false);
-    if (!Engine::dispatch(msg)) {
-	sendLocationUpdateReject(m,conn,CauseServNotSupp);
-	return;
+    ue->m_imsiDetached = false;
+    YBTSLocationUpd* th = new YBTSLocationUpd(*ue,conn->connId());
+    lckUE.drop();
+    if (!th->startup()) {
+	delete th;
+	ue->lock();
+	Debug(this,DebugNote,"Location updating for IMSI=%s: failed to start thread [%p]",
+	    ue->imsi().c_str(),this);
+	ue->unlock();
+	sendLocationUpdateReject(m,conn,CauseProtoError);
     }
     updateExpire(ue);
-    Lock lckUE(ue);
-    ue->m_registered = true;
     saveUEs();
-    XmlElement* ch = 0;
-    XmlElement* mm = buildMM(ch,"LocationUpdatingAccept");
-    if (ch) {
-	ch->addChildSafe(__plugin.signalling()->lai().build());
-	ch->addChildSafe(buildXmlWithChild(s_mobileIdent,s_tmsi,ue->tmsi()));
-    }
-    lckUE.drop();
-    conn->sendL3(mm);
 }
 
 // Handle location update (TMSI reallocation) complete
@@ -2944,22 +3167,20 @@ void YBTSMM::handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* c
     if (!ue)
 	return;
     ue->stopPagingNow();
+    Lock lckUE(ue);
+    if (!ue->m_imsiDetached) {
+	Debug(this,DebugInfo,"Detached IMSI=%s [%p]",ue->imsi().c_str(),this);
+	ue->m_imsiDetached = true;
+    }
     if (!ue->registered())
 	return;
-    Lock lckUE(ue);
     ue->m_registered = false;
+    Message* msg = buildUnregister(ue->imsi(),ue);
+    lckUE.drop();
     updateExpire(ue);
     saveUEs();
-    if (!ue->imsi())
-	return;
-
-    Message* msg = new Message("user.unregister");
-    msg->addParam("driver",__plugin.name());
-    msg->addParam("username",ue->imsi());
-    msg->addParam("number",ue->msisdn(),false);
-    msg->addParam("imei",ue->imei(),false);
-    msg->addParam("tmsi",ue->tmsi(),false);
-    Engine::enqueue(msg);
+    if (msg)
+	Engine::enqueue(msg);
 }
 
 void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
@@ -4463,9 +4684,19 @@ void YBTSDriver::stopPeer()
 bool YBTSDriver::handleEngineStop(Message& msg)
 {
     m_engineStop++;
-    m_media->cleanup(false);
-    // TODO: unregister
-    // TODO: Drop all channels
+    dropAll(msg);
+    bool haveThreads = false;
+    if (m_engineStop == 1) {
+	haveThreads = !YBTSGlobalThread::cancelAll();
+	// TODO: unregister
+    }
+    else {
+	m_media->cleanup(false);
+	haveThreads = !YBTSGlobalThread::cancelAll(false,60);
+    }
+    if (haveThreads)
+	return true;
+    stop();
     return false;
 }
 
@@ -4496,6 +4727,12 @@ void YBTSDriver::changeState(int newStat)
     Debug(this,DebugNote,"State changed %s -> %s",
 	stateName(),lookup(newStat,s_stateName));
     m_state = newStat;
+    // Update globals
+    Lock lck(s_globalMutex);
+    if (m_state != Idle)
+	s_startTime = Time::now();
+    else
+	s_startTime = 0;
 }
 
 void YBTSDriver::setRestart(int resFlag, bool on, unsigned int intervalMs)
@@ -4690,6 +4927,7 @@ bool YBTSDriver::received(Message& msg, int id)
 	case Halt:
 	    dropAll(msg);
 	    stop();
+	    YBTSGlobalThread::cancelAll(true);
 	    return false;
 	case Timer:
 	    // Handle stop/restart
