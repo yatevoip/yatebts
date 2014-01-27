@@ -31,6 +31,7 @@
 namespace GSM {
     class LogicalChannel;
     class TCHFACCHLogicalChannel;
+    class SACCHLogicalChannel;
 };
 
 namespace Connection {
@@ -41,14 +42,16 @@ public:
     struct Conn {
 	GSM::LogicalChannel* mChan;
 	GSM::TCHFACCHLogicalChannel* mMedia;
+	GSM::SACCHLogicalChannel* mSACCH;
     };
     ConnectionMap();
-    int map(GSM::LogicalChannel* chan);
+    int map(GSM::LogicalChannel* chan, GSM::SACCHLogicalChannel* sacch);
     void mapMedia(unsigned int id, GSM::TCHFACCHLogicalChannel* media);
     bool unmap(unsigned int id);
     bool unmap(const GSM::LogicalChannel* chan);
-    int remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media);
+    int remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media, GSM::SACCHLogicalChannel* sacch);
     int find(const GSM::LogicalChannel* chan);
+    int find(const GSM::SACCHLogicalChannel* chan);
     GSM::LogicalChannel* find(unsigned int id);
     GSM::TCHFACCHLogicalChannel* findMedia(unsigned int id);
     GSM::TCHFACCHLogicalChannel* findMedia(const GSM::LogicalChannel* chan);

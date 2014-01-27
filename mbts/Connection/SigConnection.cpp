@@ -246,8 +246,20 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 	    {
 		LogicalChannel* ch = gConnMap.find(id);
 		if (ch) {
-		    L3Frame frame((const char*)data,len);
-		    ch->send(frame,info & 0x03);
+		    if (info & 0x80) {
+			ch = ch->SACCH();
+			info &= 0x7f;
+		    }
+		    if (!ch) {
+			LOG(ERR) << "received L3 frame for missing SACCH of id " << id;
+			break;
+		    }
+		    if ((info < 4) && ch->debugGetL2(info)) {
+			L3Frame frame((const char*)data,len);
+			ch->send(frame,info);
+		    }
+		    else
+			LOG(ERR) << "received L3 frame for invalid SAPI " << (unsigned int)info;
 		}
 		else
 		    LOG(ERR) << "received L3 frame for unmapped id " << id;

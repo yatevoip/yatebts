@@ -34,8 +34,10 @@ ConnectionMap::ConnectionMap()
     memset(mMap,0,sizeof(mMap));
 }
 
-int ConnectionMap::map(GSM::LogicalChannel* chan)
+int ConnectionMap::map(GSM::LogicalChannel* chan, GSM::SACCHLogicalChannel* sacch)
 {
+    if (!chan)
+	return -1;
     int id = find(chan);
     if (id >= 0)
 	return id;
@@ -48,6 +50,7 @@ int ConnectionMap::map(GSM::LogicalChannel* chan)
 	if (!mMap[i].mChan) {
 	    mMap[i].mChan = chan;
 	    mMap[i].mMedia = 0;
+	    mMap[i].mSACCH = sacch;
 	    id = mIndex = i;
 	    break;
 	}
@@ -69,6 +72,7 @@ bool ConnectionMap::unmap(unsigned int id)
     if ((id < BTS_CONN_MAP_SIZE) && mMap[id].mChan) {
 	mMap[id].mChan = 0;
 	mMap[id].mMedia = 0;
+	mMap[id].mSACCH = 0;
 	return true;
     }
     return false;
@@ -85,6 +89,7 @@ bool ConnectionMap::unmap(const GSM::LogicalChannel* chan)
 	    if (c.mChan == chan) {
 		c.mChan = 0;
 		c.mMedia = 0;
+		c.mSACCH = 0;
 	    }
 	    unlock();
 	    return true;
@@ -93,7 +98,7 @@ bool ConnectionMap::unmap(const GSM::LogicalChannel* chan)
     return false;
 }
 
-int ConnectionMap::remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media)
+int ConnectionMap::remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media, GSM::SACCHLogicalChannel* sacch)
 {
     int id = -1;
     lock();
@@ -102,6 +107,7 @@ int ConnectionMap::remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel*
 	if (c.mMedia == media) {
 	    if (chan != c.mChan) {
 		c.mChan = chan;
+		c.mSACCH = sacch;
 		id = i;
 	    }
 	    break;
@@ -115,6 +121,15 @@ int ConnectionMap::find(const GSM::LogicalChannel* chan)
 {
     for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {
 	if (mMap[i].mChan == chan)
+	    return i;
+    }
+    return -1;
+}
+
+int ConnectionMap::find(const GSM::SACCHLogicalChannel* chan)
+{
+    for (unsigned int i = 0; i < BTS_CONN_MAP_SIZE; i++) {
+	if (mMap[i].mSACCH == chan)
 	    return i;
     }
     return -1;

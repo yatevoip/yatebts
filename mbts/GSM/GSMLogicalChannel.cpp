@@ -416,45 +416,24 @@ void SACCHLogicalChannel::serviceLoop()
 
 			// Process SAP3 -- SMS
 			L3Frame *smsFrame = LogicalChannel::recv(0,3);
-			if (smsFrame) nothing=false;
-			L3Message* smsMessage = processSACCHMessage(smsFrame);
-			delete smsFrame;
-			// FIXME YATEBTS -- In-call SMS processing goes here.
-			delete smsMessage;
-			//if (smsMessage) {
-			//	const SMS::CPData* cpData = dynamic_cast<const SMS::CPData*>(smsMessage);
-			//	if (cpData) {
-			//		OBJLOG(INFO) << "SMS CPDU " << *cpData;
-			//		//Control::TransactionEntry *transaction = gTransactionTable.find(this);
-			//		//try {
-			//		//	if (transaction) {
-			//		//		Control::InCallMOSMSController(cpData,transaction,this);
-			//		//	} else {
-			//		//		OBJLOG(WARNING) << "in-call MOSMS CP-DATA with no corresponding transaction";
-			//		//	}
-			//		//} catch (Control::ControlLayerException e) {
-			//		//	//LogicalChannel::send(RELEASE,3);
-			//		//	gTransactionTable.remove(e.transactionID());
-			//		}
-			//	} else {
-			//		OBJLOG(NOTICE) << "SACCH SAP3 sent unaticipated message " << rrMessage;
-			//	}
-			//	delete smsMessage;
-			//}
-
-			// Anything from the SIP side?
-			// MTSMS (delivery from SIP to the MS)
-			//Control::TransactionEntry *sipTransaction = mTransactionFIFO.readNoBlock();
-			//if (sipTransaction) {
-			//	OBJLOG(INFO) << "SIP-side transaction: " << sipTransaction;
-			//	assert(sipTransaction->service() == L3CMServiceType::MobileTerminatedShortMessage);
-			//	try {
-			//		Control::MTSMSController(sipTransaction,this);
-			//	} catch (Control::ControlLayerException e) {
-			//		//LogicalChannel::send(RELEASE,3);
-			//		gTransactionTable.remove(e.transactionID());
-			//	}
-			//}
+			if (smsFrame) {
+				nothing=false;
+				switch (smsFrame->primitive()) {
+					case DATA:
+					case UNIT_DATA:
+						{
+							int id = gConnMap.find(this);
+							if (id >= 0)
+								gSigConn.send(0x83,id,smsFrame);
+							else
+								LOG(ERR) << "SAP3 on unmapped channel " << *this;
+						}
+						break;
+					default:
+						LOG(INFO) << "non-data primitive " << smsFrame->primitive();
+				}
+				delete smsFrame;
+			}
 
 			// Did we get anything from the phone?
 			// If not, we may have lost contact.  Bump the RSSI to induce more power

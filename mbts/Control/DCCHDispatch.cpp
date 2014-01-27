@@ -75,7 +75,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(chan);
 	LOG(INFO) << "starting dispatch loop for connection " << id << (tch ? " with traffic" : "");
 	unsigned int maxQ = gConfig.getNum("GSM.MaxSpeechLatency");
-	unsigned int tOut = tch ? 5 : 100; // TODO
+	unsigned int tOut = tch ? 5 : 20; // TODO
 	while (gSigConn.valid() && (gConnMap.find(id) == chan)) {
 		if (tch) {
 			while (tch->queueSize() > maxQ)
@@ -86,7 +86,18 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 				delete mFrame;
 			}
 		}
-		L3Frame* frame = chan->recv(tOut,0); // What about different SAPI?
+		unsigned char sapi;
+		L3Frame* frame = 0;
+		for (sapi = 1; sapi < 4; sapi++) {
+			if (chan->debugGetL2(sapi))
+				frame = chan->recv(0,sapi);
+			if (frame)
+				break;
+		}
+		if (!frame) {
+			sapi = 0;
+			frame = chan->recv(tOut,0);
+		}
 		if (!frame)
 			continue;
 		switch (frame->primitive()) {
@@ -96,12 +107,18 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 			case DATA:
 			case UNIT_DATA:
 				if (!connDispatchRR(chan,id,frame))
-					gSigConn.send(0,id,frame);
+					gSigConn.send(sapi,id,frame);
 				delete frame;
 				continue;
 			case RELEASE:
 			case HARDRELEASE:
 				break;
+			case ESTABLISH:
+				if (sapi) {
+					delete frame;
+					continue;
+				}
+				// fall through
 			default:
 				LOG(ERR) << "unexpected primitive " << frame->primitive();
 				break;
@@ -120,7 +137,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 // Dispatch new channel establishing frame
 static void connDispatchChannel(LogicalChannel* chan, L3Frame* frame)
 {
-	int id = gConnMap.map(chan);
+	int id = gConnMap.map(chan,chan->SACCH());
 	if (id < 0) {
 		LOG(ERR) << "failed to map channel " << *chan;
 		return;
@@ -140,7 +157,7 @@ static void connDispatchReassigned(LogicalChannel* chan, L3Frame* frame)
 		LOG(ERR) << "reassigned to non-traffic channel " << *chan;
 		return;
 	}
-	int id = gConnMap.remap(chan,tch);
+	int id = gConnMap.remap(chan,tch,chan->SACCH());
 	if (id < 0) {
 		LOG(ERR) << "failed to remap channel " << *chan;
 		return;
