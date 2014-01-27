@@ -128,7 +128,6 @@ void GenConnection::run()
 	    break;
 	}
     }
-    LOG(INFO) << "exited thread loop";
 }
 
 void GenConnection::started()
