@@ -390,7 +390,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Start the peer interface
-	gPeerInterface.start();
+//	gPeerInterface.start();
 
 	// Sync factory calibration as defaults from radio EEPROM
 	signed sdrsn = gTRX.ARFCN(0)->getFactoryCalibration("sdrsn");
