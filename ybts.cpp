@@ -69,6 +69,7 @@ static const String s_causeLocation = "location";
 static const String s_causeCoding = "coding";
 static const String s_cmServType = "CMServiceType";
 static const String s_cmMOCall = "MO-call-establishment-or-PM-connection-establishment";
+static const String s_cmSMS = "SMS";
 static const String s_ccSetup = "Setup";
 static const String s_ccEmergency = "EmergencySetup";
 static const String s_ccProceeding = "CallProceeding";
@@ -111,6 +112,7 @@ class YBTSSignalling;                    // Signalling interface
 class YBTSMedia;                         // Media interface
 class YBTSUE;                            // A registered equipment
 class YBTSLocationUpd;                   // Running location update from UE
+class YBTSSMSSubmit;                     // MO SMS submit thread
 class YBTSMM;                            // Mobility management entity
 class YBTSDataSource;
 class YBTSDataConsumer;
@@ -201,7 +203,7 @@ public:
 	{ return lookup(m_primitive,s_priName); }
     inline uint16_t primitive() const
 	{ return m_primitive; }
-    inline uint16_t info() const
+    inline uint8_t info() const
 	{ return m_info; }
     inline bool hasConnId() const
 	{ return 0 == (m_primitive & 0x80); }
@@ -470,6 +472,15 @@ public:
 	}
     // Send L3 RR Status
     bool sendRRMStatus(uint16_t connId, uint8_t code);
+    // Send L3 SMS CP Data
+    bool sendSmsCPData(YBTSConn* conn, const String& callRef, bool tiFlag,
+	uint8_t sapi, const String& rpdu);
+    // Send L3 SMS CP Ack/Error
+    bool sendSmsCPRsp(YBTSConn* conn, const String& callRef, bool tiFlag,
+	uint8_t sapi, const char* cause = 0);
+    // Send L3 RP Ack/Error
+    bool sendSmsRPRsp(YBTSConn* conn, const String& callRef, bool tiFlag, uint8_t sapi,
+	uint8_t rpMsgRef, uint8_t cause);
     bool start();
     void stop();
     // Drop a connection
@@ -644,6 +655,27 @@ protected:
     String m_imsi;                       // UE imsi, empty if already notified termination
     Message m_msg;                       // The message to dispatch
     uint64_t m_startTime;
+};
+
+class YBTSSMSSubmit : public YBTSGlobalThread, public YBTSConnIdHolder
+{
+public:
+    YBTSSMSSubmit(YBTSUE& ue, uint16_t connid,
+	const char* callRef, bool tiFlag, uint8_t sapi, uint8_t rpMsgRef);
+    inline Message& msg()
+	{ return m_msg; }
+    virtual void cleanup()
+	{ notify(); }
+protected:
+    virtual void run();
+    void notify(bool final = true, unsigned int cause = 111, const String* rpdu = 0);
+
+    String m_imsi;                       // UE imsi, empty if already notified termination
+    String m_callRef;                    // TID: Call reference
+    bool m_tiFlag;                       // TID: TI flag
+    uint8_t m_sapi;                      // SAPI to use
+    uint8_t m_rpMsgRef;                  // RP Message reference
+    Message m_msg;                       // The message to dispatch
 };
 
 class YBTSMM : public GenObject, public DebugEnabler, public Mutex
@@ -936,6 +968,8 @@ public:
     XmlElement* buildCC(XmlElement*& ch, const char* type, const char* callRef, bool tiFlag = false);
     // Handle call control messages
     void handleCC(YBTSMessage& m, YBTSConn* conn);
+    // Handle SMS PDUs
+    void handleSmsPDU(YBTSMessage& m, YBTSConn* conn);
     // Check if a MT service is pending for new connection and start it
     void checkMtService(YBTSUE* ue, YBTSConn* conn, bool pagingRsp = false);
     // Handle media start/alloc response
@@ -966,6 +1000,10 @@ public:
     static const TokenDict s_stateName[];
 
 protected:
+    void handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
+	const String& callRef, bool tiFlag, const XmlElement& cpData);
+    void handleSmsCPRsp(YBTSMessage& m, YBTSConn* conn,
+	const String& callRef, bool tiFlag, const XmlElement& rsp, bool ok);
     void start();
     inline void startIdle() {
 	    Lock lck(m_stateMutex);
@@ -1120,62 +1158,71 @@ const TokenDict YBTSDriver::s_stateName[] =
     {0,0}
 };
 
-// Call termination cause
-// ETSI TS 100 940, Section 10.5.4.11
-static const TokenDict s_ccErrorDict[] = {
-  {"unallocated",                     1}, // Unallocated (unassigned) number
-  {"noroute",                         3}, // No route to destination
-  {"channel-unacceptable",            6}, // Channel unacceptable
-  {"forbidden",                       8}, // Operator determined barring
-  {"normal-clearing",                16}, // Normal Clearing
-  {"busy",                           17}, // User busy
-  {"noresponse",                     18}, // No user responding
-  {"noanswer",                       19}, // No answer from user (user alerted)
-  {"rejected",                       21}, // Call Rejected
-  {"moved",                          22}, // Number changed
-  {"preemption",                     25}, // Preemption
-  {"answered",                       26}, // Non-selected user clearing (answered elsewhere)
-  {"out-of-order",                   27}, // Destination out of order
-  {"invalid-number",                 28}, // Invalid number format
-  {"facility-rejected",              29}, // Facility rejected
-  {"status-enquiry-rsp",             30}, // Response to STATUS ENQUIRY
-  {"normal",                         31}, // Normal, unspecified
-  {"congestion",                     34}, // No circuit/channel available
-  {"net-out-of-order",               38}, // Network out of order
-  {"noconn",                         41},
-  {"temporary-failure",              41}, // Temporary failure
-  {"congestion",                     42}, // Switching equipment congestion
-  {"switch-congestion",              42},
-  {"access-info-discarded",          43}, // Access information discarded
-  {"channel-unavailable",            44}, // Requested channel not available
-  {"noresource",                     47}, // Resource unavailable, unspecified
-  {"qos-unavailable",                49}, // Quality of service unavailable
-  {"facility-not-subscribed",        50}, // Requested facility not subscribed
-  {"forbidden-in",                   55}, // Incoming call barred within CUG
-  {"bearer-cap-not-auth",            57}, // Bearer capability not authorized
-  {"bearer-cap-not-available",       58}, // Bearer capability not presently available
-  {"nomedia",                        58},
-  {"service-unavailable",            63}, // Service or option not available
-  {"bearer-cap-not-implemented",     65}, // Bearer capability not implemented
-//TODO: {"",     68}, // ACM equal to or greater then ACMmax
-  {"restrict-bearer-cap-avail",      70}, // Only restricted digital information bearer capability is available
-  {"service-not-implemented",        79}, // Service or option not implemented, unspecified
-  {"invalid-callref",                81}, // Invalid transaction identifier value
-  {"not-subscribed",                 87}, // User not member of CUG
-  {"incompatible-dest",              88}, // Incompatible destination
-  {"invalid-transit-net",            91}, // Invalid transit network selection
-  {"invalid-message",                95}, // Invalid message, unspecified
-  {"invalid-ie",                     96}, // Invalid information element contents
-  {"unknown-message",                97}, // Message type non-existent or not implemented
-  {"wrong-state-message",            98}, // Message not compatible with call state
-  {"unknown-ie",                     99}, // Information element non-existent or not implemented
-  {"conditional-ie",                100}, // Conditional IE error
-  {"wrong-proto-message",           101}, // Message not compatible with protocol state
-  {"timeout",                       102}, // Recovery on timer expiry
-  {"protocol-error",                111}, // Protocol error, unspecified
-  {"interworking",                  127}, // Interworking, unspecified
-  {0,0}
+static const TokenDict s_numType[] = {
+    {"unknown",             0},
+    {"international",       1},
+    {"national",            2},
+    {"network-specific",    3},
+    {"dedicated-access",    4},
+    {"reserved",            5},
+    {"abbreviated",         6},
+    {"extension-reserved",  7},
+    {0,0}
 };
+
+static const TokenDict s_numPlan[] = {
+    {"unknown",            0},
+    {"isdn",               1},
+    {"data",               3},
+    {"telex",              4},
+    {"national",           8},
+    {"private",            9},
+    {"CTS-reserved",       11},
+    {"extension-reserved", 15},
+    {0,0}
+};
+
+static const char* s_bcd = "0123456789*#ABC";
+
+// Skip length and value from buffer
+// Length is 1 byte value length
+static inline void skipLV(uint8_t*& b, unsigned int& len)
+{
+    if (!len)
+	return;
+    unsigned int skip = *b + 1;
+    if (skip > len)
+	skip = len;
+    b += skip;
+    len -= skip;
+}
+
+// Decode BCD number
+static void decodeBCDNumber(uint8_t* b, unsigned int len,
+    String& bcd, String& plan, String& type)
+{
+    if (!len)
+	return;
+    plan = lookup(*b & 0x0f,s_numPlan);
+    type = lookup((*b & 0x70) >> 4,s_numType);
+    if (len == 1)
+	return;
+    len--;
+    b++;
+    char* s = new char[len * 2 + 1];
+    unsigned int l = 0;
+    for (; len; b++, len--) {
+	uint8_t idx = (*b & 0x0f);
+	if (idx < 15)
+	    s[l++] = s_bcd[idx];
+	idx = *b >> 4;
+	if (idx < 15)
+	    s[l++] = s_bcd[idx];
+    }
+    if (l)
+	bcd.assign(s,l);
+    delete[] s;
+}
 
 // Append an xml element from list parameter
 static inline bool addXmlFromParam(ObjList& dest, const NamedList& list,
@@ -1359,6 +1406,29 @@ static inline XmlElement* buildProgressIndicator(const Message& msg,
     if (earlyMedia && msg.getBoolValue("earlymedia"))
 	return new XmlElement(s_ccProgressInd,"inband");
     return 0;
+}
+
+// Retrieve TID (transaction identifier data)
+// Return true if a valid transaction identifier was found
+static inline bool getTID(const XmlElement& xml, const String*& callRef, bool& tiFlag)
+{
+    const XmlElement* tid = xml.findFirstChild(&s_ccCallRef);
+    if (tid) {
+	callRef = &tid->getText();
+	if (TelEngine::null(callRef))
+	    callRef = 0;
+	tiFlag = tid->attributes().getBoolValue(s_ccTIFlag);
+	return callRef != 0;
+    }
+    return false;
+}
+
+// Build TID (transaction identifier data)
+static inline XmlElement* buildTID(const char* callRef, bool tiFlag)
+{
+    XmlElement* tid = new XmlElement(s_ccCallRef,callRef);
+    tid->setAttribute(s_ccTIFlag,String::boolText(tiFlag));
+    return tid;
 }
 
 
@@ -2041,6 +2111,60 @@ bool YBTSSignalling::sendRRMStatus(uint16_t connId, uint8_t code)
     return sendL3Conn(connId,rrm);
 }
 
+// Send L3 SMS CP Data
+bool YBTSSignalling::sendSmsCPData(YBTSConn* conn, const String& callRef, bool tiFlag,
+    uint8_t sapi, const String& rpdu)
+{
+    if (!conn)
+	return false;
+    XmlElement* sms = new XmlElement("SMS");
+    sms->addChildSafe(buildTID(callRef,tiFlag));
+    XmlElement* what = new XmlElement(s_message);
+    what->setAttribute(s_type,"CP-Data");
+    what->addChildSafe(new XmlElement("RPDU",rpdu));
+    sms->addChildSafe(what);
+    return sendL3Conn(conn->connId(),sms,sapi);
+}
+
+// Send L3 SMS CP Ack/Error
+bool YBTSSignalling::sendSmsCPRsp(YBTSConn* conn, const String& callRef, bool tiFlag,
+   uint8_t sapi, const char* cause)
+{
+    if (!conn)
+	return false;
+    XmlElement* sms = new XmlElement("SMS");
+    sms->addChildSafe(buildTID(callRef,tiFlag));
+    XmlElement* what = new XmlElement(s_message);
+    if (!cause)
+	what->setAttribute(s_type,"CP-Ack");
+    else {
+	what->setAttribute(s_type,"CP-Error");
+	what->addChildSafe(new XmlElement("CP-Cause",String(cause)));
+    }
+    sms->addChildSafe(what);
+    return sendL3Conn(conn->connId(),sms,sapi);
+}
+
+// Send L3 RP Ack/Error
+bool YBTSSignalling::sendSmsRPRsp(YBTSConn* conn, const String& callRef, bool tiFlag,
+    uint8_t sapi, uint8_t rpMsgRef, uint8_t cause)
+{
+    // ETSI TS 124 011
+    // Section 7.3.3 and 7.3.4: RP Ack/Error: 1 byte message type + 1 byte message reference
+    // Error: RP-Cause IE: 1 byte length + 1 byte cause
+    // See Section 8.2.2 for message type
+    uint8_t buf[4] = {!cause ? 3 : 5,rpMsgRef};
+    String rpdu;
+    if (!cause)
+	rpdu.hexify(buf,2);
+    else {
+	buf[2] = 1;
+	buf[3] = (cause & 0x7f);
+	rpdu.hexify(buf,4);
+    }
+    return sendSmsCPData(conn,callRef,tiFlag,sapi,rpdu);
+}
+
 bool YBTSSignalling::start()
 {
     stop();
@@ -2303,7 +2427,11 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		    findConn(conn,msg.connId(),false);
 		    __plugin.handleCC(msg,conn);
 		}
-    		else if (proto == YSTRING("RRM"))
+		else if (proto == YSTRING("SMS")) {
+		    findConn(conn,msg.connId(),false);
+		    __plugin.handleSmsPDU(msg,conn);
+		}
+		else if (proto == YSTRING("RRM"))
 		    handleRRM(msg);
 		else
 		    Debug(this,DebugNote,"Unknown '%s' protocol in %s [%p]",
@@ -2330,7 +2458,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    __plugin.radioReady();
 	    return Ok;
 	case SigConnLost:
-	    __plugin.signalling()->dropConn(msg.connId(),false);
+	    dropConn(msg.connId(),false);
 	    return Ok;
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
@@ -2647,7 +2775,7 @@ YBTSLocationUpd::YBTSLocationUpd(YBTSUE& ue, uint16_t connid)
     m_imsi = ue.imsi();
     m_msg.addParam("driver",__plugin.name());
     m_msg.addParam("username",ue.imsi());
-    m_msg.addParam("number",ue.msisdn(),false);
+    m_msg.addParam("msisdn",ue.msisdn(),false);
     m_msg.addParam("imei",ue.imei(),false);
     m_msg.addParam("tmsi",ue.tmsi(),false);
 }
@@ -2684,6 +2812,100 @@ void YBTSLocationUpd::notify(bool final, bool ok)
     }
     if (__plugin.mm())
 	__plugin.mm()->locUpdTerminated(m_startTime,imsi,connId(),ok,m_msg);
+}
+
+
+//
+// YBTSSMSSubmit
+//
+YBTSSMSSubmit::YBTSSMSSubmit(YBTSUE& ue, uint16_t connid,
+	const char* callRef, bool tiFlag, uint8_t sapi, uint8_t rpMsgRef)
+    : YBTSGlobalThread("YBTSSMSSubmit"),
+    YBTSConnIdHolder(connid),
+    m_imsi(ue.imsi()),
+    m_callRef(callRef),
+    m_tiFlag(tiFlag),
+    m_sapi(sapi),
+    m_rpMsgRef(rpMsgRef),
+    m_msg("call.route")
+{
+    m_msg.addParam("module",__plugin.name());
+    m_msg.addParam("route_type","msg");
+    m_msg.addParam("caller",m_imsi);
+    m_msg.addParam("msisdn",ue.msisdn(),false);
+}
+
+void YBTSSMSSubmit::run()
+{
+    set(this,true);
+    if (!m_imsi)
+	return;
+    Debug(&__plugin,DebugAll,"Started MO SMS thread for IMSI=%s [%p]",
+	m_imsi.c_str(),this);
+    bool ok = false;
+    while (true) {
+	if (!Engine::dispatch(m_msg))
+	    break;
+	if (Thread::check(false) || Engine::exiting())
+	    break;
+	if (!m_msg.retValue() || m_msg.retValue() == YSTRING("-") ||
+	    m_msg.retValue() == YSTRING("error"))
+	    break;
+	m_msg = "msg.execute";
+	m_msg.setParam("callto",m_msg.retValue());
+	m_msg.clearParam(YSTRING("error"));
+	m_msg.clearParam(YSTRING("reason"));
+	m_msg.retValue().clear();
+	ok = Engine::dispatch(m_msg);
+	break;
+    }
+    if (Thread::check(false) || Engine::exiting()) {
+	m_imsi.clear();
+	return;
+    }
+    // TODO: Try to build a cause from other param?
+    unsigned int cause = 0;
+    if (!ok)
+	cause = m_msg.getIntValue(YSTRING("error"),111,1,127);
+    // TODO: Use the proper RPDU parameter name when known
+    notify(false,cause,m_msg.getParam(YSTRING("irpdu")));
+}
+
+void YBTSSMSSubmit::notify(bool final, unsigned int cause, const String* rpdu)
+{
+    if (!m_imsi)
+	return;
+    String imsi = m_imsi;
+    m_imsi.clear();
+    // Check if we restarted meanwhile
+    if (!isValidStartTime(m_msg.msgTime()))
+	return;
+    if (!final)
+	Debug(&__plugin,DebugAll,
+	    "MO SMS thread for IMSI=%s terminated rpdu='%s' cause=%u [%p]",
+	    imsi.c_str(),TelEngine::c_safe(rpdu),cause,this);
+    else {
+	if (!cause)
+	    cause = 111;
+	if (!Engine::exiting())
+	    Alarm(&__plugin,"system",DebugWarn,
+		"MO SMS thread for IMSI=%s abnormally terminated [%p]",
+		imsi.c_str(),this);
+    }
+    RefPointer<YBTSConn> conn;
+    if (!(__plugin.signalling() && __plugin.signalling()->findConn(conn,connId(),false)))
+	return;
+    if (!conn->ue())
+	return;
+    Lock lck(conn->ue());
+    if (conn->ue()->imsi() != imsi)
+	return;
+    lck.drop();
+    if (TelEngine::null(rpdu))
+	__plugin.signalling()->sendSmsRPRsp(conn,m_callRef,m_tiFlag,m_sapi,
+	    m_rpMsgRef,cause);
+    else
+	__plugin.signalling()->sendSmsCPData(conn,m_callRef,m_tiFlag,m_sapi,*rpdu);
 }
 
 
@@ -2869,7 +3091,7 @@ Message* YBTSMM::buildUnregister(const String& imsi, YBTSUE* ue)
     m->addParam("driver",__plugin.name());
     m->addParam("username",imsi);
     if (ue) {
-	m->addParam("number",ue->msisdn(),false);
+	m->addParam("msisdn",ue->msisdn(),false);
 	m->addParam("imei",ue->imei(),false);
 	m->addParam("tmsi",ue->tmsi(),false);
     }
@@ -3205,7 +3427,7 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	}
 	// TODO: Properly check service type, reject if not supported
 	const String& type = cmServType->getText();
-	if (type == s_cmMOCall)
+	if (type == s_cmMOCall || type == s_cmSMS)
 	    ;
 	else {
 	    Debug(this,DebugNote,
@@ -4247,9 +4469,7 @@ YBTSDriver::~YBTSDriver()
 XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* type, const char* callRef, bool tiFlag)
 {
     XmlElement* mm = buildCC();
-    XmlElement* cr = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(s_ccCallRef,callRef)));
-    if (cr)
-	cr->setAttribute(s_ccTIFlag,String::boolText(tiFlag));
+    mm->addChildSafe(buildTID(callRef,tiFlag));
     ch = static_cast<XmlElement*>(mm->addChildSafe(new XmlElement(s_message)));
     if (ch)
 	ch->setAttribute(s_type,type);
@@ -4271,15 +4491,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
     }
     const String* callRef = 0;
     bool tiFlag = false;
-    const XmlElement* tid = m.xml()->findFirstChild(&s_ccCallRef);
-    if (tid) {
-	callRef = &tid->getText();
-	if (TelEngine::null(callRef))
-	    callRef = 0;
-	const String* attr = tid->getAttribute(s_ccTIFlag);
-	if (attr)
-	    tiFlag = attr->toBoolean();
-    }
+    getTID(*m.xml(),callRef,tiFlag);
     if (conn) {
 	RefPointer<YBTSChan> chan;
 	findChan(conn->connId(),chan);
@@ -4353,6 +4565,37 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
     DDebug(this,DebugInfo,"Unhandled CC %s for callref=%s conn=%p",
 	type->c_str(),TelEngine::c_safe(callRef),conn);
     YBTSCallDesc::sendGSMRel(false,*callRef,!tiFlag,"invalid-callref",m.connId());
+}
+
+// Handle SMS PDUs
+void YBTSDriver::handleSmsPDU(YBTSMessage& m, YBTSConn* conn)
+{
+    XmlElement* xml = m.xml() ? m.xml()->findFirstChild(&s_message) : 0;
+    if (!xml) {
+	Debug(this,DebugNote,"Empty xml in %s [%p]",m.name(),this);
+	return;
+    }
+    const String* type = xml->getAttribute(s_type);
+    if (!type) {
+	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
+	return;
+    }
+    const String* callRef = 0;
+    bool tiFlag = false;
+    if (!getTID(*m.xml(),callRef,tiFlag)) {
+	Debug(this,DebugNote,"SMS %s conn=(%p,%u) with missing transaction identifier",
+	    type->c_str(),conn,conn ? conn->connId() : 0);
+	return;
+    }
+    if (*type == YSTRING("CP-Data"))
+	handleSmsCPData(m,conn,*callRef,tiFlag,*xml);
+    else if (*type == YSTRING("CP-Ack"))
+	handleSmsCPRsp(m,conn,*callRef,tiFlag,*xml,true);
+    else if (*type == YSTRING("CP-Error"))
+	handleSmsCPRsp(m,conn,*callRef,tiFlag,*xml,false);
+    else
+	Debug(this,DebugNote,"Unhandled SMS %s conn=(%p,%u)",
+	    type->c_str(),conn,conn ? conn->connId() : 0);
 }
 
 // Check and start pending MT services for new connection
@@ -4491,6 +4734,122 @@ void YBTSDriver::stopNoRestart()
     m_restart = false;
     m_restartTime = 0;
     m_error = true;
+}
+
+void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
+    const String& callRef, bool tiFlag, const XmlElement& cpData)
+{
+    if (!conn) {
+	Debug(this,DebugMild,"Ignoring SMS CP-DATA conn=%u: no connection",m.connId());
+	return;
+    }
+    // TODO: Check call reference: this might be a response for sent data
+    int level = DebugNote;
+    String reason;
+    const char* cause = "protocol-error-unspecified";
+    uint8_t causeRp = 111;
+    bool cpOk = false;
+    uint8_t rpMsgRef = 0;
+    while (true) {
+#define SMS_CPDATA_DONE(str) { reason = str; break; }
+#define SMS_CPDATA_DONE_MILD(str) { level = DebugMild; reason = str; break; }
+	if (!(conn && conn->ue()))
+	    SMS_CPDATA_DONE("no UE");
+	const String* rpdu = cpData.childText(YSTRING("RPDU"));
+	if (TelEngine::null(rpdu))
+	    SMS_CPDATA_DONE("empty RPDU");
+	DataBlock buf;
+	if (!buf.unHexify(*rpdu))
+	    SMS_CPDATA_DONE_MILD("invalid RPDU string");
+	if (buf.length() < 2)
+	    SMS_CPDATA_DONE("invalid RPDU length");
+	cause = "invalid-mandatory-info";
+	// RPDU (ETSI TS 124.011 Section 7.3 and 8.2):
+	// 1 byte (3 bits): message type, valid (MS to network):
+	//   0: RP-DATA
+	//   2: RP-ACK
+	//   4: RP-ERROR
+	//   6: RP-SMMA
+	//   Other values are reserved or used by network to MS
+	// 1 byte message reference
+	// Other IEs ...
+	uint8_t* b = (uint8_t*)buf.data();
+	uint8_t rpMsgType = *b++ & 0x03;
+	rpMsgRef = *b++;
+	// CP-DATA is ok, accept it
+	cpOk = true;
+	signalling()->sendSmsCPRsp(conn,callRef,!tiFlag,m.info());
+	// Check for RP data
+	if (rpMsgType != 0 && rpMsgType != 6) {
+	    if (rpMsgType == 2 || rpMsgType == 4) {
+		causeRp = 98; // Unexpected message
+		SMS_CPDATA_DONE("unhandled RP-ACK or RP-ERROR");
+	    }
+	    causeRp = 97; // Unknown message type
+	    SMS_CPDATA_DONE("unknown RP message " + String(rpMsgType));
+	}
+	if (rpMsgType == 6) {
+	    causeRp = 98; // Unexpected message
+	    SMS_CPDATA_DONE("unhandled RP-SMMA");
+	}
+	unsigned int len = buf.length() - 2;
+	// RP-DATA:
+	// Skip originator address (length and value)
+	skipLV(b,len);
+	// Retrieve destination address
+	String called, plan, type;
+	bool ok = (len != 0);
+	if (ok) {
+	    unsigned int destLen = *b++;
+	    if (destLen && destLen <= len)
+		decodeBCDNumber(b,destLen,called,plan,type);
+	}
+	if (!called)
+	    Debug(this,DebugNote,
+		"SMS CP-DATA conn=%u: unable to retrieve SMSC number, %s",
+		m.connId(),ok ? "empty destination address" : "invalid RP-DATA");
+	conn->ue()->lock();
+	YBTSSMSSubmit* th = new YBTSSMSSubmit(*conn->ue(),conn->connId(),
+	    callRef,!tiFlag,m.info(),rpMsgRef);
+	conn->ue()->unlock();
+	if (called) {
+	    th->msg().addParam("called",called);
+	    th->msg().addParam("callednumplan",plan,false);
+	    th->msg().addParam("callednumtype",type,false);
+	}
+	th->msg().addParam("rpdu",*rpdu);
+	if (th->startup())
+	    return;
+	causeRp = 41; // Temporary failure
+	SMS_CPDATA_DONE_MILD("failed to start thread");
+#undef SMS_CPDATA_DONE
+#undef SMS_CPDATA_DONE_MILD
+    }
+    if (!cpOk) {
+	Debug(this,level,"Rejecting SMS CP-DATA conn=%u: %s",
+	    conn->connId(),reason.c_str());
+	signalling()->sendSmsCPRsp(conn,callRef,!tiFlag,m.info(),cause);
+	return;
+    }
+    Debug(this,level,"Rejecting SMS CP-DATA conn=%u RP-Cause=%u: %s",
+	conn->connId(),causeRp,reason.c_str());
+    signalling()->sendSmsRPRsp(conn,callRef,!tiFlag,m.info(),rpMsgRef,causeRp);
+}
+
+void YBTSDriver::handleSmsCPRsp(YBTSMessage& m, YBTSConn* conn,
+    const String& callRef, bool tiFlag, const XmlElement& rsp, bool ok)
+{
+    // Short handling responses for transactions started by UE
+    if (!tiFlag) {
+	DDebug(this,DebugAll,"SMS %s conn=%u callRef=%s tiFlag=%s",
+	    (ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
+	    String::boolText(tiFlag));
+	return;
+    }
+    // Responses for transactions started by us
+    Debug(this,DebugStub,"SMS %s conn=%u callRef=%s tiFlag=%s",
+	(ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
+	String::boolText(tiFlag));
 }
 
 void YBTSDriver::start()
