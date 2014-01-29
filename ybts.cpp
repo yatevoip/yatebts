@@ -112,7 +112,8 @@ class YBTSSignalling;                    // Signalling interface
 class YBTSMedia;                         // Media interface
 class YBTSUE;                            // A registered equipment
 class YBTSLocationUpd;                   // Running location update from UE
-class YBTSSMSSubmit;                     // MO SMS submit thread
+class YBTSSmsSubmit;                     // MO SMS submit thread
+class YBTSSmsInfo;                       // Holds data describing a pending SMS
 class YBTSMM;                            // Mobility management entity
 class YBTSDataSource;
 class YBTSDataConsumer;
@@ -389,9 +390,10 @@ protected:
     YBTSSignalling* m_owner;
     XmlElement* m_xml;
     RefPointer<YBTSUE> m_ue;
+    ObjList m_sms;                       // Pending sms
     // The following data is used by YBTSSignalling and protected by conns list mutex
     uint64_t m_timeout;                  // Connection timeout
-    unsigned int m_calls;                // Calls using this connection
+    unsigned int m_usage;                // Usage counter
 };
 
 class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
@@ -491,9 +493,29 @@ public:
 	}
     // Increase/decrease connection usage. Update its timeout
     // Return false if connection is not found
-    bool setConnUsage(uint16_t connId, bool on, bool call);
-    inline bool setConnUsageCall(uint16_t connId, bool on)
-	{ return setConnUsage(connId,on,true); }
+    bool setConnUsage(uint16_t connId, bool on);
+    // Add a pending MO sms info to a connection
+    // Increase connection usage counter on success
+    bool addMOSms(YBTSConn* conn, const String& callRef, uint8_t sapi,
+	uint8_t rpCallRef);
+    inline bool addMOSms(uint16_t connId, const String& callRef, uint8_t sapi,
+	uint8_t rpCallRef) {
+	    RefPointer<YBTSConn> conn;
+	    findConn(conn,connId,false);
+	    return conn && addMOSms(conn,callRef,sapi,rpCallRef);
+	}
+    // Remove a pending sms info from a connection
+    // Decrease connection usage counter on success
+    YBTSSmsInfo* removeSms(YBTSConn* conn, const String& callRef, bool tiFlag);
+    // Respond to a MO SMS
+    bool moSmsRespond(YBTSConn* conn, const String& callRef, uint8_t cause,
+	const String* rpdu = 0);
+    inline bool moSmsRespond(uint16_t connId, const String& callRef, uint8_t cause,
+	const String* rpdu = 0) {
+	    RefPointer<YBTSConn> conn;
+	    findConn(conn,connId,false);
+	    return conn && moSmsRespond(conn,callRef,cause,rpdu);
+	}
     // Read socket. Parse and handle received data
     virtual void processLoop();
     void init(Configuration& cfg);
@@ -559,7 +581,7 @@ protected:
     // Connection timeout: protected by m_connsMutex
     bool m_haveConnTout;                 // Flag indicating we have connections to timeout
     uint64_t m_connsTimeout;             // Minimum connections timeout
-    unsigned int m_connNoCallIntervalMs; // Interval to timeout a connection after all calls terminate
+    unsigned int m_connIdleIntervalMs;   // Interval to timeout a connection after becoming idle
 };
 
 class YBTSMedia : public GenObject, public DebugEnabler, public Mutex,
@@ -657,11 +679,12 @@ protected:
     uint64_t m_startTime;
 };
 
-class YBTSSMSSubmit : public YBTSGlobalThread, public YBTSConnIdHolder
+class YBTSSmsSubmit : public YBTSGlobalThread, public YBTSConnIdHolder
 {
 public:
-    YBTSSMSSubmit(YBTSUE& ue, uint16_t connid,
-	const char* callRef, bool tiFlag, uint8_t sapi, uint8_t rpMsgRef);
+    YBTSSmsSubmit(uint16_t connid, const char* imsi, const char* callRef);
+    ~YBTSSmsSubmit()
+	{ notify(); }
     inline Message& msg()
 	{ return m_msg; }
     virtual void cleanup()
@@ -671,11 +694,41 @@ protected:
     void notify(bool final = true, unsigned int cause = 111, const String* rpdu = 0);
 
     String m_imsi;                       // UE imsi, empty if already notified termination
+    String m_callRef;                    // SMS transaction identifier
+    Message m_msg;                       // The message to dispatch
+};
+
+class YBTSSmsInfo : public GenObject
+{
+public:
+    inline YBTSSmsInfo(const String& callRef, bool tiFlag, uint8_t sapi,
+	uint8_t rpMsgRef)
+	: m_callRef(callRef), m_tiFlag(tiFlag), m_sapi(sapi), m_rpMsgRef(rpMsgRef)
+	{}
+    static inline YBTSSmsInfo* find(ObjList& list, const String& callRef, bool tiFlag) {
+	    for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
+		YBTSSmsInfo* i = static_cast<YBTSSmsInfo*>(o->get());
+		if (i->m_tiFlag == tiFlag && i->m_callRef == callRef)
+		    return i;
+	    }
+	    return 0;
+	}
+    static inline YBTSSmsInfo* remove(ObjList& list, const String& callRef, bool tiFlag) {
+	    for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
+		YBTSSmsInfo* i = static_cast<YBTSSmsInfo*>(o->get());
+		if (i->m_tiFlag == tiFlag && i->m_callRef == callRef) {
+		    o->remove(false);
+		    return i;
+		}
+	    }
+	    return 0;
+	}
+    static inline YBTSSmsInfo* findMO(ObjList& list, const String& callRef)
+	{ return find(list,callRef,false); }
     String m_callRef;                    // TID: Call reference
     bool m_tiFlag;                       // TID: TI flag
     uint8_t m_sapi;                      // SAPI to use
     uint8_t m_rpMsgRef;                  // RP Message reference
-    Message m_msg;                       // The message to dispatch
 };
 
 class YBTSMM : public GenObject, public DebugEnabler, public Mutex
@@ -1359,13 +1412,12 @@ static inline const String* getIdentTIMSI(const XmlElement& xml, bool& isTMSI, b
 
 static inline void getCCCause(String& dest, const XmlElement& xml)
 {
-    // TODO: check it when codec will be implemented
     dest = xml.childText(s_cause);
 }
 
-static inline XmlElement* buildCCCause(const char* cause, const char* location = "LPN", const char* coding = "GSM-PLMN")
+static inline XmlElement* buildCCCause(const char* cause, const char* location = "LPN",
+    const char* coding = "GSM-PLMN")
 {
-    // TODO: check it when codec will be implemented
     if (TelEngine::null(cause))
 	cause = "normal";
     XmlElement* xml = new XmlElement(s_cause,cause);
@@ -1386,13 +1438,11 @@ static inline XmlElement* buildCCCause(const String& cause)
 
 static inline void getCCCallState(String& dest, const XmlElement& xml)
 {
-    // TODO: check it when codec will be implemented
     dest = xml.childText(s_ccCallState);
 }
 
 static inline XmlElement* buildCCCallState(int stat)
 {
-    // TODO: check it when codec will be implemented
     return new XmlElement(s_ccCallState,String(stat));
 }
 
@@ -1824,7 +1874,7 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     : Mutex(false,"YBTSConn"),
     YBTSConnIdHolder(connId),
     m_owner(owner), m_xml(0),
-    m_timeout(0), m_calls(0)
+    m_timeout(0), m_usage(0)
 {
 }
 
@@ -2039,7 +2089,7 @@ YBTSSignalling::YBTSSignalling()
     m_hbTimeoutMs(YBTS_HB_TIMEOUT_DEF),
     m_haveConnTout(false),
     m_connsTimeout(0),
-    m_connNoCallIntervalMs(2000)
+    m_connIdleIntervalMs(2000)
 {
     m_name = "ybts-signalling";
     debugName(m_name);
@@ -2233,31 +2283,79 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 
 // Increase/decrease connection usage. Update its timeout
 // Return false if connection is not found
-bool YBTSSignalling::setConnUsage(uint16_t connId, bool on, bool call)
+bool YBTSSignalling::setConnUsage(uint16_t connId, bool on)
 {
-    if (!call)
-	return false;
     Lock lck(m_connsMutex);
     YBTSConn* conn = findConnInternal(connId);
     if (!conn)
 	return false;
-    if (call) {
-	if (on)
-	    conn->m_calls++;
-	else if (conn->m_calls)
-	    conn->m_calls--;
-    }
+    if (on)
+	conn->m_usage++;
+    else if (conn->m_usage)
+	conn->m_usage--;
     uint64_t tout = 0;
-    if (conn->m_calls)
+    if (conn->m_usage)
 	conn->m_timeout = 0;
     else if (!conn->m_timeout) {
-	conn->m_timeout = Time::now() + (uint64_t)m_connNoCallIntervalMs * 1000;
+	conn->m_timeout = Time::now() + (uint64_t)m_connIdleIntervalMs * 1000;
 	tout = conn->m_timeout;
     }
     if (tout && (!m_connsTimeout || tout < m_connsTimeout)) {
 	m_haveConnTout = true;
 	m_connsTimeout = tout;
     }
+    return true;
+}
+
+// Add a pending MO sms info to a connection
+// Increase connection usage counter on success
+bool YBTSSignalling::addMOSms(YBTSConn* conn, const String& callRef, uint8_t sapi,
+    uint8_t rpCallRef)
+{
+    if (!conn)
+	return false;
+    Lock lck(conn);
+    if (YBTSSmsInfo::findMO(conn->m_sms,callRef))
+	return true;
+    conn->m_sms.append(new YBTSSmsInfo(callRef,false,sapi,rpCallRef));
+    lck.drop();
+    setConnUsage(conn->connId(),true);
+    return true;
+}
+
+// Remove a pending sms info from a connection
+// Decrease connection usage counter on success
+YBTSSmsInfo* YBTSSignalling::removeSms(YBTSConn* conn, const String& callRef,
+    bool tiFlag)
+{
+    if (!conn)
+	return 0;
+    Lock lck(conn);
+    YBTSSmsInfo* i = YBTSSmsInfo::remove(conn->m_sms,callRef,tiFlag);
+    if (!i)
+	return 0;
+    lck.drop();
+    setConnUsage(conn->connId(),false);
+    return i;
+}
+
+// Respond to a MO SMS
+bool YBTSSignalling::moSmsRespond(YBTSConn* conn, const String& callRef, uint8_t cause,
+    const String* rpdu)
+{
+    if (!conn)
+	return false;
+    Lock lck(conn);
+    YBTSSmsInfo* i = YBTSSmsInfo::findMO(conn->m_sms,callRef);
+    if (!i)
+	return false;
+    uint8_t sapi = i->m_sapi;
+    uint8_t rpMsgRef = i->m_rpMsgRef;
+    lck.drop();
+    if (TelEngine::null(rpdu))
+	sendSmsRPRsp(conn,callRef,true,sapi,rpMsgRef,cause);
+    else
+	sendSmsCPData(conn,callRef,true,sapi,*rpdu);
     return true;
 }
 
@@ -2816,32 +2914,26 @@ void YBTSLocationUpd::notify(bool final, bool ok)
 
 
 //
-// YBTSSMSSubmit
+// YBTSSmsSubmit
 //
-YBTSSMSSubmit::YBTSSMSSubmit(YBTSUE& ue, uint16_t connid,
-	const char* callRef, bool tiFlag, uint8_t sapi, uint8_t rpMsgRef)
-    : YBTSGlobalThread("YBTSSMSSubmit"),
+YBTSSmsSubmit::YBTSSmsSubmit(uint16_t connid, const char* imsi, const char* callRef)
+    : YBTSGlobalThread("YBTSSmsSubmit"),
     YBTSConnIdHolder(connid),
-    m_imsi(ue.imsi()),
+    m_imsi(imsi),
     m_callRef(callRef),
-    m_tiFlag(tiFlag),
-    m_sapi(sapi),
-    m_rpMsgRef(rpMsgRef),
     m_msg("call.route")
 {
     m_msg.addParam("module",__plugin.name());
     m_msg.addParam("route_type","msg");
-    m_msg.addParam("caller",m_imsi);
-    m_msg.addParam("msisdn",ue.msisdn(),false);
 }
 
-void YBTSSMSSubmit::run()
+void YBTSSmsSubmit::run()
 {
     set(this,true);
     if (!m_imsi)
 	return;
-    Debug(&__plugin,DebugAll,"Started MO SMS thread for IMSI=%s [%p]",
-	m_imsi.c_str(),this);
+    Debug(&__plugin,DebugAll,"Started MO SMS thread for IMSI=%s callRef=%s [%p]",
+	m_imsi.c_str(),m_callRef.c_str(),this);
     bool ok = false;
     while (true) {
 	if (!Engine::dispatch(m_msg))
@@ -2871,7 +2963,7 @@ void YBTSSMSSubmit::run()
     notify(false,cause,m_msg.getParam(YSTRING("irpdu")));
 }
 
-void YBTSSMSSubmit::notify(bool final, unsigned int cause, const String* rpdu)
+void YBTSSmsSubmit::notify(bool final, unsigned int cause, const String* rpdu)
 {
     if (!m_imsi)
 	return;
@@ -2882,30 +2974,18 @@ void YBTSSMSSubmit::notify(bool final, unsigned int cause, const String* rpdu)
 	return;
     if (!final)
 	Debug(&__plugin,DebugAll,
-	    "MO SMS thread for IMSI=%s terminated rpdu='%s' cause=%u [%p]",
-	    imsi.c_str(),TelEngine::c_safe(rpdu),cause,this);
+	    "MO SMS thread for IMSI=%s callRef=%s terminated rpdu='%s' cause=%u [%p]",
+	    imsi.c_str(),m_callRef.c_str(),TelEngine::c_safe(rpdu),cause,this);
     else {
 	if (!cause)
 	    cause = 111;
 	if (!Engine::exiting())
 	    Alarm(&__plugin,"system",DebugWarn,
-		"MO SMS thread for IMSI=%s abnormally terminated [%p]",
-		imsi.c_str(),this);
+		"MO SMS thread for IMSI=%s callRef=%s abnormally terminated [%p]",
+		imsi.c_str(),m_callRef.c_str(),this);
     }
-    RefPointer<YBTSConn> conn;
-    if (!(__plugin.signalling() && __plugin.signalling()->findConn(conn,connId(),false)))
-	return;
-    if (!conn->ue())
-	return;
-    Lock lck(conn->ue());
-    if (conn->ue()->imsi() != imsi)
-	return;
-    lck.drop();
-    if (TelEngine::null(rpdu))
-	__plugin.signalling()->sendSmsRPRsp(conn,m_callRef,m_tiFlag,m_sapi,
-	    m_rpMsgRef,cause);
-    else
-	__plugin.signalling()->sendSmsCPData(conn,m_callRef,m_tiFlag,m_sapi,*rpdu);
+    if (__plugin.signalling())
+	__plugin.signalling()->moSmsRespond(connId(),m_callRef,cause,rpdu);
 }
 
 
@@ -2979,7 +3059,7 @@ void YBTSMM::locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t c
     if (ue->m_registered != ok)
 	level = (!ok ? DebugNote : DebugInfo);
     Debug(this,level,"IMSI=%s register %s [%p]",
-	    ue->imsi().c_str(),ok ? "succeeded" : "failed",this);
+	ue->imsi().c_str(),ok ? "succeeded" : "failed",this);
     ue->m_registered = ok;
     // TODO: Update data from parameters
     XmlElement* ch = 0;
@@ -3425,7 +3505,6 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    sendCMServiceRsp(m,conn,CauseInvalidIE);
 	    return;
 	}
-	// TODO: Properly check service type, reject if not supported
 	const String& type = cmServType->getText();
 	if (type == s_cmMOCall || type == s_cmSMS)
 	    ;
@@ -3480,12 +3559,8 @@ void YBTSMM::sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t 
 {
     XmlElement* ch = 0;
     XmlElement* mm = buildMM(ch,"LocationUpdatingReject");
-    if (ch) {
-	// TODO: Use a proper dictionary to retrieve the value
-	String tmp(cause);
-	const char* reason = tmp;
-	ch->addChildSafe(new XmlElement("RejectCause",reason));
-    }
+    if (ch)
+	ch->addChildSafe(new XmlElement("RejectCause",String(cause)));
     if (conn)
 	conn->sendL3(mm);
     else
@@ -3497,12 +3572,8 @@ void YBTSMM::sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause)
 {
     XmlElement* ch = 0;
     XmlElement* mm = buildMM(ch,!cause ? "CMServiceAccept" : "CMServiceReject");
-    if (ch && cause) {
-	// TODO: Use a proper dictionary to retrieve the value
-	String tmp(cause);
-	const char* reason = tmp;
-	ch->addChildSafe(new XmlElement("RejectCause",reason));
-    }
+    if (ch && cause)
+	ch->addChildSafe(new XmlElement("RejectCause",String(cause)));
     if (conn)
 	conn->sendL3(mm);
     else
@@ -3688,7 +3759,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, 
     m_relSent(0),
     m_chan(chan)
 {
-    __plugin.signalling()->setConnUsageCall(connId(),true);
+    __plugin.signalling()->setConnUsage(connId(),true);
     if (callRef) {
 	m_callRef = *callRef;
 	*this << prefix(false) << m_callRef;
@@ -3714,7 +3785,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& cal
     m_chan(chan),
     m_callRef(callRef)
 {
-    __plugin.signalling()->setConnUsageCall(connId(),true);
+    __plugin.signalling()->setConnUsage(connId(),true);
     *this << prefix(true) << m_callRef;
     // TODO: pick relevant info from XML list
 }
@@ -3722,7 +3793,7 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& cal
 YBTSCallDesc::~YBTSCallDesc()
 {
     if (__plugin.signalling())
-	__plugin.signalling()->setConnUsageCall(connId(),false);
+	__plugin.signalling()->setConnUsage(connId(),false);
 }
 
 void YBTSCallDesc::proceeding()
@@ -3834,7 +3905,7 @@ YBTSChan::YBTSChan(YBTSConn* conn)
 {
     if (!m_conn)
 	return;
-    __plugin.signalling()->setConnUsageCall(connId(),true);
+    __plugin.signalling()->setConnUsage(connId(),true);
     m_address = m_conn->ue()->imsi();
     Debug(this,DebugCall,"Incoming imsi=%s conn=%u [%p]",
 	m_address.c_str(),connId(),this);
@@ -3859,7 +3930,7 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
     m_route(0)
 {
     if (m_conn)
-	__plugin.signalling()->setConnUsageCall(connId(),true);
+	__plugin.signalling()->setConnUsage(connId(),true);
     if (!m_ue)
 	return;
     m_address = ue->imsi();
@@ -4135,7 +4206,7 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
     if (conn && !m_conn) {
 	m_conn = conn;
 	m_connId = conn->connId();
-	__plugin.signalling()->setConnUsageCall(m_connId,true);
+	__plugin.signalling()->setConnUsage(m_connId,true);
     }
     else
 	conn = m_conn;
@@ -4417,7 +4488,7 @@ void YBTSChan::destroyed()
     TelEngine::destruct(m_pending);
     releaseRoute(true);
     if (m_conn && __plugin.signalling())
-	__plugin.signalling()->setConnUsageCall(m_conn->connId(),false);
+	__plugin.signalling()->setConnUsage(m_conn->connId(),false);
     Debug(this,DebugCall,"Destroyed [%p]",this);
     Channel::destroyed();
 }
@@ -4743,18 +4814,22 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	Debug(this,DebugMild,"Ignoring SMS CP-DATA conn=%u: no connection",m.connId());
 	return;
     }
-    // TODO: Check call reference: this might be a response for sent data
     int level = DebugNote;
     String reason;
     const char* cause = "protocol-error-unspecified";
     uint8_t causeRp = 111;
     bool cpOk = false;
-    uint8_t rpMsgRef = 0;
     while (true) {
 #define SMS_CPDATA_DONE(str) { reason = str; break; }
 #define SMS_CPDATA_DONE_MILD(str) { level = DebugMild; reason = str; break; }
 	if (!(conn && conn->ue()))
 	    SMS_CPDATA_DONE("no UE");
+	if (tiFlag) {
+	    // tiFlag=true means this is a response to a transaction started by us
+	    // We never expect RP-DATA in response for something
+	    cause = "message-not-compatible-with-SM-protocol-state";
+	    SMS_CPDATA_DONE("unexpected RP-DATA");
+	}
 	const String* rpdu = cpData.childText(YSTRING("RPDU"));
 	if (TelEngine::null(rpdu))
 	    SMS_CPDATA_DONE("empty RPDU");
@@ -4775,10 +4850,11 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	// Other IEs ...
 	uint8_t* b = (uint8_t*)buf.data();
 	uint8_t rpMsgType = *b++ & 0x03;
-	rpMsgRef = *b++;
+	uint8_t rpMsgRef = *b++;
 	// CP-DATA is ok, accept it
 	cpOk = true;
 	signalling()->sendSmsCPRsp(conn,callRef,!tiFlag,m.info());
+	signalling()->addMOSms(conn,callRef,m.info(),rpMsgRef);
 	// Check for RP data
 	if (rpMsgType != 0 && rpMsgType != 6) {
 	    if (rpMsgType == 2 || rpMsgType == 4) {
@@ -4809,8 +4885,9 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 		"SMS CP-DATA conn=%u: unable to retrieve SMSC number, %s",
 		m.connId(),ok ? "empty destination address" : "invalid RP-DATA");
 	conn->ue()->lock();
-	YBTSSMSSubmit* th = new YBTSSMSSubmit(*conn->ue(),conn->connId(),
-	    callRef,!tiFlag,m.info(),rpMsgRef);
+	YBTSSmsSubmit* th = new YBTSSmsSubmit(conn->connId(),conn->ue()->imsi(),callRef);
+	th->msg().addParam("caller",conn->ue()->imsi());
+	th->msg().addParam("msisdn",conn->ue()->msisdn(),false);
 	conn->ue()->unlock();
 	if (called) {
 	    th->msg().addParam("called",called);
@@ -4833,23 +4910,22 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
     }
     Debug(this,level,"Rejecting SMS CP-DATA conn=%u RP-Cause=%u: %s",
 	conn->connId(),causeRp,reason.c_str());
-    signalling()->sendSmsRPRsp(conn,callRef,!tiFlag,m.info(),rpMsgRef,causeRp);
+    signalling()->moSmsRespond(conn,callRef,causeRp);
 }
 
 void YBTSDriver::handleSmsCPRsp(YBTSMessage& m, YBTSConn* conn,
     const String& callRef, bool tiFlag, const XmlElement& rsp, bool ok)
 {
-    // Short handling responses for transactions started by UE
-    if (!tiFlag) {
-	DDebug(this,DebugAll,"SMS %s conn=%u callRef=%s tiFlag=%s",
-	    (ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
-	    String::boolText(tiFlag));
+    YBTSSmsInfo* info = signalling()->removeSms(conn,callRef,tiFlag);
+    if (!info)
 	return;
-    }
-    // Responses for transactions started by us
-    Debug(this,DebugStub,"SMS %s conn=%u callRef=%s tiFlag=%s",
+    Debug(this,ok ? DebugAll : DebugNote,"SMS %s conn=%u callRef=%s tiFlag=%s",
 	(ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
 	String::boolText(tiFlag));
+    if (tiFlag) {
+	// TODO: forward response
+    }
+    TelEngine::destruct(info);
 }
 
 void YBTSDriver::start()
