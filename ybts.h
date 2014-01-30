@@ -44,6 +44,7 @@ enum BtsPrimitive {
     SigAllocMedia       =   5,           // Reserve a traffic channel
     SigMediaError       =   6,           // Report an allocation of mode change failure
     SigMediaStarted     =   7,           // Notify that the traffic channel has started
+    SigEstablishSAPI    =   8,           // Request / notification about SAPI establishment
     SigHandshake        = 128,           // Handshake
     SigRadioReady       = 129,           // Radio side is functioning
     SigStartPaging      = 130,           // Start paging an UE

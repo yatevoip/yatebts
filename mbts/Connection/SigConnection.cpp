@@ -234,6 +234,32 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		}
 	    }
 	    break;
+	case SigEstablishSAPI:
+	    {
+		LogicalChannel* ch = gConnMap.find(id);
+		if (ch) {
+		    unsigned char sapi = info;
+		    if (sapi & 0x80) {
+			ch = ch->SACCH();
+			sapi &= 0x7f;
+		    }
+		    if (!ch) {
+			LOG(ERR) << "received Establish SAPI for missing SACCH of id " << id;
+			break;
+		    }
+		    if ((sapi > 4) || !ch->debugGetL2(sapi)) {
+			LOG(ERR) << "received Establish for invalid SAPI " << (unsigned int)info;
+			break;
+		    }
+		    if (ch->multiframeMode(sapi))
+			send(prim,info,id);
+		    else
+			ch->send(GSM::ESTABLISH,sapi);
+		}
+		else
+		    LOG(ERR) << "received Establish SAPI for unmapped id " << id;
+	    }
+	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id;
     }

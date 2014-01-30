@@ -116,6 +116,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 			case ESTABLISH:
 				if (sapi) {
 					delete frame;
+					gSigConn.send(SigEstablishSAPI,sapi,id);
 					continue;
 				}
 				// fall through

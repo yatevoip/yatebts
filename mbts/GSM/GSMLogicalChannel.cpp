@@ -419,6 +419,15 @@ void SACCHLogicalChannel::serviceLoop()
 			if (smsFrame) {
 				nothing=false;
 				switch (smsFrame->primitive()) {
+					case ESTABLISH:
+						{
+							int id = gConnMap.find(this);
+							if (id >= 0)
+								gSigConn.send(Connection::SigEstablishSAPI,0x83,id);
+							else
+								LOG(ERR) << "SAP3 established on unmapped channel " << *this;
+						}
+						break;
 					case DATA:
 					case UNIT_DATA:
 						{
@@ -426,7 +435,7 @@ void SACCHLogicalChannel::serviceLoop()
 							if (id >= 0)
 								gSigConn.send(0x83,id,smsFrame);
 							else
-								LOG(ERR) << "SAP3 on unmapped channel " << *this;
+								LOG(ERR) << "SAP3 data on unmapped channel " << *this;
 						}
 						break;
 					default:
