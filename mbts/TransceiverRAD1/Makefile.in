@@ -22,4 +22,4 @@ OBJS := DummyLoad.o FactoryCalibration.o fusb.o RAD1Device.o radioInterface.o \
 all:
 
 transceiver-rad1: runTransceiver.cpp $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)

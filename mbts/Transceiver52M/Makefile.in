@@ -34,13 +34,13 @@ EXTRACLEAN := runTransceiver.o USRPDevice.o UHDDevice.o
 all:
 
 transceiver-usrp1: USRPDevice.cpp USRPDevice.h runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
 
 transceiver-uhd: UHDDevice.cpp runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
 
 USRPping-usrp1: USRPDevice.cpp USRPDevice.h USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
 
 USRPping-uhd: UHDDevice.cpp USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)

@@ -61,7 +61,7 @@ $(LIBS): $(OBJS)
 	$(AR) rcs $@ $^
 
 %: %.cpp $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS) $(YATELIBS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
 
 ../%.a:
 	$(MAKE) -C `dirname $@`
