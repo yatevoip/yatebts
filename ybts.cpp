@@ -2432,7 +2432,7 @@ int YBTSSignalling::checkTimers(const Time& time)
 		YBTSConn* c = static_cast<YBTSConn*>(o->get());
 		if (!c->m_timeout)
 		    continue;
-		if (c->m_timeout <= time)
+		if (Engine::exiting() || c->m_timeout <= time)
 		    remove.append(new String(c->connId()));
 		else if (!m_connsTimeout || m_connsTimeout > c->m_timeout)
 		    m_connsTimeout = c->m_timeout;
@@ -2442,7 +2442,8 @@ int YBTSSignalling::checkTimers(const Time& time)
 	m_connsMutex.unlock();
 	for (ObjList* o = remove.skipNull(); o; o = o->skipNext()) {
 	    String* s = static_cast<String*>(o->get());
-	    Debug(this,DebugAll,"Connection %s idle timeout [%p]",s->c_str(),this);
+	    if (!Engine::exiting())
+		Debug(this,DebugAll,"Connection %s idle timeout [%p]",s->c_str(),this);
 	    dropConn(s->toInteger(),true);
 	}
     }
@@ -5022,6 +5023,7 @@ void YBTSDriver::addTerminatedCall(YBTSCallDesc* call)
 	call->setTimeout(s_t305);
     }
     call->m_timeout = Time::now() + 1000000;
+    Lock lck(this);
     m_terminatedCalls.append(call);
     m_haveCalls = true;
 }
@@ -5707,10 +5709,14 @@ bool YBTSDriver::handleEngineStop(Message& msg)
 	m_media->cleanup(false);
 	haveThreads = !YBTSGlobalThread::cancelAll(false,60);
     }
-    if (haveThreads)
-	return true;
-    stop();
-    return false;
+    bool canStop = !(haveThreads || m_haveCalls);
+    if (canStop) {
+	Lock lck(this);
+	canStop = (channels().skipNull() == 0);
+    }
+    if (canStop)
+	stop();
+    return !canStop;
 }
 
 YBTSChan* YBTSDriver::findChanConnId(uint16_t connId)
