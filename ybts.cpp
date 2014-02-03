@@ -1230,6 +1230,7 @@ protected:
 	    m_stopped = !start;
 	    m_restartIndex = 0;
 	}
+    void ybtsStatus(String& line, String& retVal);
     void btsStatus(Message& msg);
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
@@ -1270,6 +1271,7 @@ protected:
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
 static uint64_t s_startTime = 0;
+static uint64_t s_idleTime = Time::now();
 static YBTSLAI s_lai;
 static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
@@ -1293,6 +1295,7 @@ static unsigned int s_t313 = 5000;       // Send Connect, expect Connect Ack, cl
 
 static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
 
+static const String s_statusCmd = "status";
 static const String s_startCmd = "start";
 static const String s_stopCmd = "stop";
 static const String s_restartCmd = "restart";
@@ -5782,10 +5785,14 @@ void YBTSDriver::changeState(int newStat)
     m_state = newStat;
     // Update globals
     Lock lck(s_globalMutex);
-    if (m_state != Idle)
+    if (m_state != Idle) {
 	s_startTime = Time::now();
-    else
+	s_idleTime = 0;
+    }
+    else {
 	s_startTime = 0;
+	s_idleTime = Time::now();
+    }
 }
 
 void YBTSDriver::setRestart(int resFlag, bool on, unsigned int intervalMs)
@@ -5830,6 +5837,25 @@ void YBTSDriver::checkRestart(const Time& time)
     }
     else
 	m_restart = false;
+}
+
+void YBTSDriver::ybtsStatus(String& line, String& retVal)
+{
+    Module::statusModule(retVal);
+    Lock lck(m_stateMutex);
+    retVal.append("state=",";");
+    retVal << stateName();
+    uint64_t val = 0;
+    if (state() != Idle)
+	getGlobalUInt64(val,s_startTime);
+    else {
+	if (m_stopped)
+	    retVal << " (stopped)";
+	getGlobalUInt64(val,s_idleTime);
+    }
+    lck.drop();
+    retVal << ",state_time=" << (val ? ((Time::now() - val) / 1000000)  : 0);
+    retVal << "\r\n";
 }
 
 void YBTSDriver::btsStatus(Message& msg)
@@ -6074,7 +6100,9 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
 {
     String tmp = line;
     if (tmp.startSkip(name())) {
-	if (tmp.startSkip(s_startCmd)) {
+	if (tmp.startSkip(s_statusCmd))
+	    ybtsStatus(tmp,retVal);
+	else if (tmp.startSkip(s_startCmd)) {
 	    cmdStartStop(true);
 	    startIdle();
 	}
@@ -6119,6 +6147,7 @@ bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const Str
 	itemComplete(msg.retValue(),name(),partWord);
     }
     else if (partLine == name()) {
+	itemComplete(msg.retValue(),s_statusCmd,partWord);
 	itemComplete(msg.retValue(),s_startCmd,partWord);
 	itemComplete(msg.retValue(),s_stopCmd,partWord);
 	itemComplete(msg.retValue(),s_restartCmd,partWord);
