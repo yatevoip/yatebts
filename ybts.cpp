@@ -44,16 +44,26 @@ namespace { // anonymous
 
 // Handshake interval (timeout)
 #define YBTS_HK_INTERVAL_DEF 60000
+#define YBTS_HK_INTERVAL_MIN 20000
+#define YBTS_HK_INTERVAL_MAX 300000
 // Heartbeat interval
 #define YBTS_HB_INTERVAL_DEF 30000
+#define YBTS_HB_INTERVAL_MIN 1000
+#define YBTS_HB_INTERVAL_MAX 120000
 // Heartbeat timeout
 #define YBTS_HB_TIMEOUT_DEF 60000
+#define YBTS_HB_TIMEOUT_MIN 10000
+#define YBTS_HB_TIMEOUT_MAX 180000
 // Restart time
 #define YBTS_RESTART_DEF 120000
 #define YBTS_RESTART_MIN 30000
 #define YBTS_RESTART_MAX 600000
 // Peer check
 #define YBTS_PEERCHECK_DEF 3000
+// SMS
+#define YBTS_MT_SMS_TIMEOUT_DEF 300000
+#define YBTS_MT_SMS_TIMEOUT_MIN 5000
+#define YBTS_MT_SMS_TIMEOUT_MAX 600000
 
 // Constant strings
 static const String s_message = "Message";
@@ -1258,6 +1268,7 @@ static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
 static String s_ueFile;                  // File to save UE information
 static bool s_askIMEI = true;            // Ask the IMEI identity
+static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
 static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
@@ -2706,22 +2717,24 @@ static inline int getPrintData(const NamedList& list, const String& param, int d
 
 void YBTSSignalling::init(Configuration& cfg)
 {
-    const NamedList& sect = safeSect(cfg,"signalling");
-    m_printMsg = getPrintData(sect,YSTRING("print_msg"),-1);
-    m_printMsgData = getPrintData(sect,YSTRING("print_msg_data"),1);
+    const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));
+    m_hkIntervalMs = ybts.getIntValue(YSTRING("handshake_start"),
+	YBTS_HK_INTERVAL_DEF,YBTS_HK_INTERVAL_MIN,YBTS_HK_INTERVAL_MAX);
+    m_hbIntervalMs = ybts.getIntValue(YSTRING("heartbeat_ping"),
+	YBTS_HB_INTERVAL_DEF,YBTS_HB_INTERVAL_MIN,YBTS_HB_INTERVAL_MAX);
+    m_hbTimeoutMs = ybts.getIntValue(YSTRING("heartbeat_timeout"),
+	YBTS_HB_TIMEOUT_DEF,m_hbIntervalMs + 3000,YBTS_HB_TIMEOUT_MAX);
+    m_printMsg = getPrintData(ybts,YSTRING("print_msg"),-1);
+    m_printMsgData = getPrintData(ybts,YSTRING("print_msg_data"),1);
 #ifdef DEBUG
-    // Allow changing some data for debug purposes
-    m_hkIntervalMs = sect.getIntValue("handshake_timeout",60000,5000,120000);
-
     String s;
+    s << "\r\nheartbeat_ping=" << m_hbIntervalMs;
+    s << "\r\nheartbeat_timeout=" << m_hbTimeoutMs;
+    s << "\r\nhandshake_start=" << m_hkIntervalMs;
     s << "\r\nprint_msg=" <<
 	(m_printMsg > 0 ? "dump" : String::boolText(m_printMsg < 0));
     s << "\r\nprint_msg_data=" <<
 	(m_printMsgData > 0 ? "verbose" : String::boolText(m_printMsgData < 0));
-    s << "\r\nhandshake_timeout=" << m_hkIntervalMs;
-    s << "\r\nheartbeat_timeout=" << m_hbTimeoutMs;
-    s << "\r\nheartbeat_interval=" << m_hbIntervalMs;
-
     Debug(this,DebugAll,"Initialized [%p]\r\n-----%s\r\n-----",this,s.c_str());
 #endif
 }
@@ -5649,9 +5662,8 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     Debug(this,DebugInfo,"MT SMS '%s' to IMSI=%s",
 	sms->id().c_str(),ue->imsi().c_str());
     checkMtSms(*list);
-    unsigned int intervals = msg.getIntValue(YSTRING("timeout"),300000);
-    if (intervals)
-	intervals = threadIdleIntervals(intervals);
+    unsigned int intervals = msg.getIntValue(YSTRING("timeout"));
+    intervals = threadIdleIntervals(intervals ? intervals : s_mtSmsTimeout);
     while (sms->active()) {
 #define YBTS_SMSOUT_DONE(reason) { sms->terminate(false,reason); break; }
 	Thread::idle();
@@ -5834,14 +5846,19 @@ void YBTSDriver::initialize()
     static bool s_first = true;
     Output("Initializing module YBTS");
     Configuration cfg(Engine::configFile("ybts"));
-    const NamedList& general = safeSect(cfg,"general");
-    const NamedList& ybts = safeSect(cfg,"ybts");
+    const NamedList& general = safeSect(cfg,YSTRING("general"));
+    const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));
+    const NamedList& calls = safeSect(cfg,YSTRING("calls"));
+    const NamedList& registrar = safeSect(cfg,YSTRING("registrar"));
+    const NamedList& sms = safeSect(cfg,YSTRING("sms"));
     s_restartMs = ybts.getIntValue("restart_interval",
 	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
-    s_t305 = general.getIntValue("t305",30000,20000,60000);
-    s_t308 = general.getIntValue("t308",5000,4000,20000);
-    s_t313 = general.getIntValue("t313",5000,4000,20000);
-    s_tmsiExpire = general.getIntValue("tmsi_expire",864000,7200,2592000);
+    s_t305 = calls.getIntValue("t305",30000,20000,60000);
+    s_t308 = calls.getIntValue("t308",5000,4000,20000);
+    s_t313 = calls.getIntValue("t313",5000,4000,20000);
+    s_tmsiExpire = registrar.getIntValue("tmsi_expire",864000,7200,2592000);
+    s_mtSmsTimeout = sms.getIntValue("timeout",
+	YBTS_MT_SMS_TIMEOUT_DEF,YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     s_globalMutex.lock();
     YBTSLAI lai;
     const String& laiStr = general[YSTRING("lai")];
@@ -5854,8 +5871,8 @@ void YBTSDriver::initialize()
 	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
 	s_lai = lai;
     }
-    s_askIMEI = general.getBoolValue("imei_request",true);
-    s_ueFile = general.getValue("datafile",Engine::configFile("ybtsdata"));
+    s_askIMEI = registrar.getBoolValue("imei_request",true);
+    s_ueFile = registrar.getValue("datafile",Engine::configFile("ybtsdata"));
     Engine::runParams().replaceParams(s_ueFile);
     s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
     s_peerArg = ybts.getValue("peer_arg");
@@ -5863,6 +5880,21 @@ void YBTSDriver::initialize()
     Engine::runParams().replaceParams(s_peerCmd);
     Engine::runParams().replaceParams(s_peerArg);
     Engine::runParams().replaceParams(s_peerDir);
+#ifdef DEBUG
+    String s;
+    s << "\r\nLAI=" << s_lai.lai();
+    s << "\r\nimei_request=" << String::boolText(s_askIMEI);
+    s << "\r\ntmsi_expire=" << s_tmsiExpire << "s";
+    s << "\r\ndatafile=" << s_ueFile;
+    s << "\r\nt305=" << s_t305;
+    s << "\r\nt308=" << s_t308;
+    s << "\r\nt313=" << s_t313;
+    s << "\r\nsms_timeout=" << s_mtSmsTimeout;
+    s << "\r\npeer_cmd=" << s_peerCmd;
+    s << "\r\npeer_arg=" << s_peerArg;
+    s << "\r\npeer_dir=" << s_peerDir;
+    Debug(this,DebugAll,"Initialized\r\n-----%s\r\n-----",s.c_str());
+#endif
     s_globalMutex.unlock();
     if (s_first) {
 	s_first = false;
