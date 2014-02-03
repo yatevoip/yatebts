@@ -54,10 +54,12 @@ namespace { // anonymous
 #define YBTS_HB_TIMEOUT_DEF 60000
 #define YBTS_HB_TIMEOUT_MIN 10000
 #define YBTS_HB_TIMEOUT_MAX 180000
-// Restart time
+// Restart
 #define YBTS_RESTART_DEF 120000
 #define YBTS_RESTART_MIN 30000
 #define YBTS_RESTART_MAX 600000
+#define YBTS_RESTART_COUNT_DEF 10
+#define YBTS_RESTART_COUNT_MIN 3
 // Peer check
 #define YBTS_PEERCHECK_DEF 3000
 // SMS
@@ -1222,6 +1224,12 @@ protected:
 	    m_stopTime = Time::now() + (uint64_t)stopIntervalMs * 1000;
 	    Debug(this,DebugAll,"Scheduled stop in %ums",stopIntervalMs);
 	}
+    // Utility called when handling start/stop/restart commands
+    inline void cmdStartStop(bool start) {
+	    Lock lck(m_stateMutex);
+	    m_stopped = !start;
+	    m_restartIndex = 0;
+	}
     void btsStatus(Message& msg);
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
@@ -1242,6 +1250,7 @@ protected:
     uint64_t m_stopTime;                 // Stop time
     bool m_restart;                      // Restart flag
     uint64_t m_restartTime;              // Restart time
+    unsigned int m_restartIndex;         // Current restart index
     YBTSLog* m_logTrans;                 // Log transceiver
     YBTSLog* m_logBts;                   // Log OpenBTS
     YBTSCommand* m_command;              // Command interface
@@ -1273,6 +1282,7 @@ static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
+static unsigned int s_restartMax = YBTS_RESTART_COUNT_DEF; // Restart counter
 // Call Control Timers (in milliseconds)
 // ETSI TS 100 940 Section 11.3
 static unsigned int s_t305 = 30000;      // DISC sent, no inband tone available
@@ -4835,6 +4845,7 @@ YBTSDriver::YBTSDriver()
     m_stopTime(0),
     m_restart(false),
     m_restartTime(0),
+    m_restartIndex(0),
     m_logTrans(0),
     m_logBts(0),
     m_command(0),
@@ -5138,6 +5149,7 @@ bool YBTSDriver::radioReady()
 	restart();
 	return false;
     }
+    m_restartIndex = 0;
     changeState(RadioUp);
     return true;
 }
@@ -5428,6 +5440,15 @@ void YBTSDriver::start()
     Lock lck(m_stateMutex);
     if (m_stopped)
 	return;
+    unsigned int n = s_restartMax;
+    if (m_restartIndex >= n) {
+	m_stopped = true;
+	Alarm(this,"system",DebugWarn,
+	    "Restart index reached maximum value %u. Exiting ...",n);
+	Engine::halt(0);
+	return;
+    }
+    m_restartIndex++;
     changeState(Starting);
     while (true) {
 	// Log interface
@@ -5444,8 +5465,6 @@ void YBTSDriver::start()
 	// Media interface
 	if (!m_media->start())
 	    break;
-	// Start control interface
-	// Start status interface
 	// Start peer application
 	if (!startPeer())
 	    break;
@@ -5755,8 +5774,11 @@ void YBTSDriver::changeState(int newStat)
 {
     if (m_state == newStat)
 	return;
-    Debug(this,DebugNote,"State changed %s -> %s",
-	stateName(),lookup(newStat,s_stateName));
+    String extra;
+    if (newStat == Starting)
+	extra << " restart counter " << m_restartIndex << "/" << s_restartMax;
+    Debug(this,DebugNote,"State changed %s -> %s%s",
+	stateName(),lookup(newStat,s_stateName),extra.safe());
     m_state = newStat;
     // Update globals
     Lock lck(s_globalMutex);
@@ -5851,6 +5873,8 @@ void YBTSDriver::initialize()
     const NamedList& calls = safeSect(cfg,YSTRING("calls"));
     const NamedList& registrar = safeSect(cfg,YSTRING("registrar"));
     const NamedList& sms = safeSect(cfg,YSTRING("sms"));
+    s_restartMax = ybts.getIntValue("max_restart",
+	YBTS_RESTART_COUNT_DEF,YBTS_RESTART_COUNT_MIN);
     s_restartMs = ybts.getIntValue("restart_interval",
 	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
     s_t305 = calls.getIntValue("t305",30000,20000,60000);
@@ -5886,6 +5910,7 @@ void YBTSDriver::initialize()
     s << "\r\nimei_request=" << String::boolText(s_askIMEI);
     s << "\r\ntmsi_expire=" << s_tmsiExpire << "s";
     s << "\r\ndatafile=" << s_ueFile;
+    s << "\r\nmax_restart=" << s_restartMax;
     s << "\r\nt305=" << s_t305;
     s << "\r\nt308=" << s_t308;
     s << "\r\nt313=" << s_t313;
@@ -6050,15 +6075,15 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
     String tmp = line;
     if (tmp.startSkip(name())) {
 	if (tmp.startSkip(s_startCmd)) {
-	    m_stopped = false;
+	    cmdStartStop(true);
 	    startIdle();
 	}
 	else if (tmp.startSkip(s_stopCmd)) {
-	    m_stopped = true;
+	    cmdStartStop(false);
 	    stopNoRestart();
 	}
 	else if (tmp.startSkip(s_restartCmd)) {
-	    m_stopped = false;
+	    cmdStartStop(true);
 	    restart(tmp.toInteger(1,0,0));
 	}
 	else
