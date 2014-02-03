@@ -1397,15 +1397,15 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.CellSelection.NCCsPermitted","1",
+	tmp = new ConfigurationKey("GSM.CellSelection.NCCsPermitted","-1",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
 		ConfigurationKey::VALRANGE,
-		"0:255",
+		"-1:255",
 		false,
 		"NCCs Permitted.  "
 			"An 8-bit mask of allowed NCCs.  "
-			"Unless you are coordinating with another carrier, this should probably just select your own NCC."
+			"Unless you are coordinating with another carrier the default value -1 selects your own NCC."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

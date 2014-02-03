@@ -193,6 +193,8 @@ void PeerInterface::processNeighborParams(const struct sockaddr_in* peer, const 
 		int NCC = BSIC >> 3;
 		int NCCMaskBit = 1 << NCC;
 		int ourNCCMask = gConfig.getNum("GSM.CellSelection.NCCsPermitted");
+		if (ourNCCMask < 0)
+			ourNCCMask = 1 << ((ourBSIC >> 3) & 0x07);
 		if ((NCCMaskBit & ourNCCMask) == 0) { 
 			LOG(ALERT) << "neighbor with NCC " << NCC << " not in NCCsPermitted";
 		}

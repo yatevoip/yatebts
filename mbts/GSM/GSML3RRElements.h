@@ -294,7 +294,10 @@ class L3NCCPermitted : public L3ProtocolElement {
 	L3NCCPermitted()
 		:L3ProtocolElement()
 	{
-		mPermitted = gConfig.getNum("GSM.CellSelection.NCCsPermitted");
+		int mask = gConfig.getNum("GSM.CellSelection.NCCsPermitted");
+		if (mask < 0)
+			mask = 1 << (gConfig.getNum("GSM.Identity.BSIC.NCC") & 0x07);
+		mPermitted = mask;
 	}
 
 	size_t lengthV() const { return 1; }

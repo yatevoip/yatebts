@@ -762,7 +762,7 @@ vector<string> configurationCrossCheck(const string& key) {
 	} else if (key.compare("GSM.CellSelection.NCCsPermitted") == 0 || key.compare("GSM.Identity.BSIC.NCC") == 0) {
 		int ourNCCMask = gConfig.getNum("GSM.CellSelection.NCCsPermitted");
 		int NCCMaskBit = 1 << gConfig.getNum("GSM.Identity.BSIC.NCC");
-		if ((NCCMaskBit & ourNCCMask) == 0) {
+		if ((ourNCCMask >= 0) && ((NCCMaskBit & ourNCCMask) == 0)) {
 			warning << "GSM.CellSelection.NCCsPermitted is not set to a mask which contains the local network color code defined in GSM.Identity.BSIC.NCC. ";
 			warning << "Set GSM.CellSelection.NCCsPermitted to " << NCCMaskBit;
 			warnings.push_back(warning.str());
