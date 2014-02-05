@@ -45,6 +45,16 @@ function pkgconfig_check()
     printf '%s\n' "$res" 2>/dev/null
 }
 
+AC_MSG_CHECKING([for sed command to use])
+# sed expression to convert version into something comparable lexicographically
+csed='sed'
+vsed='s/\(^\|\.\)\([[0-9]]\)\($\|\.\)/\10\2\3/g'
+if [[ -n "`echo a | sed 's/a\|b//'`" ]]; then
+    csed='sed -E'
+    vsed='s/(^|\.)([[0-9]])($|\.)/\10\2\3/g'
+fi
+AC_MSG_RESULT([$csed])
+
 # Check compiler and platform specifics
 AC_C_CONST
 AC_C_INLINE
@@ -60,6 +70,7 @@ AC_CHECK_FUNCS([openlog syslog], , [AC_MSG_ERROR([This function is required.])])
 AC_CHECK_HEADERS([byteswap.h])
 
 # Check for Yate (required)
+YATE_REQ="5.0.1"
 YATE_VER=""
 YATE_DEF=""
 YATE_INC=""
@@ -100,6 +111,11 @@ fi
 AC_MSG_RESULT([$YATE_VER])
 if [[ "x$YATE_VER" = "xno" ]]; then
     AC_ERROR([Could not find Yate])
+fi
+yver=`echo "$YATE_VER" | $csed "$vsed" | $csed "$vsed" | sed 's/\(..\)\.\(..\)\.\(..\)/\1\2\3/'`
+yreq=`echo "$YATE_REQ" | $csed "$vsed" | $csed "$vsed" | sed 's/\(..\)\.\(..\)\.\(..\)/\1\2\3/'`
+if [[ "1$yver" -lt "1$yreq" ]]; then
+    AC_ERROR([Requires at least Yate version $YATE_REQ])
 fi
 fi
 AC_SUBST(YATE_VER)
