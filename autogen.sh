@@ -1,5 +1,23 @@
 #!/bin/sh
 
+# autogen.sh
+# This file is part of the Yate-BTS Project http://www.yatebts.com
+#
+# Yet Another BTS Channel
+# Copyright (C) 2013-2014 Null Team
+#
+# This software is distributed under multiple licenses;
+# see the COPYING file in the main directory for licensing
+# information for this specific distribution.
+#
+# This use of this software may be subject to additional restrictions.
+# See the LEGAL file in the main directory for details.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
 # Run this to generate a new configure script
 
 if [ -z `which which 2>/dev/null` ]; then

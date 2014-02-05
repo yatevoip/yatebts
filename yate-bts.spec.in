@@ -81,7 +81,7 @@ At least one transceiver package must also be installed for interfacing with the
 %doc %{_defaultdocdir}/%{name}-%{version}/README
 %dir %{moddir}
 %{moddir}/*.yate
-%{moddir}/localbss
+%{moddir}/mbts
 %config(noreplace) %{_sysconfdir}/yate/*.conf
 
 
@@ -97,9 +97,9 @@ Requires:	%{name} = %{version}-%{release}
 RAD1 transceiver executable and support files for Yate-BTS.
 
 %files rad1
-%{moddir}/bts/transceiver-rad1
-%{moddir}/bts/ezusb.ihx
-%{moddir}/bts/fpga.rbf
+%{moddir}/transceiver-rad1
+%{moddir}/ezusb.ihx
+%{moddir}/fpga.rbf
 
 %define conf_rad1 --enable-rad1
 %else
@@ -119,8 +119,8 @@ Requires:	%{name} = %{version}-%{release}
 USRP1 transceiver executable and support files for Yate-BTS.
 
 %files usrp1
-%{moddir}/bts/transceiver-usrp1
-%{moddir}/bts/std_inband.rbf
+%{moddir}/transceiver-usrp1
+%{moddir}/std_inband.rbf
 
 %define conf_usrp1 --enable-usrp1
 %else
@@ -177,7 +177,7 @@ chmod +x %{local_find_requires} %{local_find_provides}
 %build
 ./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man \
     %{conf_usrp1} %{conf_uhd} %{conf_rad1}
-make strip
+make %{stripped}
 
 %install
 make install DESTDIR=%{buildroot}

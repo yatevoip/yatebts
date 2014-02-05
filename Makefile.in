@@ -19,6 +19,7 @@ LDFLAGS:= @YATE_LIB@
 MODSTRIP:= @YATE_STR@
 
 PROGS := ybts.yate
+DOCS  := README
 LIBS  :=
 OEXE  :=
 OTRAN :=
@@ -33,7 +34,10 @@ LINK = $(CXX) $(LDFLAGS)
 
 prefix = @prefix@
 exec_prefix = @exec_prefix@
+datarootdir = @datarootdir@
 
+datadir:= @datadir@
+docdir := @datadir@/doc/yate-bts-@PACKAGE_VERSION@
 confdir:= @YATE_CFG@
 moddir := @YATE_MOD@
 scrdir := @YATE_SCR@
@@ -103,6 +107,10 @@ install: all
 		install -m 0644 "$$s" "$$d" ; \
 	    fi ; \
 	done
+	@mkdir -p "$(DESTDIR)$(docdir)/api/" && \
+	for i in $(DOCS) ; do \
+	    install -m 0644 @srcdir@/$$i "$(DESTDIR)$(docdir)/" ; \
+	done
 	$(MAKE) -C ./mbts/apps install
 	$(MAKE) -C ./mbts/Transceiver52M install
 	$(MAKE) -C ./mbts/TransceiverRAD1 install
@@ -119,6 +127,7 @@ uninstall:
 	@-if [ -d "$(DESTDIR)$(confdir)" ]; then \
 	    rmdir "$(DESTDIR)$(confdir)" || echo "Remove conf files by hand if you want so"; \
 	fi
+	@rm -rf "$(DESTDIR)$(docdir)/"
 
 .PHONY: snapshot tarball rpm
 snapshot tarball: check-topdir clean
