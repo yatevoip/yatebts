@@ -1,11 +1,12 @@
 /**
  * ConnectionMap.cpp
- * This file is part of YateBTS
+ * This file is part of the Yate-BTS Project http://www.yatebts.com
  *
  * Connection to Logical Channel mapper
  *
- * Yet Another Telephony Engine - a fully featured software PBX and IVR
- * Copyright (C) 2004-2014 Null Team
+ * Yet Another Telephony Engine - Base Transceiver Station
+ * Copyright (C) 2013-2014 Null Team Impex SRL
+ * Copyright (C) 2014 Legba, Inc
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing
