@@ -1,10 +1,12 @@
 /*
  * Copright 2011 Range Networks, Inc.
  * All rights reserved.
+ * Copyright (C) 2013-2014 Null Team Impex SRL
+ * Copyright (C) 2014 Legba, Inc
 */
 
 #include "NeighborTable.h"
-#include "Peering.h"
+//#include "Peering.h"
 
 #include <Logger.h>
 #include <Globals.h>
@@ -65,53 +67,6 @@ void NeighborTable::NeighborTableInit(const char* wPath)
 void NeighborTable::fill()
 {
 	mConfigured.clear();
-	// Stuff the neighbor ip addresses into the table without any other info.
-	// Let existing information persist for current neighbors.
-	// NeighborTable::refresh() will get updated infomation when it's available.
-	vector<string> neighbors = gConfig.getVectorOfStrings("GSM.Neighbors");
-	LOG(DEBUG) << "neighbor list length " << neighbors.size();
-	unsigned short port = gConfig.getNum("Peering.Port");
-	for (unsigned int i = 0; i < neighbors.size(); i++) {
-		struct sockaddr_in address;
-		const char *host = neighbors[i].c_str();
-		LOG(DEBUG) << "resolving host name for " << host;
-		if (!resolveAddress(&address, host, port)) {
-			LOG(CRIT) << "cannot resolve host name for " << host;
-			// these two seem to want to get set even if addNeighbor isn't called
-			mBCCSet = getBCCSet();
-			mARFCNList = getARFCNs();
-			continue;
-		}
-		addNeighbor(&address);
-	}
-	// get a list of ipaddresses in neighbor table that aren't configured
-	vector<string> toBeDeleted;
-	sqlite3_stmt *stmt;
-	const char *query = "SELECT IPADDRESS FROM NEIGHBOR_TABLE";
-	if (sqlite3_prepare_statement(mDB,&stmt,query)) {
-		LOG(ALERT) << "read of neighbor table failed: " << query;
-		return;
-	}
-	int src = sqlite3_step(stmt);
-	while (src==SQLITE_ROW) {
-		const char* ipaddress = (const char*)sqlite3_column_text(stmt,0);
-		if (!ipaddress) {
-			LOG(ALERT) << "null address in neighbor table";
-			src = sqlite3_step(stmt);
-			continue;
-		}
-		if (mConfigured.find(ipaddress) == mConfigured.end()) {
-			toBeDeleted.push_back(ipaddress);
-		}
-		src = sqlite3_step(stmt);
-	}
-	sqlite3_finalize(stmt);
-	// remove entries in neighbor table that aren't configured
-	char query2[400];
-	for (unsigned int i = 0; i < toBeDeleted.size(); i++) {
-		sprintf(query2, "delete from NEIGHBOR_TABLE where IPADDRESS = '%s'", toBeDeleted[i].c_str());
-		sqlite3_command(mDB, query2);
-	}
 }
 
 
@@ -217,7 +172,7 @@ void NeighborTable::refresh()
 			continue;
 		}
 		LOG(INFO) << "sending neighbor param request to " << addrString;
-		gPeerInterface.sendNeighborParamsRequest(&address);
+//		gPeerInterface.sendNeighborParamsRequest(&address);
 		src = sqlite3_step(stmt);
 	}
 	sqlite3_finalize(stmt);

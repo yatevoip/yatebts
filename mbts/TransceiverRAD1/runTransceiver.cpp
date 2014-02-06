@@ -1,7 +1,9 @@
 /*
 * Copyright 2008, 2009 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
-*
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
+
 * This software is distributed under multiple licenses; see the COPYING file in the main directory for licensing information for this specific distribuion.
 *
 * This use of this software may be subject to additional restrictions.
@@ -34,7 +36,7 @@
 using namespace std;
 
 std::vector<std::string> configurationCrossCheck(const std::string& key);
-static const char *cOpenBTSConfigEnv = "OpenBTSConfigFile";
+static const char *cOpenBTSConfigEnv = "MBTSConfigFile";
 // Load configuration from a file.
 ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):"/etc/OpenBTS/OpenBTS.db","transceiver", getConfigurationKeys());
 FactoryCalibration gFactoryCalibration;
@@ -183,6 +185,28 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Hardware-specific gain adjustment for transmitter, matched to the power amplifier, expessed as an attenuationi in dB.  "
 			"Set at the factory.  "
 			"Do not adjust without proper calibration."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.IP","127.0.0.1",
+		"",
+		ConfigurationKey::CUSTOMERWARN,
+		ConfigurationKey::IPADDRESS,
+		"",
+		true,
+		"IP address of the transceiver application."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.Port","5700",
+		"",
+		ConfigurationKey::FACTORY,
+		ConfigurationKey::PORT,
+		"",
+		true,
+		"IP port of the transceiver application."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

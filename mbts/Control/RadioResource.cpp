@@ -37,7 +37,7 @@
 #include "../GPRS/GPRSExport.h"
 
 #include <NeighborTable.h>
-#include <Peering.h>
+//#include <Peering.h>
 //#include <SIPEngine.h>
 
 

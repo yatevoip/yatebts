@@ -31,6 +31,7 @@
 #include <sys/wait.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
 #include <syslog.h>
@@ -1384,6 +1385,7 @@ static Mutex s_globalMutex(false,"YBTSGlobal");
 static uint64_t s_startTime = 0;
 static uint64_t s_idleTime = Time::now();
 static YBTSLAI s_lai;
+static String s_configFile;              // Configuration file path
 static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
@@ -1391,7 +1393,7 @@ static String s_peerDir;                 // Peer program working directory
 static String s_ueFile;                  // File to save UE information
 static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
-static unsigned int s_bufLenLog = 4096;  // Read buffer length for log interface
+static unsigned int s_bufLenLog = 16384; // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
@@ -6028,6 +6030,9 @@ bool YBTSDriver::startPeer()
     // Close all other handles
     for (; i < 1024; i++)
 	::close(i);
+    // Let MBTS know where to pick the configuration file from
+    if (s_configFile)
+	::setenv("MBTSConfigFile",s_configFile,true);
     // Change directory if asked
     if (dir && ::chdir(dir))
     ::fprintf(stderr,"Failed to change directory to '%s': %d %s\n",
@@ -6403,6 +6408,7 @@ void YBTSDriver::initialize()
 	installRelay(Halt);
 	installRelay(Stop,"engine.stop");
 	installRelay(Start,"engine.start");
+	s_configFile = cfg;
         m_logTrans = new YBTSLog("transceiver");
         m_logBts = new YBTSLog(BTS_CMD);
         m_command = new YBTSCommand;

@@ -2,6 +2,8 @@
 * Copyright 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 *
 * This software is distributed under the terms of the GNU Affero Public License.
@@ -252,7 +254,7 @@ void gLogInit(const char* name, const char* level, int facility)
 	// Pat added, tired of the syslog facility.
 	// Both the transceiver and OpenBTS use this same facility, but only OpenBTS/OpenNodeB may use this log file:
 	string str = gConfig.getStr("Log.File");
-	if (gLogToFile==0 && str.length() && 0==strncmp(gCmdName,"Open",4)) {
+	if (gLogToFile==0 && str.length() && 0==strncmp(gCmdName,"mbts",4)) {
 		const char *fn = str.c_str();
 		if (fn && *fn && strlen(fn)>3) {	// strlen because a garbage char is getting in sometimes.
 			gLogToFile = fopen(fn,"w"); // New log file each time we start.

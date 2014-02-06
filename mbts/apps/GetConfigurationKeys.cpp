@@ -2,6 +2,8 @@
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -57,39 +59,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	ConfigurationKeyMap map;
 	ConfigurationKey *tmp;
 
-	tmp = new ConfigurationKey("CLI.SocketPath","/var/run/command",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
-		"",
-		false,
-		"Path for Unix domain datagram socket used for the OpenBTS console interface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.Call.QueryRRLP.Early","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Query every MS for its location via RRLP during the setup of a call."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.Call.QueryRRLP.Late","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Query every MS for its location via RRLP during the teardown of a call."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("Control.GSMTAP.GPRS","0",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
@@ -136,253 +105,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.LUR.FailedRegistration.Message","Your handset is not provisioned for this network. ",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING_OPT,// audited
-		"^[[:print:]]+$",
-		false,
-		"Send this text message, followed by the IMSI, to unprovisioned handsets that are denied registration."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.FailedRegistration.ShortCode","1000",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[0-9]+$",
-		false,
-		"The return address for the failed registration message."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.NormalRegistration.Message","",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING_OPT,// audited
-		"^[[:print:]]+$",
-		false,
-		"The text message (followed by the IMSI) to be sent to provisioned handsets when they attach on Um.  "
-			"By default, no message is sent.  "
-			"To have a message sent, specify one.  "
-			"To stop sending messages again, execute \"unconfig Control.LUR.NormalRegistration.Message\"."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.NormalRegistration.ShortCode","0000",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[0-9]+$",
-		false,
-		"The return address for the normal registration message."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.OpenRegistration","",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::REGEX_OPT,// audited
-		"",
-		false,
-		"This is value is a regular expression.  "
-			"Any handset with an IMSI matching the regular expression is allowed to register, even if it is not provisioned.  "
-			"By default, this feature is disabled.  "
-			"To enable open registration, specify a regular expression e.g. ^460 (which matches any IMSI starting with 460, the MCC for China).  "
-			"To disable open registration again, execute \"unconfig Control.LUR.OpenRegistration\"."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.OpenRegistration.Message","Welcome to the test network.  Your IMSI is ",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[[:print:]]+$",
-		false,
-		"Send this text message, followed by the IMSI, to unprovisioned handsets when they attach on Um due to open registration."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.OpenRegistration.Reject","",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::REGEX_OPT,// audited
-		"",
-		false,
-		"This is value is a regular expression.  "
-			"Any unprovisioned handset with an IMSI matching the regular expression is rejected for registration, even if it matches Control.LUR.OpenRegistration.  "
-			"By default, this feature is disabled.  "
-			"To enable this filter, specify a regular expression e.g. ^460 (which matches any IMSI starting with 460, the MCC for China).  "
-			"To disable this filter again, execute \"unconfig Control.LUR.OpenRegistration.Reject\".  "
-			"If Control.LUR.OpenRegistration is disabled, this parameter has no effect."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.OpenRegistration.ShortCode","101",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[0-9]+$",
-		false,
-		"The return address for the open registration message."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.QueryClassmark","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Query every MS for classmark during LUR."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.QueryIMEI","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Query every MS for IMEI during LUR."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.QueryRRLP","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Query every MS for its location via RRLP during LUR."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.SendTMSIs","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Send new TMSI assignments to handsets that are allowed to attach."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.UnprovisionedRejectCause","0x04",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::CHOICE,
-		"0x02|IMSI unknown in HLR,"
-			//"0x03|Illegal MS,"
-			"0x04|IMSI unknown in VLR,"
-			"0x05|IMEI not accepted,"
-			//"0x06|Illegal ME,"
-			"0x0B|PLMN not allowed,"
-			"0x0C|Location Area not allowed,"
-			"0x0D|Roaming not allowed in this location area,"
-			"0x11|Network failure,"
-			"0x16|Congestion,"
-			"0x20|Service option not supported,"
-			"0x21|Requested service option not subscribed,"
-			"0x22|Service option temporarily out of order,"
-			"0x26|Call cannot be identified,"
-			"0x30|Retry upon entry into a new cell,"
-			"0x5F|Semantically incorrect message,"
-			"0x60|Invalid mandatory information,"
-			"0x61|Message type non-existent or not implemented,"
-			"0x62|Message type not compatible with the protocol state,"
-			"0x63|Information element non-existent or not implemented,"
-			"0x64|Conditional IE error,"
-			"0x65|Message not compatible with the protocol state,"
-			"0x6F|Unspecified protocol error",
-		false,
-		"Reject cause for location updating failures for unprovisioned phones.  "
-			"Reject causes come from GSM 04.08 10.5.3.6.  "
-			"Reject cause 0x04, IMSI not in VLR, is usually the right one."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.WhiteList","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Whitelist checking is performed."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.WhiteListing.Message","Your handset needs to be added to the whitelist.",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[[:print:]]+$",
-		false,
-		"The whitelisting notification message."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.WhiteListing.RejectCause","0x04",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::CHOICE,
-		"0x02|IMSI unknown in HLR,"
-			//"0x03|Illegal MS,"
-			"0x04|IMSI unknown in VLR,"
-			"0x05|IMEI not accepted,"
-			//"0x06|Illegal ME,"
-			"0x0B|PLMN not allowed,"
-			"0x0C|Location Area not allowed,"
-			"0x0D|Roaming not allowed in this location area,"
-			"0x11|Network failure,"
-			"0x16|Congestion,"
-			"0x20|Service option not supported,"
-			"0x21|Requested service option not subscribed,"
-			"0x22|Service option temporarily out of order,"
-			"0x26|Call cannot be identified,"
-			"0x30|Retry upon entry into a new cell,"
-			"0x5F|Semantically incorrect message,"
-			"0x60|Invalid mandatory information,"
-			"0x61|Message type non-existent or not implemented,"
-			"0x62|Message type not compatible with the protocol state,"
-			"0x63|Information element non-existent or not implemented,"
-			"0x64|Conditional IE error,"
-			"0x65|Message not compatible with the protocol state,"
-			"0x6F|Unspecified protocol error",
-		false,
-		"Reject cause for handset not in the whitelist, when whitelisting is enforced.  "
-			"Reject causes come from GSM 04.08 10.5.3.6.  "
-			"Reject cause 0x04, IMSI not in VLR, is usually the right one."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.LUR.WhiteListing.ShortCode","1000",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[0-9]+$",
-		false,
-		"The return address for the whitelisting notificiation message."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("Control.Reporting.PhysStatusTable","/var/run/ChannelTable.db",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
@@ -405,28 +127,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.Reporting.TMSITable","/var/run/TMSITable.db",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
-		"",
-		true,
-		"File path for TMSITable database."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.Reporting.TransactionTable","/var/run/TransactionTable.db",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
-		"",
-		true,
-		"File path for transaction table database."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("Control.SACCHTimeout.BumpDown","1",
 		"dB",
 		ConfigurationKey::DEVELOPER,
@@ -434,17 +134,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"1:3",// educated guess
 		false,
 		"Decrease the RSSI by this amount to induce more power in the MS each time we fail to receive a response from it."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.SMS.QueryRRLP","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Query every MS for its location via RRLP during an SMS."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
@@ -463,62 +152,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.TestCall.AutomaticModeChange","0",
-		"",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Automatically change the channel mode of a TCH/FACCH from signaling-only to speech-V1 before starting the fuzzing interface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.TestCall.LocalPort","24020",
-		"",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::PORT,
-		"",
-		false,
-		"Port number part of source for L3 payloads received from the handset in fuzzing interface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.TestCall.PollTime","100",
-		"milliseconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"50:200(10)",// educated guess
-		false,
-		"Polling time of the fuzzing interface in milliseconds."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.TestCall.RemoteHost","127.0.0.1",
-		"",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::IPADDRESS,
-		"",
-		false,
-		"Host part of destination for L3 payloads received from the handset in fuzzing interface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.TestCall.RemotePort","24021",
-		"",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::PORT,
-		"",
-		false,
-		"Port number part of destination for L3 payloads received from the handset in fuzzing interface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.VEA","0",
+	tmp = new ConfigurationKey("Control.VEA","1",
 		"",
 		ConfigurationKey::CUSTOMER,
 		ConfigurationKey::BOOLEAN,
@@ -529,17 +163,6 @@ ConfigurationKeyMap getConfigurationKeys()
 			"If VEA is selected, GSM.CellSelection.NECI should be set to 1.  "
 			"See GSM 04.08 Sections 9.1.8 and 10.5.2.4 for an explanation of the NECI bit.  "
 			"Note that some handset models exhibit bugs when VEA is used and these bugs may affect performance."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Control.WatchdogMinutes","60",
-		"minutes",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"0:6000",// educated guess
-		false,
-		"Number of minutes before the radio watchdog expires and OpenBTS is restarted."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
@@ -1653,7 +1276,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Identity.ShortName","Range",
+	tmp = new ConfigurationKey("GSM.Identity.ShortName","YateBTS",
 		"",
 		ConfigurationKey::CUSTOMERSITE,
 		ConfigurationKey::STRING,
@@ -1736,20 +1359,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Neighbors","",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::MIPADDRESS_OPT,// audited
-		"",
-		false,
-		"A list of IP addresses of neighbor BTSs available for handover.  "
-			"By default, this feature is disabled.  "
-			"To enable, specify a space-separated list of the BTS IP addresses, in IP dotted notation, eg: 1.2.3.4 5.6.7.8.  "
-			"To disable again, execute \"unconfig GSM.Neighbors\"."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("GSM.Neighbors.NumToSend","8",
 		"neighbors",
 		ConfigurationKey::CUSTOMERTUNE,
@@ -1812,147 +1421,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Parameter to spread RACH busts over time.  "
 			"This is the raw parameter sent on the BCCH.  "
 			"See GSM 04.08 10.5.2.29 for encoding."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.ACCURACY","40",
-		"",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"20:60",// educated guess
-		false,
-		"Requested accuracy of location request. "
-			"K in r=10(1.1**K-1), where r is the accuracy in meters. "
-			"See 3GPP 03.32, sect 6.2"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.ALMANAC.ASSIST.PRESENT","0",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Send almanac info to mobile"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.ALMANAC.REFRESH.TIME","24.0",
-		"hours",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"18.0:30.0(0.1)",// educated guess
-		false,
-		"How often the almanac is refreshed, in hours"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.ALMANAC.URL","http://www.navcen.uscg.gov/?pageName=currentAlmanac&format=yuma",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::STRING,
-		"^(http|ftp)://[[:alnum:]_.-]",
-		false,
-		"URL of almanac source."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.EPHEMERIS.ASSIST.COUNT","9",
-		"satellites",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"6:12",// educated guess
-		false,
-		"number of satellites to include in navigation model"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.EPHEMERIS.REFRESH.TIME","1.0",
-		"hours",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"0.5:1.5(0.1)",// educated guess
-		false,
-		"How often the ephemeris is refreshed, in hours."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.EPHEMERIS.URL","ftp://ftp.trimble.com/pub/eph/CurRnxN.nav",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::STRING,
-		"^(http|ftp)://[[:alnum:]_.-]",
-		false,
-		"URL of ephemeris source."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.RESPONSETIME","4",
-		"",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"2:6",// educated guess
-		false,
-		"Mobile timeout. "
-			"(OpenBTS timeout is 130 sec = max response time + 2.) N in 2**N. "
-			"See 3GPP 04.31 sect A.2.2.1"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.SEED.ALTITUDE","0",
-		"meters",
-		ConfigurationKey::CUSTOMERSITE,
-		ConfigurationKey::VALRANGE,
-		"-420:8850(5)",
-		false,
-		"Seed altitude in meters wrt geoidal surface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.SEED.LATITUDE","37.777423",
-		"degrees",
-		ConfigurationKey::CUSTOMERSITE,
-		ConfigurationKey::VALRANGE,
-		"-90.000000:90.000000",
-		false,
-		"Seed latitude in degrees.  "
-			"-90 (south pole) .. +90 (north pole)"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.SEED.LONGITUDE","-122.39807",
-		"degrees",
-		ConfigurationKey::CUSTOMERSITE,
-		ConfigurationKey::VALRANGE,
-		"-180.000000:180.000000",
-		false,
-		"Seed longitude in degrees.  "
-			"-180 (west of greenwich) .. 180 (east)"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.RRLP.SERVER.URL","",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::STRING_OPT,// audited
-		"^(http|ftp)://[[:alnum:]_.-]",
-		false,
-		"URL of RRLP server.  "
-			"By default, this feature is disabled.  "
-			"To enable, specify a server URL eg: http://localhost/cgi/rrlpserver.cgi.  "
-			"To disable again, execute \"unconfig GSM.RRLP.SERVER.URL\"."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
@@ -2200,17 +1668,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Peering.Neighbor.RefreshAge","60000",
-		"milliseconds",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"30000:90000(1000)",// educated guess
-		false,
-		"Milliseconds before refreshing parameters from a neighbor."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("Peering.NeighborTable.Path","/var/run/NeighborTable.db",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
@@ -2218,63 +1675,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"",
 		true,
 		"File path for neighbor information database."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Peering.Port","16001",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::PORT,
-		"",
-		true,
-		"The UDP port used by the peer interface for handover."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Peering.ResendCount","5",
-		"attempts",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"3:8",// educated guess
-		false,
-		"Number of tries to send message over the peer interface before giving up"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Peering.ResendTimeout","100",
-		"milliseconds",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"50:100(10)",// educated guess
-		false,
-		"Milliseconds before resending a message on the peer interface"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("RTP.Range","98",
-		"ports",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::VALRANGE,
-		"25:200",// educated guess
-		true,
-		"Range of RTP port pool.  "
-			"Pool is RTP.Start to RTP.Range-1."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("RTP.Start","16484",
-		"",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::PORT,
-		"",
-		true,
-		"Base of RTP port pool.  "
-			"Pool is RTP.Start to RTP.Range-1."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
@@ -2337,293 +1737,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Also known as T3314, 3GPP 24.008 4.7.2.1.  "
 			"Inactivity period required before MS may perform another routing area or cell update, in seconds."
 	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.DTMF.RFC2833","1",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Use RFC-2833 (RTP event signalling) for in-call DTMF."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.DTMF.RFC2833.PayloadType","101",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::VALRANGE,
-		"96:127",
-		false,
-		"Payload type to use for RFC-2833 telephone event packets."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.DTMF.RFC2967","0",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Use RFC-2967 (SIP INFO method) for in-call DTMF."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Local.IP","127.0.0.1",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::IPADDRESS,
-		"",
-		true,
-		"IP address of the OpenBTS machine as seen by its proxies.  "
-			"If these are all local, this can be localhost."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Local.Port","5062",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::PORT,
-		"",
-		true,
-		"IP port that OpenBTS uses for its SIP interface."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.MaxForwards","70",
-		"referrals",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"1:100",
-		false,
-		"Maximum allowed number of referrals."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Proxy.Registration","127.0.0.1:5064",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::IPANDPORT,
-		"",
-		false,
-		"The IP host and port of the proxy to be used for registration and authentication.  "
-			"This should normally be the subscriber registry SIP interface, not Asterisk."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Proxy.SMS","127.0.0.1:5063",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::IPANDPORT,
-		"",
-		false,
-		"The IP host and port of the proxy to be used for text messaging.  "
-			"This is smqueue, for example."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Proxy.Speech","127.0.0.1:5060",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::IPANDPORT,
-		"",
-		false,
-		"The IP host and port of the proxy to be used for normal speech calls.  "
-			"This is Asterisk, for example."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.RegistrationPeriod","90",
-		"minutes",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"6:2298",// educated guess
-		false,
-		"Registration period in minutes for MS SIP users.  "
-			"Should be longer than GSM T3212."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.RFC3428.NoTrying","0",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Send 100 Trying response to SIP MESSAGE, even though that violates RFC-3428."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.SMSC","smsc",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::CHOICE_OPT,// audited
-		"smsc",
-		false,
-		"The SMSC handler in smqueue.  "
-			"This is the entity that handles full 3GPP MIME-encapsulted TPDUs.  "
-			"If not defined, use direct numeric addressing.  "
-			"The value should be disabled with \"unconfig SIP.SMSC\" if SMS.MIMEType is \"text/plain\" or set to \"smsc\" if SMS.MIMEType is \"application/vnd.3gpp\"."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Timer.A","2000",
-		"milliseconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"1500:2500(100)",// educated guess
-		false,
-		"SIP timer A, the INVITE retry period, RFC-3261 Section 17.1.1.2, in milliseconds."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Timer.B","10000",
-		"milliseconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"5000:15000(100)",// educated guess
-		false,
-		"INVITE transaction timeout in milliseconds.  "
-			"This value should usually match GSM.Timer.T3113."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Timer.E","500",
-		"milliseconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"250:750(10)",// educated guess
-		false,
-		"Non-INVITE initial request retransmit period in milliseconds."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Timer.F","5000",
-		"milliseconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"2500:7500(100)",// educated guess
-		false,
-		"Non-INVITE initial request timeout in milliseconds."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SIP.Timer.H","5000",
-		"milliseconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"2500:7500(100)",// educated guess
-		false,
-		"ACK timeout period in milliseconds."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SMS.FakeSrcSMSC","0000",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::STRING,
-		"^[0-9]+$",
-		false,
-		"Use this to fill in L4 SMSC address in SMS delivery."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SMS.MIMEType","application/vnd.3gpp.sms",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::CHOICE,
-		"application/vnd.3gpp.sms,"
-			"text/plain",
-		false,
-		"This is the MIME Type that OpenBTS will use for RFC-3428 SIP MESSAGE payloads.  "
-			"Valid values are \"application/vnd.3gpp.sms\" and \"text/plain\"."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SubscriberRegistry.A3A8","/OpenBTS/comp128",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
-		"",
-		false,
-		"Path to the program that implements the A3/A8 algorithm."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SubscriberRegistry.db","/var/lib/asterisk/sqlite3dir/sqlite3.db",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
-		"",
-		false,
-		"The location of the sqlite3 database holding the subscriber registry."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SubscriberRegistry.Manager.Title","Subscriber Registry",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"^[[:print:]]+$",
-		false,
-		"Title text to be displayed on the subscriber registry manager."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SubscriberRegistry.Manager.VisibleColumns","name username type context host",
-		"",
-		ConfigurationKey::CUSTOMERTUNE,
-		ConfigurationKey::STRING,
-		"^(name){0,1} (username){0,1} (type){0,1} (context){0,1} (host){0,1}$",
-		false,
-		"A space separated list of columns to display in the subscriber registry manager."
-	);
-
-	tmp = new ConfigurationKey("SubscriberRegistry.Port","5064",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::PORT,
-		"",
-		false,
-		"Port used by the SIP Authentication Server. NOTE: In some older releases (pre-2.8.1) this is called SIP.myPort."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("SubscriberRegistry.UpstreamServer","",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::STRING_OPT,// audited
-		"",
-		false,
-		"URL of the subscriber registry HTTP interface on the upstream server.  "
-			"By default, this feature is disabled.  "
-			"To enable, specify a server URL eg: http://localhost/cgi/subreg.cgi.  "
-			"To disable again, execute \"unconfig SubscriberRegistry.UpstreamServer\"."
-			);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
@@ -2713,6 +1826,17 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
+	tmp = new ConfigurationKey("TRX.Path","",
+		"",
+		ConfigurationKey::CUSTOMER,
+		ConfigurationKey::STRING,
+		"",
+		false,
+		"Path used to execute the Transceiver"
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
 	//kurtis
 	tmp = new ConfigurationKey("TRX.Args","",
 		"",
@@ -2754,17 +1878,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"0:100(5)",// educated guess
 		true,
 		"Probability (0-100) of flipping a bit in any uplink frame to test robustness."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Test.SIP.SimulatedPacketLoss","0",
-		"probability in %",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"0:100(5)",// educated guess
-		true,
-		"Probability (0-100) of dropping any inbound or outbound SIP packet to test robustness."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

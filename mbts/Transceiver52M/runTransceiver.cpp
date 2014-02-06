@@ -1,6 +1,8 @@
 /*
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under the terms of the GNU Affero Public License.
 * See the COPYING file in the main directory for details.
@@ -51,7 +53,7 @@
 #define SPS                 4
 
 std::vector<std::string> configurationCrossCheck(const std::string& key);
-static const char *cOpenBTSConfigEnv = "OpenBTSConfigFile";
+static const char *cOpenBTSConfigEnv = "MBTSConfigFile";
 // Load configuration from a file.
 ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):CONFIGDB,"transceiver", getConfigurationKeys());
 
@@ -64,55 +66,6 @@ static void ctrlCHandler(int signo)
 {
   std::cout << "Received shutdown signal" << std::endl;
   gbShutdown = true;
-}
-
-/*
- * Attempt to open and test the database file before
- * accessing the configuration table. We do this because
- * the global table constructor cannot provide notification
- * in the event of failure.
- */
-int testConfig(const char *filename)
-{
-  int rc, val = 9999;
-  sqlite3 *db;
-  std::string test = "sadf732zdvj2";
-
-  const char *keys[3] = {
-    "Log.Level",
-    "TRX.Port",
-    "TRX.IP",
-  };
-
-  /* Try to open the database  */
-  rc = sqlite3_open(filename, &db);
-  if (rc || !db) {
-    std::cerr << "Config: Database could not be opened" << std::endl;
-    return -1;
-  } else {
-    sqlite3_close(db);
-  }
-
-  /* Attempt to set a value in the global config */
-  if (!gConfig.set(test, val)) {
-    std::cerr << "Config: Failed to set test key - "
-              << "permission to access the database?" << std::endl;
-    return -1;
-  } else {
-    gConfig.remove(test);
-  }
-
-  /* Attempt to query */
-  for (int i = 0; i < 3; i++) {
-    try {
-      gConfig.getStr(keys[i]); 
-    } catch (...) {
-      std::cerr << "Config: Failed query on " << keys[i] << std::endl;
-      return -1;
-    }
-  }
-
-  return 0; 
 }
 
 int main(int argc, char *argv[])
@@ -135,12 +88,6 @@ int main(int argc, char *argv[])
 
   if (signal(SIGTERM, ctrlCHandler) == SIG_ERR)  {
     std::cerr << "Couldn't install signal handler for SIGTERM" << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  // Configure logger.
-  if (testConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):CONFIGDB) < 0) {
-    std::cerr << "Config: Database failure" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -242,6 +189,28 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Hardware-specific gain adjustment for transmitter, matched to the power amplifier, expessed as an attenuationi in dB.  "
 			"Set at the factory.  "
 			"Do not adjust without proper calibration."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.IP","127.0.0.1",
+		"",
+		ConfigurationKey::CUSTOMERWARN,
+		ConfigurationKey::IPADDRESS,
+		"",
+		true,
+		"IP address of the transceiver application."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.Port","5700",
+		"",
+		ConfigurationKey::FACTORY,
+		ConfigurationKey::PORT,
+		"",
+		true,
+		"IP port of the transceiver application."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

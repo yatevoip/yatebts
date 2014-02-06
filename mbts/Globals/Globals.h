@@ -3,7 +3,8 @@
 /*
 * Copyright 2008, 2009 Free Software Foundation, Inc.
 * Copyright 2011 Range Networks, Inc.
-* Copyright 2014 Legba, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -69,11 +70,6 @@ extern GSM::PhysicalStatus gPhysStatus;
 
 /** The global transceiver interface. */
 extern TransceiverManager gTRX;
-
-/** A global watchdog timer. */
-void gResetWatchdog();
-size_t gWatchdogRemaining();
-bool gWatchdogExpired();
 
 /** Connections to YBTS */
 extern Connection::LogConnection gLogConn;

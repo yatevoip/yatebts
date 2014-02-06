@@ -2,7 +2,7 @@
 # This file holds the make rules for the peering lib
 
 INCLUDES := $(ALL_INCLUDES)
-INCFILES := ../../config.h NeighborTable.h Peering.h
+INCFILES := ../../config.h NeighborTable.h
 
 LIBS := libPeering.a
-OBJS := NeighborTable.o Peering.o
+OBJS := NeighborTable.o

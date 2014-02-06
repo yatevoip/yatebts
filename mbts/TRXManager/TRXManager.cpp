@@ -76,16 +76,8 @@ void* ClockLoopAdapter(TransceiverManager *transceiver)
 
 	// This loop has a period of about 3 seconds.
 
-	gResetWatchdog();
-	Timeval nextContact;
 	while (1) {
 		transceiver->clockHandler();
-		LOG(DEBUG) << "watchdog timer expires in " << gWatchdogRemaining() << " seconds";
-		if (gWatchdogExpired()) {
-			LOG(ALERT) << "restarting OpenBTS on expiration of watchdog timer";
-			gReports.incr("OpenBTS.Exit.Error.Watchdog");
-			exit(-2);
-		}
 	}
 	return NULL;
 }

@@ -3,6 +3,8 @@
 /*
 * Copyright 2008, 2009 Free Software Foundation, Inc.
 * Copyright 2011 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -221,7 +223,6 @@ void Control::DCCHDispatcher(LogicalChannel *DCCH)
 			LOG(DEBUG) << "waiting for " << *DCCH << " ESTABLISH or HANDOVER_ACCESS";
 			L3Frame *frame = DCCH->waitForEstablishOrHandover();
 			LOG(DEBUG) << *DCCH << " received " << *frame;
-			gResetWatchdog();
 			Primitive prim = frame->primitive();
 			delete frame;
 			LOG(DEBUG) << "received primtive " << prim;

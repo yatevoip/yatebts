@@ -2,6 +2,8 @@
 * Copyright 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -151,9 +153,7 @@ int uptime(int argc, char** argv, ostream& os)
 	time_t now = time(NULL);
 	const char* timestring = ctime(&now);
 	// no endl since ctime includes a "\n" in the string
-	os << "Unix time " << now << ", " << timestring;
-
-	os << "watchdog timer expires in " << (gWatchdogRemaining() / 60) << " minutes" << endl;
+	os << "Unix time " << now << ", " << timestring << endl;
 
 	int seconds = gBTS.uptime();
 	if (seconds<120) {
@@ -271,39 +271,12 @@ int printStats(int argc, char** argv, ostream& os)
 /** Get/Set MCC, MNC, LAC, CI. */
 int cellID(int argc, char** argv, ostream& os)
 {
-	if (argc==1) {
-		os << "MCC=" << gConfig.getStr("GSM.Identity.MCC")
-		<< " MNC=" << gConfig.getStr("GSM.Identity.MNC")
-		<< " LAC=" << gConfig.getNum("GSM.Identity.LAC")
-		<< " CI=" << gConfig.getNum("GSM.Identity.CI")
-		<< endl;
-		return SUCCESS;
-	}
-
-	if (argc!=5) return BAD_NUM_ARGS;
-
-	// Safety check the args!!
-	if (!gConfig.isValidValue("GSM.Identity.MCC", argv[1])) {
-		os << "MCC must be three digits" << endl;
-		return BAD_VALUE;
-	}
-	if (!gConfig.isValidValue("GSM.Identity.MNC", argv[2])) {
-		os << "MNC must be two or three digits" << endl;
-		return BAD_VALUE;
-	}
-	if (!gConfig.isValidValue("GSM.Identity.LAC", argv[3])) {
-		os << "Invalid value for LAC" << endl;
-		return BAD_VALUE;
-	}
-	if (!gConfig.isValidValue("GSM.Identity.CI", argv[4])) {
-		os << "Invalid value for CI" << endl;
-		return BAD_VALUE;
-	}
-
-	gConfig.set("GSM.Identity.MCC",argv[1]);
-	gConfig.set("GSM.Identity.MNC",argv[2]);
-	gConfig.set("GSM.Identity.LAC",argv[3]);
-	gConfig.set("GSM.Identity.CI",argv[4]);
+	if (argc!=1) return BAD_NUM_ARGS;
+	os << "MCC=" << gConfig.getStr("GSM.Identity.MCC")
+	<< " MNC=" << gConfig.getStr("GSM.Identity.MNC")
+	<< " LAC=" << gConfig.getNum("GSM.Identity.LAC")
+	<< " CI=" << gConfig.getNum("GSM.Identity.CI")
+	<< endl;
 	return SUCCESS;
 }
 
@@ -747,6 +720,19 @@ int rmconfig(int argc, char** argv, ostream& os)
 	return SUCCESS;
 }
 
+/** Reload configuration */
+int reload(int argc, char** argv, ostream& os)
+{
+	if (argc!=1) return BAD_NUM_ARGS;
+
+	if (gConfig.load()) {
+		gBTS.regenerateBeacon();
+		os << "Configuration reloaded" << endl;
+	}
+	else
+		os << "Failed to reload configuration" << endl;
+	return SUCCESS;
+}
 
 
 /** Change the registration timers. */
@@ -754,7 +740,6 @@ int regperiod(int argc, char** argv, ostream& os)
 {
 	if (argc==1) {
 		os << "T3212 is " << gConfig.getNum("GSM.Timer.T3212") << " minutes" << endl;
-		os << "SIP registration period is " << gConfig.getNum("SIP.RegistrationPeriod") << " minutes" << endl;
 		return SUCCESS;
 	}
 
@@ -766,21 +751,7 @@ int regperiod(int argc, char** argv, ostream& os)
 		return BAD_VALUE;
 	}
 
-	// By default, make SIP registration period 1.5x the GSM registration period.
-	unsigned SIPRegPeriod = newT3212 * 1.5;
-	char SIPRegPeriodStr[10];
-	sprintf(SIPRegPeriodStr, "%u", SIPRegPeriod);
-	if (argc==3) {
-		SIPRegPeriod = strtol(argv[2],NULL,10);
-		sprintf(SIPRegPeriodStr, "%s", argv[2]);
-	}
-	if (!gConfig.isValidValue("SIP.RegistrationPeriod", SIPRegPeriodStr)) {
-		os << "valid SIP registration range is 6..2298 minutes" << endl;
-		return BAD_VALUE;
-	}
-
 	// Set the values in the table and on the GSM beacon.
-	gConfig.set("SIP.RegistrationPeriod",SIPRegPeriod);
 	gConfig.set("GSM.Timer.T3212",newT3212);
 	// Done.
 	return SUCCESS;
@@ -1137,7 +1108,7 @@ void Parser::addCommands()
 	addCommand("audit", audit, "-- audit the current configuration for troubleshooting");
 	addCommand("config", config, "[] OR [patt] OR [key val(s)] -- print the current configuration, print configuration values matching a pattern, or set/change a configuration value");
 	addCommand("devconfig", devconfig, "[] OR [patt] OR [key val(s)] -- print the current configuration, print configuration values matching a pattern, or set/change a configuration value");
-	addCommand("regperiod", regperiod, "[GSM] [SIP] -- get/set the registration period (GSM T3212), in MINUTES");
+	addCommand("regperiod", regperiod, "[GSM] -- get/set the registration period (GSM T3212), in MINUTES");
 	addCommand("alarms", alarms, "-- show latest alarms");
 	addCommand("version", version,"-- print the version string");
 	addCommand("page", page, "print the paging table");
@@ -1147,6 +1118,7 @@ void Parser::addCommands()
         addCommand("txatten", txatten, "[newTxAtten] -- get/set the TX attenuation in dB");
 	addCommand("freqcorr", freqcorr, "[newOffset] -- get/set the new radio frequency offset");
         addCommand("noise", noise, "-- report receive noise level in RSSI dB");
+        addCommand("reload", reload, "-- reload configuration from file");
 	addCommand("rmconfig", rmconfig, "key -- set a configuration value back to its default or remove a custom key/value pair");
 	addCommand("unconfig", unconfig, "key -- disable a configuration key by setting an empty value");
 	addCommand("notices", notices, "-- show startup copyright and legal notices");

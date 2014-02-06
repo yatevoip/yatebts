@@ -2,6 +2,8 @@
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 *
 * This software is distributed under the terms of the GNU Affero Public License.
@@ -31,22 +33,32 @@
 #include <fstream>
 #include <iostream>
 #include <string.h>
+#include <stdio.h>
+#include <errno.h>
 
 
 using namespace std;
 
 char gCmdName[20] = {0}; // Use a char* to avoid avoid static initialization of string, and race at startup.
 
-static const char* createConfigTable = {
-	"CREATE TABLE IF NOT EXISTS CONFIG ("
-		"KEYSTRING TEXT UNIQUE NOT NULL, "
-		"VALUESTRING TEXT, "
-		"STATIC INTEGER DEFAULT 0, "
-		"OPTIONAL INTEGER DEFAULT 0, "
-		"COMMENTS TEXT DEFAULT ''"
-	")"
-};
+// Accepted booleans
+static const char* gBoolFalse[] = { "no",  "off", "false", "disable", "f", "0", 0 };
+static const char* gBoolTrue[]  = { "yes", "on",  "true",  "enable",  "t", "1", 0 };
 
+// Config file to key prefix mapping table
+static const char* gConfMapping[] = {
+	"gsm",           "GSM.",
+	"gsm_advanced",  "GSM.",
+	"gprs",          "GPRS.",
+	"gprs_advanced", "GPRS.",
+	"tapping",       "Control.GSMTAP.",
+	"control",       "Control.",
+	"transceiver",   "TRX.",
+	"sgsn",          "SGSN.",
+	"ggsn",          "GGSN.",
+	"test",          "Test.GSM.",
+	0
+};
 
 
 float ConfigurationRecord::floatNumber() const
@@ -59,43 +71,19 @@ float ConfigurationRecord::floatNumber() const
 
 ConfigurationTable::ConfigurationTable(const char* filename, const char *wCmdName, ConfigurationKeyMap wSchema)
 {
-	gLogEarly(LOG_INFO, "opening configuration table from path %s", filename);
-	// Connect to the database.
-	int rc = sqlite3_open(filename,&mDB);
-	// (pat) When I used malloc here, sqlite3 sporadically crashes.
+	gLogEarly(LOG_INFO, "opening configuration file from path %s", filename);
 	if (wCmdName) {
 		strncpy(gCmdName,wCmdName,18);
 		gCmdName[18] = 0;
 		strcat(gCmdName,":");
 	}
-	if (rc) {
-		gLogEarly(LOG_EMERG, "cannot open configuration database at %s, error message: %s", filename, sqlite3_errmsg(mDB));
-		sqlite3_close(mDB);
-		mDB = NULL;
+
+	if (!load(filename))
 		return;
-	}
-	// Create the table, if needed.
-	if (!sqlite3_command(mDB,createConfigTable)) {
-		gLogEarly(LOG_EMERG, "cannot create configuration table in database at %s, error message: %s", filename, sqlite3_errmsg(mDB));
-	}
-	// Set high-concurrency WAL mode.
-	if (!sqlite3_command(mDB,enableWAL)) {
-		gLogEarly(LOG_EMERG, "cannot enable WAL mode on database at %s, error message: %s", filename, sqlite3_errmsg(mDB));
-	}
+	mConfigFile = filename;
 
 	// Build CommonLibs schema
 	ConfigurationKey *tmp;
-	tmp = new ConfigurationKey("Control.NumSQLTries","3",
-		"attempts",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"1:10",// educated guess
-		false,
-		"Number of times to retry SQL queries before declaring a database access failure."
-	);
-	mSchema[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("Log.Alarms.Max","20",
 		"alarms",
 		ConfigurationKey::CUSTOMER,
@@ -146,57 +134,101 @@ ConfigurationTable::ConfigurationTable(const char* filename, const char *wCmdNam
 	mCrossCheck = NULL;
 }
 
-string ConfigurationTable::getDefaultSQL(const std::string& program, const std::string& version)
+bool ConfigurationTable::load(const char* filename)
 {
-	stringstream ss;
-	ConfigurationKeyMap::iterator mp;
-
-	ss << "--" << endl;
-	ss << "-- This file was generated using: " << program << " --gensql" << endl;
-	ss << "-- binary version: " << version << endl;
-	ss << "--" << endl;
-	ss << "-- Future changes should not be put in this file directly but" << endl;
-	ss << "-- rather in the program's ConfigurationKey schema." << endl;
-	ss << "--" << endl;
-	ss << "PRAGMA foreign_keys=OFF;" << endl;
-	ss << "PRAGMA journal_mode=WAL;" << endl;
-	ss << "BEGIN TRANSACTION;" << endl;
-	ss << "CREATE TABLE IF NOT EXISTS CONFIG ( KEYSTRING TEXT UNIQUE NOT NULL, VALUESTRING TEXT, STATIC INTEGER DEFAULT 0, OPTIONAL INTEGER DEFAULT 0, COMMENTS TEXT DEFAULT '');" << endl;
-
-	mp = mSchema.begin();
-	while (mp != mSchema.end()) {
-		ss << "INSERT OR IGNORE INTO \"CONFIG\" VALUES(";
-			// name
-			ss << "'" << mp->first << "',";
-			// default
-			ss << "'" << mp->second.getDefaultValue() << "',";
-			// static
-			if (mp->second.isStatic()) {
-				ss << "1";
-			} else {
-				ss << "0";
-			}
-			ss << ",";
-			// optional
-			ss << "0,";
-			// description
-			ss << "'";
-			if (mp->second.getType() == ConfigurationKey::BOOLEAN) {
-				ss << "1=enabled, 0=disabled - ";
-			}
-			ss << mp->second.getDescription();
-			if (mp->second.isStatic()) {
-				ss << "  Static.";
-			}
-			ss << "'";
-		ss << ");" << endl;
-		mp++;
+	if (!filename) {
+		if (mConfigFile.empty())
+			return false;
+		filename = mConfigFile.c_str();
 	}
-
-	ss << "COMMIT;" << endl;
-	ss << endl;
-
-	return ss.str();
+	// Open file
+	FILE* f = ::fopen(filename, "r");
+	if (!f) {
+		gLogEarly(LOG_EMERG, "cannot open configuration file at %s, error message: %s (%d)",
+			filename, ::strerror(errno), errno);
+		return false;
+	}
+	// Load the cache records from file
+	ScopedLock lock(mLock);
+	mCache.clear();
+	bool start = true;
+	std::string prefix;
+	for (;;) {
+		char buf [1024];
+		if (!::fgets(buf, sizeof(buf), f))
+			break;
+		char *pc = ::strchr(buf, '\r');
+		if (pc)
+			*pc = 0;
+		pc = ::strchr(buf, '\n');
+		if (pc)
+			*pc = 0;
+		pc = buf;
+		if (start) {
+			start = false;
+			// Strip UTF-8 BOM if present at start of file
+			if ((pc[0] == '\357') && (pc[1] == '\273') && (pc[2] == '\277'))
+				pc += 3;
+		}
+		while (*pc == ' ' || *pc == '\t')
+			pc++;
+		char* end;
+		switch (*pc) {
+			case 0:
+			case ';':
+				continue;
+			case '[':
+				end = ::strchr(++pc,']');
+				if (end) {
+					*end = 0;
+					prefix.clear();
+					for (const char** s = gConfMapping; *s; s += 2)
+						if (!::strcasecmp(pc, s[0])) {
+							prefix = s[1];
+							break;
+						}
+				}
+				continue;
+		}
+		end = ::strchr(pc, '=');
+		if (!end)
+			continue;
+		*end++ = 0;
+		std::string key(pc);
+		std::size_t last = key.find_last_not_of(" \t");
+		if (last == std::string::npos)
+			continue;
+		key.erase(last + 1);
+		while (*end == ' ' || *end == '\t')
+			end++;
+		std::string val(end);
+		while ((val.length() >= 1) && ('\\' == val.at(val.length() - 1))) {
+			// Line continues onto next
+			val.resize(val.length() - 1);
+			if (!::fgets(buf, sizeof(buf), f))
+				break;
+			pc = ::strchr(buf,'\r');
+			if (pc)
+				*pc = 0;
+			pc = ::strchr(buf,'\n');
+			if (pc)
+				*pc = 0;
+			pc = buf;
+			while (*pc == ' ' || *pc == '\t')
+				pc++;
+			val += pc;
+		}
+		if (prefix.empty())
+			continue;
+		last = val.find_last_not_of(" \t");
+		if (last == std::string::npos)
+			val.clear();
+		else
+			val.erase(last + 1);
+		mCache[prefix + key] = ConfigurationRecord(val);
+	}
+	::fclose(f);
+	return true;
 }
 
 string ConfigurationTable::getTeX(const std::string& program, const std::string& version)
@@ -297,9 +329,13 @@ bool ConfigurationTable::isValidValue(const std::string& name, const std::string
 
 	switch (key.getType()) {
 		case ConfigurationKey::BOOLEAN: {
-			if (val == "1" || val == "0") {
-				ret = true;
-			}
+			const char** s;
+			for (s = gBoolFalse; *s && !ret; s++)
+				if (val == *s)
+					ret = true;
+			for (s = gBoolTrue; *s && !ret; s++)
+				if (val == *s)
+					ret = true;
 			break;
 		}
 
@@ -532,8 +568,6 @@ ConfigurationKeyMap ConfigurationTable::getSimilarKeys(const std::string& snippe
 
 const ConfigurationRecord& ConfigurationTable::lookup(const string& key)
 {
-	assert(mDB);
-	checkCacheAge();
 	// We assume the caller holds mLock.
 	// So it is OK to return a reference into the cache.
 
@@ -544,26 +578,14 @@ const ConfigurationRecord& ConfigurationTable::lookup(const string& key)
 		if (where->second.defined()) return where->second;
 		throw ConfigurationTableKeyNotFound(key);
 	}
-
-	// Check the database.
-	// This is more expensive.
-	char *value = NULL;
-	sqlite3_single_lookup(mDB,"CONFIG",
-			"KEYSTRING",key.c_str(),"VALUESTRING",value);
-
-	// value found, cache the result
-	if (value) {
-		mCache[key] = ConfigurationRecord(value);
 	// key definition found, cache the default
-	} else if (keyDefinedInSchema(key)) {
+	if (keyDefinedInSchema(key)) {
 		mCache[key] = ConfigurationRecord(mSchema[key].getDefaultValue());
 	// total miss, cache the error
 	} else {
 		mCache[key] = ConfigurationRecord(false);
 		throw ConfigurationTableKeyNotFound(key);
 	}
-
-	free(value);
 
 	// Leave mLock locked.  The caller holds it still.
 	return mCache[key];
@@ -600,7 +622,16 @@ string ConfigurationTable::getStr(const string& key)
 bool ConfigurationTable::getBool(const string& key)
 {
 	try {
-		return getNum(key) != 0;
+		const ConfigurationRecord& rec = lookup(key);
+		string val = rec.value();
+		const char** s;
+		for (s = gBoolFalse; *s; s++)
+			if (val == *s)
+				return false;
+		for (s = gBoolTrue; *s; s++)
+			if (val == *s)
+				return true;
+		return rec.number() != 0;
 	} catch (ConfigurationTableKeyNotFound) {
 		// Raise an alert and re-throw the exception.
 		gLogEarly(LOG_DEBUG, "configuration parameter %s has no defined value", key.c_str());
@@ -696,85 +727,46 @@ std::vector<unsigned> ConfigurationTable::getVector(const string& key)
 	return retVal;
 }
 
-
 bool ConfigurationTable::remove(const string& key)
 {
-	assert(mDB);
-
 	ScopedLock lock(mLock);
 	// Clear the cache entry and the database.
 	ConfigurationMap::iterator where = mCache.find(key);
 	if (where!=mCache.end()) mCache.erase(where);
-	// Really remove it.
-	string cmd = "DELETE FROM CONFIG WHERE KEYSTRING=='"+key+"'";
-	return sqlite3_command(mDB,cmd.c_str());
+	return true;
 }
 
 
-
-void ConfigurationTable::find(const string& pat, ostream& os) const
+void ConfigurationTable::find(const string& pat, ostream& os)
 {
-	// Prepare the statement.
-	string cmd = "SELECT KEYSTRING,VALUESTRING FROM CONFIG WHERE KEYSTRING LIKE \"%" + pat + "%\"";
-	sqlite3_stmt *stmt;
-	if (sqlite3_prepare_statement(mDB,&stmt,cmd.c_str())) return;
-	// Read the result.
-	int src = sqlite3_run_query(mDB,stmt);
-	while (src==SQLITE_ROW) {
-		const char* value = (const char*)sqlite3_column_text(stmt,1);
-		os << sqlite3_column_text(stmt,0) << " ";
-		int len = 0;
-		if (value) {
-			len = strlen(value);
+	ScopedLock lock(mLock);
+	for (ConfigurationMap::iterator mp = mCache.begin(); mp != mCache.end(); mp++) {
+		if (mp->first.find(pat)) {
+			os << mp->first << " ";
+			if (mp->second.value().empty())
+				os << "(disabled)" << endl;
+			else
+				os << mp->second.value() << endl;
 		}
-		if (len && value) os << value << endl;
-		else os << "(disabled)" << endl;
-		src = sqlite3_run_query(mDB,stmt);
 	}
-	sqlite3_finalize(stmt);
 }
 
 
-ConfigurationRecordMap ConfigurationTable::getAllPairs() const
+ConfigurationRecordMap ConfigurationTable::getAllPairs()
 {
 	ConfigurationRecordMap tmp;
-
-	// Prepare the statement.
-	string cmd = "SELECT KEYSTRING,VALUESTRING FROM CONFIG";
-	sqlite3_stmt *stmt;
-	if (sqlite3_prepare_statement(mDB,&stmt,cmd.c_str())) return tmp;
-	// Read the result.
-	int src = sqlite3_run_query(mDB,stmt);
-	while (src==SQLITE_ROW) {
-		const char* key = (const char*)sqlite3_column_text(stmt,0);
-		const char* value = (const char*)sqlite3_column_text(stmt,1);
-		if (key && value) {
-			tmp[string(key)] = ConfigurationRecord(value);
-		} else if (key && !value) {
-			tmp[string(key)] = ConfigurationRecord(false);
-		}
-		src = sqlite3_run_query(mDB,stmt);
-	}
-	sqlite3_finalize(stmt);
-
+	ScopedLock lock(mLock);
+	for (ConfigurationMap::iterator mp = mCache.begin(); mp != mCache.end(); mp++)
+		tmp[mp->first] = ConfigurationRecord(mp->second);
 	return tmp;
 }
 
+
 bool ConfigurationTable::set(const string& key, const string& value)
 {
-	assert(mDB);
 	ScopedLock lock(mLock);
-	string cmd;
-	if (keyDefinedInSchema(key)) {
-		cmd = "INSERT OR REPLACE INTO CONFIG (KEYSTRING,VALUESTRING,OPTIONAL,COMMENTS) VALUES (\"" + key + "\",\"" + value + "\",1,\'" + mSchema[key].getDescription() + "\')";
-	} else {
-		cmd = "INSERT OR REPLACE INTO CONFIG (KEYSTRING,VALUESTRING,OPTIONAL) VALUES (\"" + key + "\",\"" + value + "\",1)";
-	}
-	
-	bool success = sqlite3_command(mDB,cmd.c_str());
-	// Cache the result.
-	if (success) mCache[key] = ConfigurationRecord(value);
-	return success;
+	mCache[key] = ConfigurationRecord(value);
+	return true;
 }
 
 bool ConfigurationTable::set(const string& key, long value)
@@ -783,44 +775,6 @@ bool ConfigurationTable::set(const string& key, long value)
 	sprintf(buffer,"%ld",value);
 	return set(key,buffer);
 }
-
-void ConfigurationTable::checkCacheAge()
-{
-	// mLock is set by caller 
-	static time_t timeOfLastPurge = 0;
-	time_t now = time(NULL);
-	// purge every 3 seconds
-	// purge period cannot be configuration parameter
-	if (now - timeOfLastPurge < 3) return;
-	timeOfLastPurge = now;
-	// this is purge() without the lock
-	ConfigurationMap::iterator mp = mCache.begin();
-	while (mp != mCache.end()) {
-		ConfigurationMap::iterator prev = mp;
-		mp++;
-		mCache.erase(prev);
-	}
-}
-
-
-void ConfigurationTable::purge()
-{
-	ScopedLock lock(mLock);
-	ConfigurationMap::iterator mp = mCache.begin();
-	while (mp != mCache.end()) {
-		ConfigurationMap::iterator prev = mp;
-		mp++;
-		mCache.erase(prev);
-	}
-}
-
-
-void ConfigurationTable::setUpdateHook(void(*func)(void *,int ,char const *,char const *,sqlite3_int64))
-{
-	assert(mDB);
-	sqlite3_update_hook(mDB,func,NULL);
-}
-
 
 void ConfigurationTable::setCrossCheckHook(vector<string> (*wCrossCheck)(const string&))
 {
@@ -1146,8 +1100,7 @@ void ConfigurationKey::printDescription(const ConfigurationKey &key, ostream& os
 		} while ((startPos = tmp.find(',', startPos)) != (int)std::string::npos);
 
 	} else if (key.getType() == ConfigurationKey::BOOLEAN) {
-		os << " - valid values:     0 = disabled" << std::endl;
-		os << " - valid values:     1 = enabled" << std::endl;
+		os << " - valid values:     no, yes" << std::endl;
 
 	} else if (key.getType() == ConfigurationKey::STRING) {
 		os << " - valid val regex:  " << tmp << std::endl;

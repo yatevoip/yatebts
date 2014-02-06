@@ -2,7 +2,8 @@
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
-* Copyright 2014 Legba, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -26,9 +27,9 @@
 
 #include <Configuration.h>
 std::vector<std::string> configurationCrossCheck(const std::string& key);
-static const char *cOpenBTSConfigEnv = "OpenBTSConfigFile";
+static const char *cOpenBTSConfigEnv = "MBTSConfigFile";
 // Load configuration from a file.
-ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):"/etc/OpenBTS/OpenBTS.db","OpenBTS", getConfigurationKeys());
+ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):"/etc/OpenBTS/OpenBTS.db","mbts", getConfigurationKeys());
 #include <Logger.h>
 Log dummy("openbts",gConfig.getStr("Log.Level").c_str(),LOG_LOCAL7);
 
@@ -54,7 +55,6 @@ ReportingTable gReports(gConfig.getStr("Control.Reporting.StatsTable").c_str());
 #include <PhysicalStatus.h>
 //#include <SubscriberRegistry.h>
 #include "NeighborTable.h"
-#include <Peering.h>
 
 #include <sys/wait.h>
 
@@ -105,9 +105,6 @@ TransceiverManager gTRX(gConfig.getNum("GSM.Radio.ARFCNs"), gConfig.getStr("TRX.
 // Subscriber registry and http authentication
 //SubscriberRegistry gSubscriberRegistry;
 
-/** The global peering interface. */
-Peering::PeerInterface gPeerInterface;
-
 /** The global neighbor table. */
 Peering::NeighborTable gNeighborTable;
 
@@ -117,16 +114,6 @@ Connection::CmdConnection gCmdConn(STDERR_FILENO + 3);
 Connection::SigConnection gSigConn(STDERR_FILENO + 4);
 Connection::MediaConnection gMediaConn(STDERR_FILENO + 5);
 Connection::ConnectionMap gConnMap;
-
-/** Define a function to call any time the configuration database changes. */
-void purgeConfig(void*,int,char const*, char const*, sqlite3_int64)
-{
-	LOG(INFO) << "purging configuration cache";
-	gConfig.purge();
-	gBTS.regenerateBeacon();
-	gResetWatchdog();
-}
-
 
 
 const char* transceiverPath = "./transceiver";
@@ -192,52 +179,6 @@ void createStats()
 	// count of CLI commands where responses could not be returned
 	gReports.create("OpenBTS.CLI.Command.ResponseFailure");
 
-	// count of initiated LUR attempts
-	gReports.create("OpenBTS.GSM.MM.LUR.Start");
-	// count of LUR attempts where the server timed out
-	gReports.create("OpenBTS.GSM.MM.LUR.Timeout");
-	//gReports.create("OpenBTS.GSM.MM.LUR.Success");
-	//gReports.create("OpenBTS.GSM.MM.LUR.NotFound");
-	//gReports.create("OpenBTS.GSM.MM.LUR.Allowed");
-	//gReports.create("OpenBTS.GSM.MM.LUR.Rejected");
-	// count of all authentication attempts
-	gReports.create("OpenBTS.GSM.MM.Authenticate.Request");
-	// count of authentication attempts the succeeded
-	gReports.create("OpenBTS.GSM.MM.Authenticate.Success");
-	// count of authentication attempts that failed
-	gReports.create("OpenBTS.GSM.MM.Authenticate.Failure");
-	// count of the number of TMSIs assigned to users
-	gReports.create("OpenBTS.GSM.MM.TMSI.Assigned");
-	//gReports.create("OpenBTS.GSM.MM.TMSI.Unknown");
-	// count of CM Service requests for MOC
-	gReports.create("OpenBTS.GSM.MM.CMServiceRequest.MOC");
-	// count of CM Service requests for MOSMS
-	gReports.create("OpenBTS.GSM.MM.CMServiceRequest.MOSMS");
-	// count of CM Service requests for services we don't support
-	gReports.create("OpenBTS.GSM.MM.CMServiceRequest.Unhandled");
-
-	// count of mobile-originated SMS submissions initiated
-	gReports.create("OpenBTS.GSM.SMS.MOSMS.Start");
-	// count of mobile-originated SMS submissions competed (got CP-ACK for RP-ACK)
-	gReports.create("OpenBTS.GSM.SMS.MOSMS.Complete");
-	// count of mobile-temrinated SMS deliveries initiated
-	gReports.create("OpenBTS.GSM.SMS.MTSMS.Start");
-	// count of mobile-temrinated SMS deliveries completed (got RP-ACK)
-	gReports.create("OpenBTS.GSM.SMS.MTSMS.Complete");
-
-	// count of mobile-originated setup messages
-	gReports.create("OpenBTS.GSM.CC.MOC.Setup");
-	// count of mobile-terminated setup messages
-	gReports.create("OpenBTS.GSM.CC.MTC.Setup");
-	// count of mobile-terminated release messages
-	gReports.create("OpenBTS.GSM.CC.MTD.Release");
-	// count of mobile-originated disconnect messages
-	gReports.create("OpenBTS.GSM.CC.MOD.Disconnect");
-	// total number of minutes of carried calls
-	gReports.create("OpenBTS.GSM.CC.CallMinutes");
-	// count of dropped calls
-	gReports.create("OpenBTS.GSM.CC.DroppedCalls");
-
 	// count of CS (non-GPRS) channel assignments
 	gReports.create("OpenBTS.GSM.RR.ChannelAssignment");
 	//gReports.create("OpenBTS.GSM.RR.ChannelRelease");
@@ -287,10 +228,6 @@ int main(int argc, char *argv[])
 				cout << gVersionString << endl;
 				continue;
 			}
-			if (!strcmp(argv[argi], "--gensql")) {
-				cout << gConfig.getDefaultSQL(string(argv[0]), gVersionString) << endl;
-				continue;
-			}
 			if (!strcmp(argv[argi], "--gentex")) {
 				cout << gConfig.getTeX(string(argv[0]), gVersionString) << endl;
 				continue;
@@ -301,11 +238,11 @@ int main(int argc, char *argv[])
 			// so stick this arg in the environment, whence the ConfigurationTable can find it, and then reboot.
 			if (!strcmp(argv[argi],"--config")) {
 				if (++argi == argc) {
-					LOG(ALERT) <<"Missing argument to -sql option";
+					LOG(ALERT) <<"Missing argument to --config option";
 					exit(2);
 				}
 				setenv(cOpenBTSConfigEnv,argv[argi],1);
-				execl(argv[0],"OpenBTS",NULL);
+				execl(argv[0],"mbts",NULL);
 				LOG(ALERT) <<"execl failed?  Exiting...";
 				exit(0);
 			}
@@ -322,14 +259,11 @@ int main(int argc, char *argv[])
 	}
 
 	if (gLogConn.valid() && gCmdConn.valid() && gSigConn.valid() &&
-			gMediaConn.valid() && gLogConn.write("M-BTS connected to YBTS"))
+			gMediaConn.valid() && gLogConn.write("MBTS connected to YBTS"))
 		Log::gHook = Connection::LogConnection::hook;
 	else {
 		COUT("\nNot started by YBTS\n");
-		gLogConn.clear();
-		gCmdConn.clear();
-		gSigConn.clear();
-		gMediaConn.clear();
+		exit(1);
 	}
 
 	createStats();
@@ -341,24 +275,11 @@ int main(int argc, char *argv[])
 	gNeighborTable.NeighborTableInit(
 		gConfig.getStr("Peering.NeighborTable.Path").c_str());
 
-	int sock = socket(AF_UNIX,SOCK_DGRAM,0);
-	if (sock<0) {
-		perror("creating CLI datagram socket");
-		LOG(ALERT) << "cannot create socket for CLI";
-		gReports.incr("OpenBTS.Exit.CLI.Socket");
-		exit(1);
-	}
-
 	try {
 
 	srandom(time(NULL));
 
-	gConfig.setUpdateHook(purgeConfig);
-	LOG(ALERT) << "M-BTS (re)starting, version " << PACKAGE_VERSION << " build date " << __DATE__;
-
-	COUT("\n\n" << gOpenBTSWelcome << "\n");
-	//gTMSITable.open(gConfig.getStr("Control.Reporting.TMSITable").c_str());
-	//gTransactionTable.init(gConfig.getStr("Control.Reporting.TransactionTable").c_str());
+	gLogConn.write(gOpenBTSWelcome);
 	gPhysStatus.open(gConfig.getStr("Control.Reporting.PhysStatusTable").c_str());
 	gBTS.init();
 	//gSubscriberRegistry.init();
@@ -366,7 +287,7 @@ int main(int argc, char *argv[])
 
 	if (gCmdConn.valid()) {
 		gSigConn.start();
-		gLogConn.write("Starting M-BTS...");
+		gLogConn.write("Starting MBTS...");
 	}
 	else
 		COUT("\nStarting the system...");
@@ -605,9 +526,8 @@ int main(int argc, char *argv[])
 	gBTS.start();
 
 	if (gCmdConn.valid()) {
-		close(sock);
 		gMediaConn.start();
-		gLogConn.write("M-BTS ready");
+		gLogConn.write("MBTS ready");
 		gSigConn.send(Connection::SigRadioReady);
 		while (gLogConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
 			char* line = gCmdConn.read();
@@ -623,45 +543,6 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	struct sockaddr_un cmdSockName;
-	cmdSockName.sun_family = AF_UNIX;
-	const char* sockpath = gConfig.getStr("CLI.SocketPath").c_str();
-	char rmcmd[strlen(sockpath)+5];
-	sprintf(rmcmd,"rm -f %s",sockpath);
-	if (system(rmcmd)) {}
-	strcpy(cmdSockName.sun_path,sockpath);
-	LOG(INFO) "binding CLI datagram socket at " << sockpath;
-	if (bind(sock, (struct sockaddr *) &cmdSockName, sizeof(struct sockaddr_un))) {
-		perror("binding name to cmd datagram socket");
-		LOG(ALERT) << "cannot bind socket for CLI at " << sockpath;
-		gReports.incr("OpenBTS.Exit.CLI.Socket");
-		exit(1);
-	}
-
-	COUT("\nsystem ready\n");
-	COUT("\nuse the OpenBTSCLI utility to access CLI\n");
-	LOG(INFO) << "system ready";
-
-	while (1) {
-		char cmdbuf[1000];
-		struct sockaddr_un source;
-		socklen_t sourceSize = sizeof(source);
-		int nread = recvfrom(sock,cmdbuf,sizeof(cmdbuf)-1,0,(struct sockaddr*)&source,&sourceSize);
-		gReports.incr("OpenBTS.CLI.Command");
-		cmdbuf[nread]='\0';
-		LOG(INFO) << "received command \"" << cmdbuf << "\" from " << source.sun_path;
-		std::ostringstream sout;
-		int res = gParser.process(cmdbuf,sout);
-		const std::string rspString= sout.str();
-		const char* rsp = rspString.c_str();
-		LOG(INFO) << "sending " << strlen(rsp) << "-char result to " << source.sun_path;
-		if (sendto(sock,rsp,strlen(rsp)+1,0,(struct sockaddr*)&source,sourceSize)<0) {
-			LOG(ERR) << "can't send CLI response to " << source.sun_path;
-			gReports.incr("OpenBTS.CLI.Command.ResponseFailure");
-		}
-		// res<0 means to exit the application
-		if (res<0) break;
-	}
 
 	} // try
 
@@ -671,7 +552,6 @@ int main(int argc, char *argv[])
 	}
 
 	//if (gTransceiverPid) kill(gTransceiverPid, SIGKILL);
-	close(sock);
 
 }
 
@@ -739,25 +619,6 @@ vector<string> configurationCrossCheck(const string& key) {
 			warning.str(std::string());
 		}
 
-	// Control.LUR.WhiteList depends on Control.WhiteListing.Message, Control.LUR.WhiteListing.RejectCause and Control.WhiteListing.ShortCode
-	} else if (key.compare("Control.LUR.WhiteList") == 0 || key.compare("Control.WhiteListing.Message") == 0 ||
-				key.compare("Control.LUR.WhiteListing.RejectCause") == 0 || key.compare("Control.WhiteListing.ShortCode") == 0) {
-		if (gConfig.getBool("Control.LUR.WhiteList")) {
-			if (!gConfig.getStr("Control.WhiteListing.Message").length()) {
-				warning << "Control.LUR.WhiteList is enabled but will not be functional until Control.WhiteListing.Message is set";
-				warnings.push_back(warning.str());
-				warning.str(std::string());
-			} else if (!gConfig.getStr("Control.LUR.WhiteListing.RejectCause").length()) {
-				warning << "Control.LUR.WhiteList is enabled but will not be functional until Control.WhiteListing.RejectCause is set";
-				warnings.push_back(warning.str());
-				warning.str(std::string());
-			} else if (!gConfig.getStr("Control.WhiteListing.ShortCode").length()) {
-				warning << "Control.LUR.WhiteList is enabled but will not be functional until Control.WhiteListing.ShortCode is set";
-				warnings.push_back(warning.str());
-				warning.str(std::string());
-			}
-		}
-
 	// GSM.CellSelection.NCCsPermitted needs to contain our own GSM.Identity.BSIC.NCC
 	} else if (key.compare("GSM.CellSelection.NCCsPermitted") == 0 || key.compare("GSM.Identity.BSIC.NCC") == 0) {
 		int ourNCCMask = gConfig.getNum("GSM.CellSelection.NCCsPermitted");
@@ -765,30 +626,6 @@ vector<string> configurationCrossCheck(const string& key) {
 		if ((ourNCCMask >= 0) && ((NCCMaskBit & ourNCCMask) == 0)) {
 			warning << "GSM.CellSelection.NCCsPermitted is not set to a mask which contains the local network color code defined in GSM.Identity.BSIC.NCC. ";
 			warning << "Set GSM.CellSelection.NCCsPermitted to " << NCCMaskBit;
-			warnings.push_back(warning.str());
-			warning.str(std::string());
-		}
-
-	// Control.LUR.FailedRegistration.Message depends on Control.LUR.FailedRegistration.ShortCode
-	} else if (key.compare("Control.LUR.FailedRegistration.Message") == 0 || key.compare("Control.LUR.FailedRegistration.ShortCode") == 0) {
-		if (gConfig.getStr("Control.LUR.FailedRegistration.Message").length() && !gConfig.getStr("Control.LUR.FailedRegistration.ShortCode").length()) {
-			warning << "Control.LUR.FailedRegistration.Message is enabled but will not be functional until Control.LUR.FailedRegistration.ShortCode is set";
-			warnings.push_back(warning.str());
-			warning.str(std::string());
-		}
-
-	// Control.LUR.NormalRegistration.Message depends on Control.LUR.NormalRegistration.ShortCode
-	} else if (key.compare("Control.LUR.NormalRegistration.Message") == 0 || key.compare("Control.LUR.NormalRegistration.ShortCode") == 0) {
-		if (gConfig.getStr("Control.LUR.NormalRegistration.Message").length() && !gConfig.getStr("Control.LUR.NormalRegistration.ShortCode").length()) {
-			warning << "Control.LUR.NormalRegistration.Message is enabled but will not be functional until Control.LUR.NormalRegistration.ShortCode is set";
-			warnings.push_back(warning.str());
-			warning.str(std::string());
-		}
-
-	// Control.LUR.OpenRegistration depends on Control.LUR.OpenRegistration.ShortCode
-	} else if (key.compare("Control.LUR.OpenRegistration") == 0 || key.compare("Control.LUR.OpenRegistration.ShortCode") == 0) {
-		if (gConfig.getStr("Control.LUR.OpenRegistration").length() && !gConfig.getStr("Control.LUR.OpenRegistration.ShortCode").length()) {
-			warning << "Control.LUR.OpenRegistration is enabled but will not be functional until Control.LUR.OpenRegistration.ShortCode is set";
 			warnings.push_back(warning.str());
 			warning.str(std::string());
 		}

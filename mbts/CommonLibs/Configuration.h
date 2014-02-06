@@ -2,6 +2,8 @@
 * Copyright 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under the terms of the GNU Affero Public License.
 * See the COPYING file in the main directory for details.
@@ -27,9 +29,6 @@
 
 #ifndef CONFIGURATION_H
 #define CONFIGURATION_H
-
-
-#include "sqlite3util.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -177,14 +176,14 @@ ConfigurationKeyMap getConfigurationKeys();
 
 /**
 	A class for maintaining a configuration key-value table,
-	based on sqlite3 and a local map-based cache.
+	based on a file and a local map-based cache.
 	Thread-safe, too.
 */
 class ConfigurationTable {
 
 	private:
 
-	sqlite3* mDB;				///< database connection
+	std::string mConfigFile;        ///< configuration file name
 	ConfigurationMap mCache;	///< cache of recently access configuration values
 	mutable Mutex mLock;		///< control for multithreaded access to the cache
 	std::vector<std::string> (*mCrossCheck)(const std::string&);	///< cross check callback pointer
@@ -195,8 +194,8 @@ class ConfigurationTable {
 
 	ConfigurationTable(const char* filename = ":memory:", const char *wCmdName = 0, ConfigurationKeyMap wSchema = ConfigurationKeyMap());
 
-	/** Generate an up-to-date example sql file for new installs. */
-	std::string getDefaultSQL(const std::string& program, const std::string& version);
+	/** Load the configuration from a file, by default use the one from constructor */
+	bool load(const char* filename = 0);
 
 	/** Generate an up-to-date TeX snippet. */
 	std::string getTeX(const std::string& program, const std::string& version);
@@ -273,25 +272,16 @@ class ConfigurationTable {
 	bool remove(const std::string& key);
 
 	/** Search the table, dumping to a stream. */
-	void find(const std::string& pattern, std::ostream&) const;
+	void find(const std::string& pattern, std::ostream&);
 
 	/** Return all key/value pairs stored in the ConfigurationTable */
-	ConfigurationRecordMap getAllPairs() const;
-
-	/** Define the callback to purge the cache whenever the database changes. */
-	void setUpdateHook(void(*)(void *,int ,char const *,char const *,sqlite3_int64));
+	ConfigurationRecordMap getAllPairs();
 
 	/** Define the callback for cross checking. */
 	void setCrossCheckHook(std::vector<std::string> (*wCrossCheck)(const std::string&));
 
 	/** Execute the application specific value cross checking logic. */
 	std::vector<std::string> crossCheck(const std::string& key);
-
-	/** purege cache if it exceeds a certain age */
-	void checkCacheAge();
-
-	/** Delete all records from the cache. */
-	void purge();
 
 
 	private:
