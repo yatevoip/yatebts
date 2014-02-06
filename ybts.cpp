@@ -1266,7 +1266,7 @@ public:
     // Don't enqueue the message if decode failed and rlc is false
     bool enqueueSS(Message* m, const String* facility, bool rlc);
     // Decode Facility
-    XmlElement* decodeFacility(const String& buf);
+    XmlElement* decodeFacility(const String& buf, String* error = 0);
 
     static const TokenDict s_stateName[];
 
@@ -5475,32 +5475,46 @@ bool YBTSDriver::enqueueSS(Message* m, const String* facility, bool rlc)
     if (!m)
 	return false;
     XmlElement* xml = 0;
+    String error;
     if (!TelEngine::null(facility))
-	xml = decodeFacility(*facility);
+	xml = decodeFacility(*facility,&error);
     if (xml)
 	exportXml(*m,xml);
     else if (!rlc) {
-	Debug(this,DebugNote,"Can't enqueue '%s': failed to decode facility '%s'",
-	    m->c_str(),TelEngine::c_safe(facility));
+	Debug(this,DebugNote,
+	    "Can't enqueue '%s': failed to decode facility '%s' error='%s'",
+	    m->c_str(),TelEngine::c_safe(facility),error.safe());
 	TelEngine::destruct(m);
 	return false;
     }
+    else if (!TelEngine::null(facility))
+	Debug(this,DebugNote,
+	    "Enqueueing '%s', failed to decode facility '%s' error='%s'",
+	    m->c_str(),facility->c_str(),error.safe());
     return Engine::enqueue(m);
 }
 
 // Decode Facility
-XmlElement* YBTSDriver::decodeFacility(const String& buf)
+XmlElement* YBTSDriver::decodeFacility(const String& buf, String* error)
 {
     if (!buf)
 	return 0;
     Message m("map.decode");
     m.addParam("data",buf);
     m.addParam("xmlstr",String::boolText(true));
-    if (!Engine::dispatch(m))
+    bool ok = Engine::dispatch(m);
+    const char* e = m.getValue(YSTRING("error"));
+    if (error)
+	*error = e;
+    if (!ok) {
+	Debug(this,DebugInfo,"Decode Facility failed error='%s'",e);
 	return 0;
-    
-    Debug(this,DebugStub,"decodeFacility not implemented");
-    return 0;
+    }
+    NamedPointer* np = YOBJECT(NamedPointer,m.getParam(YSTRING("xml")));
+    XmlElement* xml = YOBJECT(XmlElement,np);
+    if (xml)
+	np->takeData();
+    return xml;
 }
 
 void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
@@ -5821,9 +5835,13 @@ void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& 
 	const String* facility = xml.childText(s_facility);
 	if (TelEngine::null(facility))
 	    YBTS_SET_REASON_BREAK("empty Facility IE");
-	facilityXml = decodeFacility(*facility);
-	if (!facilityXml)
-	    YBTS_SET_REASON_BREAK("failed to decode Facility IE");
+	String error;
+	facilityXml = decodeFacility(*facility,&error);
+	if (!facilityXml) {
+	    reason << "failed to decode Facility IE";
+	    reason.append(error," error=");
+	    break;
+	}
 	YBTSTid::Type t = YBTSTid::Unknown;
 	// TODO: Get type
 	if (t != YBTSTid::Ussd) {
