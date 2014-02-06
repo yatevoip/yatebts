@@ -5,7 +5,7 @@
  * Yet Another BTS Channel
  *
  * Yet Another Telephony Engine - a fully featured software PBX and IVR
- * Copyright (C) 2004-2013 Null Team
+ * Copyright (C) 2013-2014 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing
@@ -67,6 +67,8 @@ namespace { // anonymous
 #define YBTS_MT_SMS_TIMEOUT_MIN 5000
 #define YBTS_MT_SMS_TIMEOUT_MAX 600000
 
+#define YBTS_SET_REASON_BREAK(s) { reason = s; break; }
+
 // Constant strings
 static const String s_message = "Message";
 static const String s_type = "type";
@@ -82,6 +84,9 @@ static const String s_causeCoding = "coding";
 static const String s_cmServType = "CMServiceType";
 static const String s_cmMOCall = "MO-call-establishment-or-PM-connection-establishment";
 static const String s_cmSMS = "SMS";
+static const String s_cmSS = "SS-activation";
+static const String s_facility = "Facility";
+static const String s_rlc = "ReleaseComplete";
 static const String s_ccSetup = "Setup";
 static const String s_ccEmergency = "EmergencySetup";
 static const String s_ccProceeding = "CallProceeding";
@@ -91,7 +96,6 @@ static const String s_ccConnect = "Connect";
 static const String s_ccConnectAck = "ConnectAcknowledge";
 static const String s_ccDisc = "Disconnect";
 static const String s_ccRel = "Release";
-static const String s_ccRlc = "ReleaseComplete";
 static const String s_ccStatusEnq = "StatusEnquiry";
 static const String s_ccStatus = "Status";
 static const String s_ccStartDTMF = "StartDTMF";
@@ -104,7 +108,6 @@ static const String s_ccCallRef = "TID";
 static const String s_ccTIFlag = "TIFlag";
 static const String s_ccCalled = "CalledPartyBCDNumber";
 static const String s_ccCallState = "CallState";
-//static const String s_ccFacility = "Facility";
 static const String s_ccProgressInd = "ProgressIndicator";
 //static const String s_ccUserUser = "UserUser";
 static const String s_ccSsCLIR = "CLIRInvocation";
@@ -117,6 +120,7 @@ class YBTSMessage;                       // YBTS <-> BTS PDU
 class YBTSTransport;
 class YBTSGlobalThread;                  // GenObject and Thread descendent
 class YBTSLAI;                           // Holds local area id
+class YBTSTid;                           // Transaction identifier holder
 class YBTSConn;                          // A logical connection
 class YBTSLog;                           // Log interface
 class YBTSCommand;                       // Command interface
@@ -124,7 +128,7 @@ class YBTSSignalling;                    // Signalling interface
 class YBTSMedia;                         // Media interface
 class YBTSUE;                            // A registered equipment
 class YBTSLocationUpd;                   // Running location update from UE
-class YBTSSmsSubmit;                     // MO SMS submit thread
+class YBTSSubmit;                        // MO SMS/SS submit thread
 class YBTSSmsInfo;                       // Holds data describing a pending SMS
 class YBTSMtSms;                         // Holds data describing a pending MT SMS
 class YBTSMtSmsList;                     // A list of MT SMS for the same UE target
@@ -369,15 +373,64 @@ protected:
     String m_lai;                        // Concatenated mnc_mcc_lac
 };
 
+
+class YBTSTid : public String
+{
+public:
+    enum Type {
+	Unknown = 0,
+	Sms,
+	Ussd,
+    };
+    inline YBTSTid(Type t, const String& callRef, bool incoming, uint8_t sapi,
+	const char* id = 0)
+	: String(id),
+	m_type(t), m_callRef(callRef), m_incoming(incoming), m_sapi(sapi),
+	m_timeout(0), m_connId(-1)
+	{}
+    ~YBTSTid()
+	{ setConnId(-1); }
+    // Set connection id, reset conn usage of old connection
+    void setConnId(int connId);
+    static inline ObjList* findObj(ObjList& list, const String& callRef, bool incoming) {
+	    for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
+		YBTSTid* i = static_cast<YBTSTid*>(o->get());
+		if (i->m_incoming == incoming && i->m_callRef == callRef)
+		    return o;
+	    }
+	    return 0;
+	}
+    static inline YBTSTid* find(ObjList& list, const String& callRef, bool incoming) {
+	    ObjList* o = findObj(list,callRef,incoming);
+	    return o ? static_cast<YBTSTid*>(o->get()) : 0;
+	}
+    static inline YBTSTid* remove(ObjList& list, const String& callRef, bool incoming) {
+	    ObjList* o = findObj(list,callRef,incoming);
+	    return o ? static_cast<YBTSTid*>(o->remove(false)) : 0;
+	}
+    static inline YBTSTid* findMO(ObjList& list, const String& callRef)
+	{ return find(list,callRef,true); }
+    static const char* typeName(int t, const char* defVal = "unknown")
+	{ return lookup(t,s_typeName,defVal); }
+    static const TokenDict s_typeName[];
+
+    Type m_type;
+    String m_callRef;                    // TID: Call reference
+    bool m_incoming;                     // Transaction direction
+    uint8_t m_sapi;                      // SAPI to use
+    uint64_t m_timeout;
+    int m_connId;                        // Connection id (less then 0: no connection)
+};
+
 // A logical connection
 // UE retrieve/set methods are not thread safe
 class YBTSConn : public RefObject, public Mutex, public YBTSConnIdHolder
 {
     friend class YBTSSignalling;
     friend class YBTSMM;
+    friend class YBTSDriver;
 public:
-    ~YBTSConn()
-	{ TelEngine::destruct(m_xml); }
+    ~YBTSConn();
     inline YBTSUE* ue()
 	{ return m_ue; }
     inline bool waitForTraffic() const
@@ -395,6 +448,23 @@ public:
 		return ((m_xml = xml) != 0);
 	    TelEngine::destruct(xml);
 	    return false;
+	}
+    // Retrieve an SS TID
+    inline YBTSTid* findSSTid(const String& callRef, bool incoming) {
+	    if (m_ussd && m_ussd->m_incoming == incoming &&
+		m_ussd->m_callRef == callRef)
+		return m_ussd;
+	    return 0;
+	}
+    // Take (remove) an SS TID
+    inline YBTSTid* takeSSTid(const String& callRef, bool incoming) {
+	    YBTSTid* tid = 0;
+	    if (m_ussd && m_ussd->m_incoming == incoming &&
+		m_ussd->m_callRef == callRef) {
+		tid = m_ussd;
+		m_ussd = 0;
+	    }
+	    return tid;
 	}
     // Start media traffic. Return true is already started, false if requesting
     bool startTraffic(uint8_t mode = 1);
@@ -416,6 +486,7 @@ protected:
     XmlElement* m_xml;
     RefPointer<YBTSUE> m_ue;
     ObjList m_sms;                       // Pending sms
+    YBTSTid* m_ussd;                     // Pending SS USSD transaction
     uint8_t m_traffic;                   // Traffic channel available (mode)
     uint8_t m_waitForTraffic;            // Waiting for traffic to start
     uint8_t m_sapiUp;                    // SAPI status: lower 4 bits SAPI + upper 4 bits if SAPI up on SDCCH
@@ -512,6 +583,12 @@ public:
     // Send L3 RP Ack/Error
     bool sendSmsRPRsp(YBTSConn* conn, const String& callRef, bool tiFlag, uint8_t sapi,
 	uint8_t rpMsgRef, uint8_t cause);
+    // Send SS
+    bool sendSS(YBTSConn* conn, const String& callRef, bool tiFlag, uint8_t sapi,
+	const String& type, const char* cause = 0, const char* facility = 0);
+    inline bool sendSSRlc(YBTSConn* conn, const String& callRef, bool tiFlag,
+	uint8_t sapi, const char* cause = 0, const char* facility = 0)
+	{ return sendSS(conn,callRef,tiFlag,sapi,s_rlc,cause,facility); }
     bool start();
     void stop();
     // Drop a connection
@@ -535,7 +612,7 @@ public:
 	}
     // Remove a pending sms info from a connection
     // Decrease connection usage counter on success
-    YBTSSmsInfo* removeSms(YBTSConn* conn, const String& callRef, bool tiFlag);
+    YBTSSmsInfo* removeSms(YBTSConn* conn, const String& callRef, bool incoming);
     // Respond to a MO SMS
     bool moSmsRespond(YBTSConn* conn, const String& callRef, uint8_t cause,
 	const String* rpdu = 0);
@@ -544,6 +621,15 @@ public:
 	    RefPointer<YBTSConn> conn;
 	    findConn(conn,connId,false);
 	    return conn && moSmsRespond(conn,callRef,cause,rpdu);
+	}
+    // Handle MO SS execute result
+    bool moSSExecuted(YBTSConn* conn, const String& callRef, bool ok,
+	const NamedList& params = NamedList::empty());
+    inline bool moSSExecuted(uint16_t connId, const String& callRef, bool ok,
+	const NamedList& params = NamedList::empty()) {
+	    RefPointer<YBTSConn> conn;
+	    findConn(conn,connId,false);
+	    return conn && moSSExecuted(conn,callRef,ok,params);
 	}
     // Read socket. Parse and handle received data
     virtual void processLoop();
@@ -564,6 +650,15 @@ public:
 	}
 
 protected:
+    inline bool findConnDrop(YBTSMessage& msg, RefPointer<YBTSConn>& conn,
+	uint16_t connId) {
+	    if (findConn(conn,connId,false))
+		return true;
+	    Debug(this,DebugNote,"Received %s for non-existent connection %u [%p]",
+		msg.name(),connId,this);
+	    dropConn(connId,true);
+	    return false;
+	}
     bool sendInternal(YBTSMessage& msg);
     YBTSConn* findConnInternal(uint16_t connId);
     bool findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create);
@@ -673,6 +768,7 @@ public:
 	{ return m_removed; }
     inline bool imsiDetached() const
 	{ return m_imsiDetached; }
+    void addCaller(NamedList& list);
     bool startPaging(BtsPagingChanType type);
     void stopPaging();
     void stopPagingNow();
@@ -716,11 +812,11 @@ protected:
     uint64_t m_startTime;
 };
 
-class YBTSSmsSubmit : public YBTSGlobalThread, public YBTSConnIdHolder
+class YBTSSubmit : public YBTSGlobalThread, public YBTSConnIdHolder
 {
 public:
-    YBTSSmsSubmit(uint16_t connid, const char* imsi, const char* callRef);
-    ~YBTSSmsSubmit()
+    YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue, const char* callRef);
+    ~YBTSSubmit()
 	{ notify(); }
     inline Message& msg()
 	{ return m_msg; }
@@ -728,43 +824,25 @@ public:
 	{ notify(); }
 protected:
     virtual void run();
-    void notify(bool final = true, unsigned int cause = 111, const String* rpdu = 0);
+    void notify(bool final = true);
 
+    YBTSTid::Type m_type;
     String m_imsi;                       // UE imsi, empty if already notified termination
     String m_callRef;                    // SMS transaction identifier
     Message m_msg;                       // The message to dispatch
+    bool m_ok;
+    uint8_t m_cause;
+    String m_data;
 };
 
-class YBTSSmsInfo : public GenObject
+class YBTSSmsInfo : public YBTSTid
 {
 public:
-    inline YBTSSmsInfo(const String& callRef, bool tiFlag, uint8_t sapi,
-	uint8_t rpMsgRef)
-	: m_callRef(callRef), m_tiFlag(tiFlag), m_sapi(sapi), m_rpMsgRef(rpMsgRef)
+    inline YBTSSmsInfo(const String& callRef, uint8_t sapi,
+	uint8_t rpMsgRef, bool incoming = true)
+	: YBTSTid(Sms,callRef,incoming,sapi), m_rpMsgRef(rpMsgRef)
 	{}
-    static inline YBTSSmsInfo* find(ObjList& list, const String& callRef, bool tiFlag) {
-	    for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
-		YBTSSmsInfo* i = static_cast<YBTSSmsInfo*>(o->get());
-		if (i->m_tiFlag == tiFlag && i->m_callRef == callRef)
-		    return i;
-	    }
-	    return 0;
-	}
-    static inline YBTSSmsInfo* remove(ObjList& list, const String& callRef, bool tiFlag) {
-	    for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
-		YBTSSmsInfo* i = static_cast<YBTSSmsInfo*>(o->get());
-		if (i->m_tiFlag == tiFlag && i->m_callRef == callRef) {
-		    o->remove(false);
-		    return i;
-		}
-	    }
-	    return 0;
-	}
-    static inline YBTSSmsInfo* findMO(ObjList& list, const String& callRef)
-	{ return find(list,callRef,false); }
-    String m_callRef;                    // TID: Call reference
-    bool m_tiFlag;                       // TID: TI flag
-    uint8_t m_sapi;                      // SAPI to use
+
     uint8_t m_rpMsgRef;                  // RP Message reference
 };
 
@@ -1125,14 +1203,30 @@ public:
     inline XmlElement* buildCC()
 	{ return new XmlElement("CC"); }
     XmlElement* buildCC(XmlElement*& ch, const char* type, const char* callRef, bool tiFlag = false);
-    inline unsigned int smsIndex() {
+    inline void setSmsId(String& s) {
+	    s << prefix() << "sms/";
 	    Lock lck(this);
-	    return ++m_smsIndex;
+	    s << ++m_smsIndex;
 	}
+    inline void setSSId(String& s) {
+	    s << prefix() << "ss/";
+	    Lock lck(this);
+	    s << ++m_ssIndex;
+	}
+    inline Message* message(const char* msg) {
+	    Message* m = new Message(msg);
+	    m->addParam("module",name());
+	    return m;
+	}
+    // Export an xml to a list parameter
+    // Consume the xml object
+    void exportXml(NamedList& list, XmlElement*& xml, const char* param = "xml");
     // Handle call control messages
     void handleCC(YBTSMessage& m, YBTSConn* conn);
     // Handle SMS PDUs
     void handleSmsPDU(YBTSMessage& m, YBTSConn* conn);
+    // Handle SS PDUs
+    void handleSSPDU(YBTSMessage& m, YBTSConn* conn);
     // Check if a MT service is pending for new connection and start it
     void checkMtService(YBTSUE* ue, YBTSConn* conn, bool pagingRsp = false);
     // Handle media start/alloc response
@@ -1167,6 +1261,11 @@ public:
 	    if (findMtSmsList(list,ue) && !checkMtSms(*list))
 		removeMtSms(list);
 	}
+    // Enqueue an SS related message. Decode facility
+    // Don't enqueue the message if decode failed and rlc is false
+    bool enqueueSS(Message* m, const String* facility, bool rlc);
+    // Decode Facility
+    XmlElement* decodeFacility(const String& buf);
 
     static const TokenDict s_stateName[];
 
@@ -1198,6 +1297,15 @@ protected:
 	}
     // Remove a pending sms. Remove its queue if empty
     bool removeMtSms(YBTSMtSmsList* list, YBTSMtSms* sms = 0);
+    // Handle SS Facility
+    void handleSSFacility(YBTSMessage& m, YBTSConn* conn, const String& callRef,
+	bool tiFlag, XmlElement& xml);
+    // Handle SS Release Complete
+    void handleSSRelease(YBTSMessage& m, YBTSConn* conn, const String& callRef,
+	bool tiFlag, XmlElement& xml);
+    // Handle SS register
+    void handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& callRef,
+	bool tiFlag, XmlElement& xml);
     void start();
     inline void startIdle() {
 	    Lock lck(m_stateMutex);
@@ -1264,8 +1372,10 @@ protected:
     unsigned int m_engineStop;
     ObjList* m_helpCache;
     unsigned int m_smsIndex;             // Index used to generate SMS id
+    unsigned int m_ssIndex;              // Index used to generate SS id
     Mutex m_mtSmsMutex;                  // Protects MT SMS list
     ObjList m_mtSms;                     // List of MT SMS
+    int m_exportXmlStr;                  // Export xml as string(-1), obj(1) or both(0)
 };
 
 INIT_PLUGIN(YBTSDriver);
@@ -1341,6 +1451,12 @@ const TokenDict YBTSMessage::s_priName[] =
     {0,0}
 };
 
+const TokenDict YBTSTid::s_typeName[] = {
+    YBTS_MAKENAME(Sms),
+    YBTS_MAKENAME(Ussd),
+    {0,0}
+};
+
 const TokenDict YBTSCallDesc::s_stateName[] =
 {
     YBTS_MAKENAME(Null),
@@ -1401,14 +1517,18 @@ static const char* s_bcd = "0123456789*#ABC";
 //   0: RP-DATA - MS to network
 //   1: RP-DATA - network to MS
 //   2: RP-ACK - MS to network
+//   3: RP-ACK - network to MS
 //   4: RP-ERROR - MS to network
+//   5: RP-ERROR - network to MS
 //   6: RP-SMMA - MS to network
 enum RPMsgType
 {
     RPDataFromMs = 0,
     RPDataFromNetwork = 1,
     RPAckFromMs = 2,
+    RPAckFromNetwork = 3,
     RPErrorFromMs = 4,
+    RPErrorFromNetwork = 3,
     RPSMMAFromMs = 6,
 };
 
@@ -2106,6 +2226,7 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     : Mutex(false,"YBTSConn"),
     YBTSConnIdHolder(connId),
     m_owner(owner), m_xml(0),
+    m_ussd(0),
     m_traffic(0),
     m_waitForTraffic(0),
     m_sapiUp(1),
@@ -2113,6 +2234,12 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     m_usage(0),
     m_mtSms(false)
 {
+}
+
+YBTSConn::~YBTSConn()
+{
+    TelEngine::destruct(m_xml);
+    TelEngine::destruct(m_ussd);
 }
 
 bool YBTSConn::startTraffic(uint8_t mode)
@@ -2525,7 +2652,7 @@ bool YBTSSignalling::sendSmsRPRsp(YBTSConn* conn, const String& callRef, bool ti
     // Section 7.3.3 and 7.3.4: RP Ack/Error: 1 byte message type + 1 byte message reference
     // Error: RP-Cause IE: 1 byte length + 1 byte cause
     // See Section 8.2.2 for message type
-    uint8_t buf[4] = {!cause ? 3 : 5,rpMsgRef};
+    uint8_t buf[4] = {!cause ? RPAckFromNetwork : RPErrorFromNetwork,rpMsgRef};
     String rpdu;
     if (!cause)
 	rpdu.hexify(buf,2);
@@ -2535,6 +2662,23 @@ bool YBTSSignalling::sendSmsRPRsp(YBTSConn* conn, const String& callRef, bool ti
 	rpdu.hexify(buf,4);
     }
     return sendSmsCPData(conn,callRef,tiFlag,sapi,rpdu);
+}
+
+bool YBTSSignalling::sendSS(YBTSConn* conn, const String& callRef, bool tiFlag, uint8_t sapi,
+    const String& type, const char* cause, const char* facility)
+{
+    if (!conn)
+	return false;
+    XmlElement* ss = new XmlElement("SS");
+    ss->addChildSafe(buildTID(callRef,tiFlag));
+    XmlElement* what = new XmlElement(s_message);
+    what->setAttribute(s_type,type);
+    if (facility)
+	what->addChildSafe(new XmlElement(s_facility,facility));
+    if (cause)
+	what->addChildSafe(new XmlElement(s_cause,cause));
+    ss->addChildSafe(what);
+    return sendL3Conn(conn->connId(),ss,sapi);
 }
 
 bool YBTSSignalling::start()
@@ -2638,7 +2782,10 @@ bool YBTSSignalling::addMOSms(YBTSConn* conn, const String& callRef, uint8_t sap
     Lock lck(conn);
     if (YBTSSmsInfo::findMO(conn->m_sms,callRef))
 	return true;
-    conn->m_sms.append(new YBTSSmsInfo(callRef,false,sapi,rpCallRef));
+    YBTSSmsInfo* i = new YBTSSmsInfo(callRef,sapi,rpCallRef);
+    conn->m_sms.append(i);
+    XDebug(this,DebugAll,"Added MO SMS (%p) tid=%s to conn %u [%p]",
+	i,i->m_callRef.c_str(),conn->connId(),this);
     lck.drop();
     setConnUsage(conn->connId(),true);
     return true;
@@ -2647,14 +2794,17 @@ bool YBTSSignalling::addMOSms(YBTSConn* conn, const String& callRef, uint8_t sap
 // Remove a pending sms info from a connection
 // Decrease connection usage counter on success
 YBTSSmsInfo* YBTSSignalling::removeSms(YBTSConn* conn, const String& callRef,
-    bool tiFlag)
+    bool incoming)
 {
     if (!conn)
 	return 0;
     Lock lck(conn);
-    YBTSSmsInfo* i = YBTSSmsInfo::remove(conn->m_sms,callRef,tiFlag);
+    YBTSTid* tid = YBTSTid::remove(conn->m_sms,callRef,incoming);
+    YBTSSmsInfo* i = static_cast<YBTSSmsInfo*>(tid);
     if (!i)
 	return 0;
+    XDebug(this,DebugAll,"Removed %s SMS (%p) tid=%s from conn %u [%p]",
+	(incoming ? "MO" : "MT"),i,i->m_callRef.c_str(),conn->connId(),this);
     lck.drop();
     setConnUsage(conn->connId(),false);
     return i;
@@ -2667,9 +2817,12 @@ bool YBTSSignalling::moSmsRespond(YBTSConn* conn, const String& callRef, uint8_t
     if (!conn)
 	return false;
     Lock lck(conn);
-    YBTSSmsInfo* i = YBTSSmsInfo::findMO(conn->m_sms,callRef);
-    if (!i)
+    YBTSSmsInfo* i = static_cast<YBTSSmsInfo*>(YBTSTid::findMO(conn->m_sms,callRef));
+    if (!i) {
+	DDebug(this,DebugInfo,"No MO SMS to respond tid=%s conn=%u [%p]",
+	    callRef.c_str(),conn->connId(),this);
 	return false;
+    }
     uint8_t sapi = i->m_sapi;
     uint8_t rpMsgRef = i->m_rpMsgRef;
     lck.drop();
@@ -2677,6 +2830,30 @@ bool YBTSSignalling::moSmsRespond(YBTSConn* conn, const String& callRef, uint8_t
 	sendSmsRPRsp(conn,callRef,true,sapi,rpMsgRef,cause);
     else
 	sendSmsCPData(conn,callRef,true,sapi,*rpdu);
+    return true;
+}
+
+bool YBTSSignalling::moSSExecuted(YBTSConn* conn, const String& callRef, bool ok,
+    const NamedList& params)
+{
+    if (!conn)
+	return false;
+    Lock lck(conn);
+    if (!ok) {
+	YBTSTid* tid = conn->takeSSTid(callRef,true);
+	lck.drop();
+	if (tid) {
+	    const char* cause = params.getValue(YSTRING("error"),"invalid-callref");
+	    sendSSRlc(conn,callRef,false,tid->m_sapi,cause);
+	    TelEngine::destruct(tid);
+	}
+	return true;
+    }
+    YBTSTid* tid = conn->findSSTid(callRef,true);
+    if (!tid) {
+	// TODO: enqueue release complete
+    }
+    // TODO: Update data
     return true;
 }
 
@@ -2845,12 +3022,16 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		    __plugin.mm()->handlePDU(msg,conn);
 		}
 		else if (proto == YSTRING("CC")) {
-		    findConn(conn,msg.connId(),false);
-		    __plugin.handleCC(msg,conn);
+		    if (findConnDrop(msg,conn,msg.connId()))
+			__plugin.handleCC(msg,conn);
 		}
 		else if (proto == YSTRING("SMS")) {
-		    findConn(conn,msg.connId(),false);
-		    __plugin.handleSmsPDU(msg,conn);
+		    if (findConnDrop(msg,conn,msg.connId()))
+			__plugin.handleSmsPDU(msg,conn);
+		}
+		else if (proto == YSTRING("SS")) {
+		    if (findConnDrop(msg,conn,msg.connId()))
+			__plugin.handleSSPDU(msg,conn);
 		}
 		else if (proto == YSTRING("RRM"))
 		    handleRRM(msg);
@@ -3133,6 +3314,15 @@ YBTSDataSource* YBTSMedia::find(unsigned int connId)
 //
 // YBTSUE
 //
+void YBTSUE::addCaller(NamedList& list)
+{
+    if (msisdn())
+	list.addParam("caller","+" + msisdn());
+    else if (imsi())
+	list.addParam("caller","IMSI" + imsi());
+    else if (imei())
+	list.addParam("caller","IMEI" + imei());
+}
 
 // Start paging, return true if already paging
 bool YBTSUE::startPaging(BtsPagingChanType type)
@@ -3250,28 +3440,43 @@ void YBTSLocationUpd::notify(bool final, bool ok)
 
 
 //
-// YBTSSmsSubmit
+// YBTSSubmit
 //
-YBTSSmsSubmit::YBTSSmsSubmit(uint16_t connid, const char* imsi, const char* callRef)
-    : YBTSGlobalThread("YBTSSmsSubmit"),
+YBTSSubmit::YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue,
+    const char* callRef)
+    : YBTSGlobalThread("YBTSSubmit"),
     YBTSConnIdHolder(connid),
-    m_imsi(imsi),
+    m_type(t),
     m_callRef(callRef),
-    m_msg("call.route")
+    m_msg("call.route"),
+    m_ok(false),
+    m_cause(111)
 {
     m_msg.addParam("module",__plugin.name());
-    m_msg.addParam("route_type","msg");
+    switch (t) {
+	case YBTSTid::Sms:
+	    m_msg.addParam("route_type","msg");
+	    break;
+	case YBTSTid::Ussd:
+	    m_msg.addParam("route_type","ussd");
+	    break;
+	default:
+	    m_imsi.clear();
+    }
+    if (ue) {
+	Lock lck(ue);
+	m_imsi = ue->imsi();
+	ue->addCaller(m_msg);
+    }
 }
 
-void YBTSSmsSubmit::run()
+void YBTSSubmit::run()
 {
     set(this,true);
-    if (!m_imsi)
-	return;
-    Debug(&__plugin,DebugAll,"Started MO SMS thread for IMSI=%s callRef=%s [%p]",
-	m_imsi.c_str(),m_callRef.c_str(),this);
-    bool ok = false;
-    while (true) {
+    Debug(&__plugin,DebugAll,
+	"Started MO submit thread type=%s IMSI=%s callRef=%s [%p]",
+	YBTSTid::typeName(m_type),m_imsi.c_str(),m_callRef.c_str(),this);
+    while (m_imsi) {
 	if (!Engine::dispatch(m_msg))
 	    break;
 	if (Thread::check(false) || Engine::exiting())
@@ -3279,12 +3484,26 @@ void YBTSSmsSubmit::run()
 	if (!m_msg.retValue() || m_msg.retValue() == YSTRING("-") ||
 	    m_msg.retValue() == YSTRING("error"))
 	    break;
+	switch (m_type) {
+	    case YBTSTid::Sms:
+		m_msg = "msg.execute";
+	        break;
+	    case YBTSTid::Ussd:
+		m_msg = "ussd.execute";
+	        break;
+	    default:
+		m_msg = "";
+	}
+	if (!m_msg)
+	    break;
 	m_msg = "msg.execute";
 	m_msg.setParam("callto",m_msg.retValue());
 	m_msg.clearParam(YSTRING("error"));
 	m_msg.clearParam(YSTRING("reason"));
 	m_msg.retValue().clear();
-	ok = Engine::dispatch(m_msg);
+	m_ok = Engine::dispatch(m_msg);
+	if (m_ok)
+	    m_cause = 0;
 	break;
     }
     if (Thread::check(false) || Engine::exiting()) {
@@ -3292,14 +3511,15 @@ void YBTSSmsSubmit::run()
 	return;
     }
     // TODO: Try to build a cause from other param?
-    unsigned int cause = 0;
-    if (!ok)
-	cause = m_msg.getIntValue(YSTRING("error"),111,1,127);
-    // TODO: Use the proper RPDU parameter name when known
-    notify(false,cause,m_msg.getParam(YSTRING("irpdu")));
+    if (m_type == YBTSTid::Sms) {
+	m_cause = m_msg.getIntValue(YSTRING("error"),m_cause,1,127);
+	// TODO: Use the proper RPDU parameter name when known
+	m_data = m_msg[YSTRING("irpdu")];
+    }
+    notify(false);
 }
 
-void YBTSSmsSubmit::notify(bool final, unsigned int cause, const String* rpdu)
+void YBTSSubmit::notify(bool final)
 {
     if (!m_imsi)
 	return;
@@ -3310,18 +3530,37 @@ void YBTSSmsSubmit::notify(bool final, unsigned int cause, const String* rpdu)
 	return;
     if (!final)
 	Debug(&__plugin,DebugAll,
-	    "MO SMS thread for IMSI=%s callRef=%s terminated rpdu='%s' cause=%u [%p]",
-	    imsi.c_str(),m_callRef.c_str(),TelEngine::c_safe(rpdu),cause,this);
-    else {
-	if (!cause)
-	    cause = 111;
-	if (!Engine::exiting())
-	    Alarm(&__plugin,"system",DebugWarn,
-		"MO SMS thread for IMSI=%s callRef=%s abnormally terminated [%p]",
-		imsi.c_str(),m_callRef.c_str(),this);
+	    "MO submit thread type=%s IMSI=%s callRef=%s terminated ok=%s data='%s' cause=%u [%p]",
+	    YBTSTid::typeName(m_type),imsi.c_str(),m_callRef.c_str(),
+	    String::boolText(m_ok),TelEngine::c_safe(m_data),m_cause,this);
+    else if (!Engine::exiting())
+	Alarm(&__plugin,"system",DebugWarn,
+	    "MO submit thread type=%s IMSI=%s callRef=%s abnormally terminated [%p]",
+	    YBTSTid::typeName(m_type),imsi.c_str(),m_callRef.c_str(),this);
+    if (!__plugin.signalling())
+	return;
+    switch (m_type) {
+	case YBTSTid::Sms:
+	    __plugin.signalling()->moSmsRespond(connId(),m_callRef,m_cause,&m_data);
+	    break;
+	case YBTSTid::Ussd:
+	    __plugin.signalling()->moSSExecuted(connId(),m_callRef,m_ok,m_msg);
+	    break;
+	default: ;
     }
-    if (__plugin.signalling())
-	__plugin.signalling()->moSmsRespond(connId(),m_callRef,cause,rpdu);
+}
+
+
+//
+// YBTSTid
+//
+void YBTSTid::setConnId(int connId)
+{
+    if (m_connId == connId)
+	return;
+    if (m_connId >= 0 && __plugin.signalling())
+	__plugin.signalling()->setConnUsage(m_connId,false);
+    m_connId = connId;
 }
 
 
@@ -3860,7 +4099,7 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    return;
 	}
 	const String& type = cmServType->getText();
-	if (type == s_cmMOCall || type == s_cmSMS)
+	if (type == s_cmMOCall || type == s_cmSMS || type == s_cmSS)
 	    ;
 	else {
 	    Debug(this,DebugNote,
@@ -4234,7 +4473,7 @@ void YBTSCallDesc::sendGSMRel(bool rel, const String& callRef, bool tiFlag, cons
     uint16_t connId)
 {
     XmlElement* ch = 0;
-    XmlElement* cc = __plugin.buildCC(ch,rel ? s_ccRel : s_ccRlc,callRef,tiFlag);
+    XmlElement* cc = __plugin.buildCC(ch,rel ? s_ccRel : s_rlc,callRef,tiFlag);
     if (ch)
 	ch->addChildSafe(buildCCCause(reason));
     __plugin.signalling()->sendL3Conn(connId,cc);
@@ -4305,18 +4544,13 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
     YBTSCallDesc* call = handleSetup(xml,regular,callRef);
     if (!call)
 	return false;
-    String caller;
-    if (ue()->msisdn())
-	caller << "+" << ue()->msisdn();
-    else if (ue()->imsi())
-	caller << "IMSI" << ue()->imsi();
-    else if (ue()->imei())
-	caller << "IMEI" << ue()->imei();
     m_route = message("call.preroute");
     // Keep the channel alive if not routing
     if (m_waitForTraffic)
 	m_route->userData(this);
-    m_route->addParam("caller",caller,false);
+    ue()->lock();
+    ue()->addCaller(*m_route);
+    ue()->unlock();
     m_route->addParam("called",call->m_called,false);
     m_route->addParam("username",ue()->imsi(),false);
     m_route->addParam("imei",ue()->imei(),false);
@@ -4326,7 +4560,7 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
     else if (xml.findFirstChild(&s_ccSsCLIP))
 	m_route->addParam("privacy",String::boolText(false));
     Message* s = message("chan.startup");
-    s->addParam("caller",caller,false);
+    s->addParam("caller",m_route->getValue(YSTRING("caller")),false);
     s->addParam("called",call->m_called,false);
     lck.drop();
     Engine::enqueue(s);
@@ -4343,7 +4577,8 @@ bool YBTSChan::initOutgoing(Message& msg)
     if (m_pending)
 	return false;
     m_pending = new ObjList;
-    addXmlFromParam(*m_pending,msg,"CallingPartyBCDNumber",YSTRING("caller"));
+    if (!msg.getBoolValue(YSTRING("privacy")));
+	addXmlFromParam(*m_pending,msg,"CallingPartyBCDNumber",YSTRING("caller"));
     lck.drop();
     if (!m_conn)
 	m_paging = ue()->startPaging(ChanTypeVoice);
@@ -4411,7 +4646,7 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
 	else
 	    call->sendWrongState();
     }
-    else if (*type == s_ccRel || *type == s_ccRlc || *type == s_ccDisc) {
+    else if (*type == s_ccRel || *type == s_rlc || *type == s_ccDisc) {
 	Debug(this,DebugInfo,"Removing call '%s' [%p]",call->c_str(),this);
 	if (m_activeCall == call)
 	    m_activeCall = 0;
@@ -4860,7 +5095,9 @@ YBTSDriver::YBTSDriver()
     m_engineStop(0),
     m_helpCache(0),
     m_smsIndex(0),
-    m_mtSmsMutex(false,"YBTSMtSms")
+    m_ssIndex(0),
+    m_mtSmsMutex(false,"YBTSMtSms"),
+    m_exportXmlStr(1)
 {
     Output("Loaded module YBTS");
 }
@@ -4885,6 +5122,24 @@ XmlElement* YBTSDriver::buildCC(XmlElement*& ch, const char* type, const char* c
     if (ch)
 	ch->setAttribute(s_type,type);
     return mm;
+}
+
+// Export an xml to a list parameter
+void YBTSDriver::exportXml(NamedList& list, XmlElement*& xml, const char* param)
+{
+    if (!xml)
+	return;
+    String value;
+    if (m_exportXmlStr <= 0)
+	xml->toString(value);
+    if (m_exportXmlStr >= 0) {
+	list.addParam(new NamedPointer(param,xml,value));
+	xml = 0;
+    }
+    else {
+	list.addParam(param,value);
+	TelEngine::destruct(xml);
+    }
 }
 
 // Handle call control messages
@@ -4942,7 +5197,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
     }
     if (TelEngine::null(callRef))
 	return;
-    bool rlc = (*type == s_ccRlc);
+    bool rlc = (*type == s_rlc);
     Lock lck(this);
     // Handle pending calls
     for (ObjList* o = m_terminatedCalls.skipNull(); o; o = o->skipNext()) {
@@ -5006,6 +5261,39 @@ void YBTSDriver::handleSmsPDU(YBTSMessage& m, YBTSConn* conn)
 	handleSmsCPRsp(m,conn,*callRef,tiFlag,*xml,false);
     else
 	Debug(this,DebugNote,"Unhandled SMS %s conn=(%p,%u)",
+	    type->c_str(),conn,conn ? conn->connId() : 0);
+}
+
+// Handle SS PDUs
+void YBTSDriver::handleSSPDU(YBTSMessage& m, YBTSConn* conn)
+{
+    XmlElement* xml = m.xml() ? m.xml()->findFirstChild(&s_message) : 0;
+    if (!xml) {
+	Debug(this,DebugNote,"Empty xml in %s [%p]",m.name(),this);
+	return;
+    }
+    const String* type = xml->getAttribute(s_type);
+    if (!type) {
+	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
+	return;
+    }
+    const String* callRef = 0;
+    bool tiFlag = false;
+    if (!getTID(*m.xml(),callRef,tiFlag)) {
+	Debug(this,DebugNote,"SS %s conn=(%p,%u) with missing transaction identifier",
+	    type->c_str(),conn,conn ? conn->connId() : 0);
+	return;
+    }
+    if (!conn)
+	return;
+    if (*type == s_facility)
+	handleSSFacility(m,conn,*callRef,tiFlag,*xml);
+    else if (*type == YSTRING("Register"))
+	handleSSRegister(m,conn,*callRef,tiFlag,*xml);
+    else if (*type == s_rlc)
+	handleSSRelease(m,conn,*callRef,tiFlag,*xml);
+    else
+	Debug(this,DebugNote,"Unhandled SS %s conn=(%p,%u)",
 	    type->c_str(),conn,conn ? conn->connId() : 0);
 }
 
@@ -5179,6 +5467,41 @@ void YBTSDriver::stopNoRestart()
     m_error = true;
 }
 
+// Enqueue an SS related message. Decode facility
+// Don't enqueue the message if decode failed and rlc is false
+bool YBTSDriver::enqueueSS(Message* m, const String* facility, bool rlc)
+{
+    if (!m)
+	return false;
+    XmlElement* xml = 0;
+    if (!TelEngine::null(facility))
+	xml = decodeFacility(*facility);
+    if (xml)
+	exportXml(*m,xml);
+    else if (!rlc) {
+	Debug(this,DebugNote,"Can't enqueue '%s': failed to decode facility '%s'",
+	    m->c_str(),TelEngine::c_safe(facility));
+	TelEngine::destruct(m);
+	return false;
+    }
+    return Engine::enqueue(m);
+}
+
+// Decode Facility
+XmlElement* YBTSDriver::decodeFacility(const String& buf)
+{
+    if (!buf)
+	return 0;
+    Message m("map.decode");
+    m.addParam("data",buf);
+    m.addParam("xmlstr",String::boolText(true));
+    if (!Engine::dispatch(m))
+	return 0;
+    
+    Debug(this,DebugStub,"decodeFacility not implemented");
+    return 0;
+}
+
 void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
     const String& callRef, bool tiFlag, const XmlElement& cpData)
 {
@@ -5196,8 +5519,7 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 #define SMS_CPDATA_DONE(str) { \
     if (tiFlag && conn) \
 	handleMtSmsRsp(conn->ue(),false,callRef); \
-    reason = str; \
-    break; \
+    YBTS_SET_REASON_BREAK(str); \
 }
 #define SMS_CPDATA_DONE_MILD(str) { level = DebugMild; SMS_CPDATA_DONE(str); }
 	if (!(conn && conn->ue()))
@@ -5247,11 +5569,7 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	    Debug(this,DebugNote,
 		"SMS CP-DATA conn=%u: unable to retrieve SMSC number, %s",
 		m.connId(),res ? "empty destination address" : "invalid RP-DATA");
-	conn->ue()->lock();
-	YBTSSmsSubmit* th = new YBTSSmsSubmit(conn->connId(),conn->ue()->imsi(),callRef);
-	th->msg().addParam("caller",conn->ue()->imsi());
-	th->msg().addParam("msisdn",conn->ue()->msisdn(),false);
-	conn->ue()->unlock();
+	YBTSSubmit* th = new YBTSSubmit(YBTSTid::Sms,conn->connId(),conn->ue(),callRef);
 	if (called) {
 	    th->msg().addParam("called",called);
 	    th->msg().addParam("callednumplan",plan,false);
@@ -5285,7 +5603,7 @@ void YBTSDriver::handleSmsCPRsp(YBTSMessage& m, YBTSConn* conn,
 	(ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
 	String::boolText(tiFlag));
     if (!tiFlag) {
-	YBTSSmsInfo* info = signalling()->removeSms(conn,callRef,tiFlag);
+	YBTSSmsInfo* info = signalling()->removeSms(conn,callRef,true);
 	TelEngine::destruct(info);
 	return;
     }
@@ -5435,6 +5753,118 @@ bool YBTSDriver::removeMtSms(YBTSMtSmsList* list, YBTSMtSms* sms)
     if (removed)
 	list->deref();
     return removed;
+}
+
+// Handle SS Facility
+void YBTSDriver::handleSSFacility(YBTSMessage& m, YBTSConn* conn, const String& callRef,
+    bool tiFlag, XmlElement& xml)
+{
+    Lock lck(conn);
+    YBTSTid* ss = conn ? conn->findSSTid(callRef,!tiFlag) : 0;
+    if (!ss) {
+	Debug(this,DebugNote,"SS %s on conn=%u: unknown session",
+	    xml.attribute(s_type),m.connId());
+	lck.drop();
+	signalling()->sendSSRlc(conn,callRef,!tiFlag,m.info(),"invalid-callref");
+	return;
+    }
+    Message* msg = 0;
+    switch (ss->m_type) {
+	case YBTSTid::Ussd:
+	    msg = message("ussd.update");
+	    break;
+	default:
+	    Debug(this,DebugStub,"handleSSFacility: unhandled SS type %u [%p]",
+		ss->m_type,this);
+    }
+    lck.drop();
+    enqueueSS(msg,xml.childText(s_facility),false);
+}
+
+// Handle SS Release Complete
+void YBTSDriver::handleSSRelease(YBTSMessage& m, YBTSConn* conn, const String& callRef,
+    bool tiFlag, XmlElement& xml)
+{
+    Lock lck(conn);
+    YBTSTid* ss = conn ? conn->takeSSTid(callRef,!tiFlag) : 0;
+    if (!ss) {
+	Debug(this,DebugInfo,"SS %s on conn=%u: unknown session",
+	    xml.attribute(s_type),m.connId());
+	return;
+    }
+    lck.drop();
+    Message* msg = 0;
+    switch (ss->m_type) {
+	case YBTSTid::Ussd:
+	    msg = message("ussd.finalize");
+	    break;
+	default:
+	    Debug(this,DebugStub,"handleSSRelease: unhandled SS type %u [%p]",
+		ss->m_type,this);
+    }
+    enqueueSS(msg,xml.childText(s_facility),true);
+    TelEngine::destruct(ss);
+}
+
+void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& callRef,
+    bool tiFlag, XmlElement& xml)
+{
+    XmlElement* facilityXml = 0;
+    String reason;
+    YBTSTid* ss = 0;
+    while (true) {
+	if (tiFlag)
+	    YBTS_SET_REASON_BREAK("wrong TI flag 'true'");
+	if (!(conn && conn->ue()))
+	    YBTS_SET_REASON_BREAK("missing UE");
+	const String* facility = xml.childText(s_facility);
+	if (TelEngine::null(facility))
+	    YBTS_SET_REASON_BREAK("empty Facility IE");
+	facilityXml = decodeFacility(*facility);
+	if (!facilityXml)
+	    YBTS_SET_REASON_BREAK("failed to decode Facility IE");
+	YBTSTid::Type t = YBTSTid::Unknown;
+	// TODO: Get type
+	if (t != YBTSTid::Ussd) {
+	    reason << "unhandled/unknown Facility type " << facilityXml->getTag();
+	    break;
+	}
+	String ssId;
+	setSSId(ssId);
+	ss = new YBTSTid(t,callRef,true,m.info(),ssId);
+	ss->setConnId(conn->connId());
+	Lock lck(conn);
+	if (conn->findSSTid(callRef,!tiFlag)) {
+	    Debug(this,DebugNote,"Ignoring SS %s on conn=%u: already exists",
+		xml.attribute(s_type),m.connId());
+	    break;
+	}
+	if (t == YBTSTid::Ussd) {
+	    if (conn->m_ussd)
+		YBTS_SET_REASON_BREAK("USSD busy");
+	    conn->m_ussd = ss;
+	    ss = 0;
+	    lck.drop();
+	    YBTSSubmit* th = new YBTSSubmit(YBTSTid::Ussd,conn->connId(),conn->ue(),
+		callRef);
+	    th->msg().addParam("id",ssId);
+	    exportXml(th->msg(),facilityXml);
+	    if (!th->startup()) {
+		delete th;
+		signalling()->moSSExecuted(conn,callRef,false);
+	    }
+	    break;
+	}
+	reason << "unhandled Facility type " << t;
+	break;
+    }
+    TelEngine::destruct(facilityXml);
+    TelEngine::destruct(ss);
+    if (!reason)
+	return;
+    Debug(this,DebugNote,"Rejecting SS %s on conn=%u: %s",
+	xml.attribute(s_type),m.connId(),reason.c_str());
+    signalling()->sendSSRlc(conn,callRef,!tiFlag,m.info(),"facility-rejected");
 }
 
 void YBTSDriver::start()
@@ -5663,7 +6093,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     if (findMtSmsList(list,ue,true)) {
 	String s = msg[YSTRING("id")];
 	if (!s)
-	    s << prefix() << smsIndex();
+	    setSmsId(s);
 	sms = new YBTSMtSms(s,*rpdu);
 	if (sms->ref()) {
 	    Lock lck(list);
