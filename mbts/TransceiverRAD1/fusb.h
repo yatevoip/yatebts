@@ -1,3 +1,20 @@
+/*
+* Copyright 2008, 2009 Free Software Foundation, Inc.
+* Copyright 2010 Kestrel Signal Processing, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
+
+* This software is distributed under multiple licenses; see the COPYING file in the main directory for licensing information for this specific distribuion.
+*
+* This use of this software may be subject to additional restrictions.
+* See the LEGAL file in the main directory for details.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+*/
+
 #ifndef _FUSB_H_
 #define _FUSB_H_
 

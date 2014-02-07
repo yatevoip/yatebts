@@ -1,5 +1,7 @@
 /*
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses; see the COPYING file in the main directory for licensing information for this specific distribuion.
 *
@@ -16,11 +18,6 @@
 #include "GSML3Message.h"
 #include "GSML3RRMessages.h"
 #include <Logger.h>
-
-
-//#include <SMSTransfer.h>
-//#include <SMSMessages.h>
-//using namespace SMS;
 
 
 using namespace std;

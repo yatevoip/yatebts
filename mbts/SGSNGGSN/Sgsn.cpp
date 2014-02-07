@@ -1,6 +1,8 @@
 /*
 * Copyright 2011 Range Networks, Inc.
 * All Rights Reserved.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
 * see the COPYING file in the main directory for licensing
@@ -15,11 +17,6 @@
 */
 
 #include <list>
-//#include <SIPInterface.h>
-//#include <SIPUtility.h>
-//#include <SIPMessage.h>
-//#include <SIPEngine.h>
-//#include <SubscriberRegistry.h>
 //#include "RList.h"
 #include "LLC.h"
 //#include "MSInfo.h"
