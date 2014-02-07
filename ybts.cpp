@@ -2536,7 +2536,7 @@ void YBTSLog::processLoop()
 {
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
-	if (rd > 1) {
+	if (rd > 2) {
 	    int level = -1;
 	    switch (m_transport.readBuf().at(0)) {
 		case LOG_EMERG:
@@ -2560,10 +2560,18 @@ void YBTSLog::processLoop()
 		    level = DebugAll;
 		    break;
 	    }
+	    String tmp((const char*)m_transport.readBuf().data(1));
+	    // LF -> CR LF
+	    for (int i = 0; (i = tmp.find('\n',i + 1)) >= 0; ) {
+		if (tmp.at(i - 1) != '\r') {
+		    tmp = tmp.substr(0,i) + "\r" + tmp.substr(i);
+		    i++;
+		}
+	    }
 	    if (level >= 0)
-		Debug(this,level,"%s",(const char*)m_transport.readBuf().data(1));
+		Debug(this,level,"%s",tmp.c_str());
 	    else
-		Output("%s",(const char*)m_transport.readBuf().data(1));
+		Output("%s",tmp.c_str());
 	    continue;
 	}
 	if (!rd) {
