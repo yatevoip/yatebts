@@ -5,3 +5,109 @@
 [gsm_advanced]
 
 [gprs_advanced]
+
+
+[ybts]
+; This section configures ybts related parameters
+
+; heartbeat_ping: integer: Interval, in milliseconds, to send heartbeat (PING)
+;  to peer application. Ping is sent only if idle, e.g. it is not sent if there
+;  are other signalling packets to be sent
+; This parameter is applied on reload
+; Defaults to 30000
+; Allowed interval: 1000 .. 120000
+;heartbeat_ping=30000
+
+; heartbeat_timeout: integer: Interval, in milliseconds, to wait for heartbeat (PING)
+;  or any other signalling packets from peer application
+; This value must be greater then . It will be automatically adjusted
+; YBTS will restart if this timer ellapses
+; This parameter is applied on reload
+; Defaults to 60000
+; Minimum allowed value is heartbeat_ping plus 3000
+; Maximum allowed value is 180000
+;heartbeat_timeout=60000
+
+; handshake_start: integer: Interval, in milliseconds, to wait for handshake
+;  from peer application after started
+; YBTS will restart if this timer ellapses
+; This parameter is applied on reload
+; Defaults to 60000
+; Allowed interval: 10000 .. 300000
+;handshake_start=60000
+
+; max_restart: integer: Maximum number of restart attempts
+; When start counter reaches this value YBTS application will exit
+; The start index is reset each time the peer notifies radio up after handshake
+; This parameter is applied on reload
+; Defaults to 10, minimum allowed value is 3
+;max_start=10
+
+; peer_cmd: string: Command used to run the BTS application
+;peer_cmd=${modulepath}/bts/mbts
+
+; peer_arg: string: Optional command line parameter for BTS application
+;peer_arg=
+
+; peer_dir: string: Directory to change after forking the BTS application
+;peer_dir=${modulepath}/bts
+
+; print_msg: boolean/string: Print sent/received messages to output if debug is at level 9
+; Allowed values are boolean values or string
+; If a non boolean value is specified message buffer will be shown
+; This parameter is applied on reload
+; Defaults to yes if empty or missing
+;print_msg=yes
+
+; print_msg_data: boolean/string: Print sent/received messages data
+; This parameter is ignored if message print is disabled
+; Allowed values are boolean values or string
+; If a non boolean value is specified (empty string also) message data will be printed
+;  in a friendly way (e.g. XML data will be printed with children on separate lines)
+; This parameter is applied on reload
+; Defaults to verbose
+;print_msg_data=verbose
+
+; imei_request: boolean: Ask for IMEI when updating location
+; This parameter is applied on reload
+; Defaults to yes
+;imei_request=yes
+
+; tmsi_expire: integer: Interval, in seconds, to keep TMSIs
+; This parameter is applied on reload
+; Allowed interval: 7200..2592000
+;tmsi_expire=864000
+
+;datafile: string: Path to data file used to save TMSI table
+;datafile=ybtsdata.conf
+
+; t305: integer: Disconnect (hangup) timeout interval in milliseconds
+; After sending Disconnect the call will wait for Release or Release Complete
+; Release will be sent on expiry
+; This parameter is applied on reload
+; Interval allowed: 20000..60000
+; Defaults to 30000
+;t305=30000
+
+; t308: integer: Release timeout interval in milliseconds (wait for Release Complete)
+; Release will be sent on first expiry, call reference will be released on second expiry
+; This parameter is applied on reload
+; Interval allowed: 4000..20000
+; Defaults to 5000
+;t308=5000
+
+; t313: integer: Connect (answer) timeout interval in milliseconds (wait for Connect Ack)
+; Call reference will be released on expiry
+; This parameter is applied on reload
+; Interval allowed: 4000..20000
+; Defaults to 5000
+;t313=5000
+
+; sms.timeout: integer: Interval, in milliseconds, to wait for an MT SMS to complete
+; This interval includes paging if needed
+; This parameter can be overridden in in msg.execute message by a 'timeout' parameter
+;  with non 0 value
+; This parameter is applied on reload
+; Interval allowed: 5000..600000
+; Defaults to 300000
+;sms.timeout=300000

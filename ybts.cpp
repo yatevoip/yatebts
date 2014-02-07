@@ -6618,18 +6618,15 @@ void YBTSDriver::initialize()
     Configuration cfg(Engine::configFile("ybts"));
     const NamedList& general = safeSect(cfg,YSTRING("general"));
     const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));
-    const NamedList& calls = safeSect(cfg,YSTRING("calls"));
-    const NamedList& registrar = safeSect(cfg,YSTRING("registrar"));
-    const NamedList& sms = safeSect(cfg,YSTRING("sms"));
     s_restartMax = ybts.getIntValue("max_restart",
 	YBTS_RESTART_COUNT_DEF,YBTS_RESTART_COUNT_MIN);
     s_restartMs = ybts.getIntValue("restart_interval",
 	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
-    s_t305 = calls.getIntValue("t305",30000,20000,60000);
-    s_t308 = calls.getIntValue("t308",5000,4000,20000);
-    s_t313 = calls.getIntValue("t313",5000,4000,20000);
-    s_tmsiExpire = registrar.getIntValue("tmsi_expire",864000,7200,2592000);
-    s_mtSmsTimeout = sms.getIntValue("timeout",
+    s_t305 = ybts.getIntValue("t305",30000,20000,60000);
+    s_t308 = ybts.getIntValue("t308",5000,4000,20000);
+    s_t313 = ybts.getIntValue("t313",5000,4000,20000);
+    s_tmsiExpire = ybts.getIntValue("tmsi_expire",864000,7200,2592000);
+    s_mtSmsTimeout = ybts.getIntValue("sms.timeout",
 	YBTS_MT_SMS_TIMEOUT_DEF,YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     s_globalMutex.lock();
     YBTSLAI lai;
@@ -6643,8 +6640,8 @@ void YBTSDriver::initialize()
 	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
 	s_lai = lai;
     }
-    s_askIMEI = registrar.getBoolValue("imei_request",true);
-    s_ueFile = registrar.getValue("datafile",Engine::configFile("ybtsdata"));
+    s_askIMEI = ybts.getBoolValue("imei_request",true);
+    s_ueFile = ybts.getValue("datafile",Engine::configFile("ybtsdata"));
     Engine::runParams().replaceParams(s_ueFile);
     s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
     s_peerArg = ybts.getValue("peer_arg");
@@ -6662,7 +6659,7 @@ void YBTSDriver::initialize()
     s << "\r\nt305=" << s_t305;
     s << "\r\nt308=" << s_t308;
     s << "\r\nt313=" << s_t313;
-    s << "\r\nsms_timeout=" << s_mtSmsTimeout;
+    s << "\r\nsms.timeout=" << s_mtSmsTimeout;
     s << "\r\npeer_cmd=" << s_peerCmd;
     s << "\r\npeer_arg=" << s_peerArg;
     s << "\r\npeer_dir=" << s_peerDir;
