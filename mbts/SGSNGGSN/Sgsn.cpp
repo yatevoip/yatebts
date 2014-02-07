@@ -110,7 +110,7 @@ SgsnInfo::SgsnInfo(uint32_t wMsHandle) :
 	//memset(mOldMnc,0,sizeof(mOldMnc));
 	time(&mLastUseTime);
 #if RN_UMTS == 0
-//	mLlcEngine = new LlcEngine(this);
+	mLlcEngine = new LlcEngine(this);
 #endif
 	sSgsnInfoList.push_back(this);
 }
