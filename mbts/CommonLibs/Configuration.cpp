@@ -58,6 +58,7 @@ static const char* gConfMapping[] = {
 	"sgsn",          "SGSN.",
 	"ggsn",          "GGSN.",
 	"test",          "Test.GSM.",
+	"logging",       "Log.",
 	0
 };
 
