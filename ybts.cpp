@@ -6606,8 +6606,13 @@ void YBTSDriver::initialize()
     if (mcc.length() == 3 && isDigits09(mcc) &&
 	((mnc.length() == 3 || mnc.length() == 2) && isDigits09(mnc))) {
 	int tmp = lac.toInteger(YBTS_LAC_DEFAULT);
-	if (tmp >= 0 && tmp <= 0xff00)
-	    lai.set(mnc,mcc,String(tmp));
+	if (tmp >= 0 && tmp <= 0xff00) {
+	    uint8_t b[2];
+	    b[0] = tmp >> 8;
+	    b[1] = tmp;
+	    lac.hexify(b,2);
+	    lai.set(mnc,mcc,lac);
+	}
     }
     const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));
     s_restartMax = ybts.getIntValue("max_restart",
