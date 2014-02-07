@@ -78,7 +78,7 @@ At least one transceiver package must also be installed for interfacing with the
 %files
 %defattr(-, root, root)
 %dir %{_defaultdocdir}/%{name}-%{version}
-%doc %{_defaultdocdir}/%{name}-%{version}/README
+%doc %{_defaultdocdir}/%{name}-%{version}/*
 %dir %{moddir}
 %{moddir}/*.yate
 %{moddir}/mbts
