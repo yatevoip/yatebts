@@ -6585,38 +6585,22 @@ void YBTSDriver::btsStatus(Message& msg)
     msg.retValue() << "name=" << BTS_CMD << ",type=misc;state=" << stateName() << "\r\n";
 }
 
-
-static void parseLAI(YBTSLAI& dest, const String& lai)
-{
-    String l = lai;
-    l.trimBlanks();
-    if (!l)
-	return;
-    ObjList* list = l.split(',');
-    if (list->count() == 3) {
-	ObjList* o = list->skipNull();
-	// MNC: 3 digits
-	String* mnc = static_cast<String*>(o->get());
-	String* mcc = static_cast<String*>((o = o->skipNext())->get());
-	String* lac = static_cast<String*>((o = o->skipNext())->get());
-	if (mnc->length() == 3 && isDigits09(*mnc) &&
-	    ((mcc->length() == 3 || mcc->length() == 2) && isDigits09(*mcc)) &&
-	    (lac->length() == 4)) {
-	    // LAC: 16 bits long
-	    int tmp = lac->toInteger(-1,16);
-	    if (tmp >= 0 && tmp < 0xffff)
-		dest.set(*mnc,*mcc,*lac);
-	}
-    }
-    TelEngine::destruct(list);
-}
-
 void YBTSDriver::initialize()
 {
     static bool s_first = true;
     Output("Initializing module YBTS");
     Configuration cfg(Engine::configFile("ybts"));
-    const NamedList& general = safeSect(cfg,YSTRING("general"));
+    const NamedList& gsm = safeSect(cfg,YSTRING("gsm"));
+    YBTSLAI lai;
+    String mcc = gsm.getValue(YSTRING("Identity.MCC"),YBTS_MCC_DEFAULT);
+    String mnc = gsm.getValue(YSTRING("Identity.MNC"),YBTS_MNC_DEFAULT);
+    String lac = gsm.getValue(YSTRING("Identity.LAC"));
+    if (mcc.length() == 3 && isDigits09(mcc) &&
+	((mnc.length() == 3 || mnc.length() == 2) && isDigits09(mnc))) {
+	int tmp = lac.toInteger(YBTS_LAC_DEFAULT);
+	if (tmp >= 0 && tmp <= 0xff00)
+	    lai.set(mnc,mcc,String(tmp));
+    }
     const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));
     s_restartMax = ybts.getIntValue("max_restart",
 	YBTS_RESTART_COUNT_DEF,YBTS_RESTART_COUNT_MIN);
@@ -6629,16 +6613,17 @@ void YBTSDriver::initialize()
     s_mtSmsTimeout = ybts.getIntValue("sms.timeout",
 	YBTS_MT_SMS_TIMEOUT_DEF,YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     s_globalMutex.lock();
-    YBTSLAI lai;
-    const String& laiStr = general[YSTRING("lai")];
-    parseLAI(lai,laiStr);
-    if (lai != s_lai || !s_lai.lai()) {
-	if (lai.lai())
+    if (lai.lai()) {
+	if (lai != s_lai || !s_lai.lai()) {
 	    Debug(this,DebugInfo,"LAI changed %s -> %s",
 		s_lai.lai().c_str(),lai.lai().c_str());
-	else
-	    Debug(this,DebugConf,"Invalid LAI '%s'",laiStr.c_str());
-	s_lai = lai;
+	    s_lai = lai;
+	}
+    }
+    else {
+	Debug(this,DebugConf,"Invalid LAI MNC='%s' MCC='%s' LAC='%s'",
+	    mnc.c_str(),mcc.c_str(),lac.c_str());
+	s_lai.reset();
     }
     s_askIMEI = ybts.getBoolValue("imei_request",true);
     s_ueFile = ybts.getValue("datafile",Engine::configFile("ybtsdata"));

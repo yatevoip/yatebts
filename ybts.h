@@ -66,6 +66,10 @@ enum BtsErrors {
     ErrInterworking     = 0x7f           // Interworking, unspecified
 };
 
+#define YBTS_MNC_DEFAULT "01"
+#define YBTS_MCC_DEFAULT "001"
+#define YBTS_LAC_DEFAULT 1000
+
 #endif // __YBTS_H
 
 /* vi: set ts=8 sw=4 sts=4 noet: */
