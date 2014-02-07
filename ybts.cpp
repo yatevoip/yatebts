@@ -1550,7 +1550,7 @@ static inline void skipLV(uint8_t*& b, unsigned int& len)
 
 // Decode BCD number
 static void decodeBCDNumber(uint8_t* b, unsigned int len,
-    String& bcd, String* plan, String* type)
+    String& bcd, String* plan, String* type, bool ignoreLast = false)
 {
     if (!len)
 	return;
@@ -1568,6 +1568,8 @@ static void decodeBCDNumber(uint8_t* b, unsigned int len,
 	uint8_t idx = (*b & 0x0f);
 	if (idx < 15)
 	    s[l++] = s_bcd[idx];
+	if (ignoreLast && len == 1)
+	    break;
 	idx = *b >> 4;
 	if (idx < 15)
 	    s[l++] = s_bcd[idx];
@@ -1575,6 +1577,43 @@ static void decodeBCDNumber(uint8_t* b, unsigned int len,
     if (l)
 	bcd.assign(s,l);
     delete[] s;
+}
+
+// Retrieve the TBCD char index
+// Return 15 (0x0f) if invalid
+static inline uint8_t bcdIndex(char c)
+{
+    for (uint8_t i = 0; i < 15; i++)
+	if (c == s_bcd[i])
+	    return i;
+    return 15;
+}
+
+// Encode BCD number
+// len is bcd number length
+static unsigned int encodeBCDNumber(uint8_t* b, unsigned int len,
+    const char* bcd, const char* plan, const char* type)
+{
+    uint8_t p = (uint8_t)lookup(plan,s_numPlan);
+    uint8_t t = (uint8_t)lookup(type,s_numType);
+    *b++ = 0x80 | (p & 0x0f) | ((t & 0x03) << 4);
+    if (!(bcd && len))
+	return 1;
+    unsigned int n = 1;
+    for (unsigned int i = 0; (i < len) && *bcd; i++) {
+	uint8_t first = bcdIndex(*bcd++);
+	if (first >= 15)
+	    return n;
+	uint8_t second = 15;
+	if (*bcd) {
+	    second = bcdIndex(*bcd++);
+	    if (second >= 15)
+		return n;
+	}
+	*b++ = (second << 4) | first;
+	n++;
+    }
+    return n;
 }
 
 // Retrieve RP message type and reference from buffer
@@ -1601,15 +1640,23 @@ static int decodeRP(uint8_t*& b, unsigned int& len, uint8_t& rpMsgType,
     if (!bcd || (rpMsgType != RPDataFromMs && rpMsgType != RPDataFromNetwork))
 	return 0;
     // MS -> network: skip originator, retrieve destination
-    // network -> MS: retrieve originator
+    // network -> MS: retrieve originator, skip destination
     if (rpMsgType == RPDataFromMs) {
 	skipLV(b,len);
 	if (!len)
 	    return -2;
     }
     unsigned int destLen = *b++;
-    if (destLen && destLen <= len)
-	decodeBCDNumber(b,destLen,*bcd,plan,type);
+    if (destLen) {
+	if (destLen <= len)
+	    decodeBCDNumber(b,destLen,*bcd,plan,type);
+	else
+	    destLen = len;
+	b += destLen;
+	len -= destLen;
+    }
+    if (rpMsgType == RPDataFromNetwork)
+	skipLV(b,len);
     return 0;
 }
 
@@ -1620,14 +1667,102 @@ static int decodeRP(uint8_t*& b, unsigned int& len, uint8_t& rpMsgType,
 // -2: Unable to retrieve party addr
 // 1: Invalid string
 static int decodeRP(const String& str, uint8_t& rpMsgType,
-    uint8_t& rpMsgRef, String* bcd = 0, String* plan = 0, String* type = 0)
+    uint8_t& rpMsgRef, String* bcd = 0, String* plan = 0, String* type = 0,
+    String* smsParty = 0, String* smsPartyPlan = 0, String* smsPartyType = 0,
+    String* smsText = 0, String* smsTextEnc = 0)
 {
     DataBlock d;
     if (!d.unHexify(str))
 	return 1;
     uint8_t* b = (uint8_t*)d.data();
     unsigned int len = d.length();
-    return decodeRP(b,len,rpMsgType,rpMsgRef,bcd,plan,type);
+    int res = decodeRP(b,len,rpMsgType,rpMsgRef,bcd,plan,type);
+    if (res || !len)
+	return res;
+    if (rpMsgType != RPDataFromMs && rpMsgType != RPDataFromNetwork)
+	return 0;
+    if (!(smsParty || smsText))
+	return 0;
+    // RP-User-Data length
+    unsigned int rpLen = *b++;
+    len--;
+    if (rpLen > len)
+	return 0;
+    // See TS 123.040 Section 9
+    uint8_t tp = *b++;
+    len--;
+    uint8_t tpMTI = tp & 0x03;
+    // SMS SUBMIT, Section 9.2.2.2
+    if (tpMTI == 1) {
+	if (len < 2)
+	    return 0;
+	// Skip message ref
+	b++;
+	len--;
+	// Handle destination address
+	if (len < 2)
+	    return 0;
+	uint8_t addrLen = *b++;
+	len--;
+	unsigned int l = 1 + (addrLen + 1) / 2;
+	if (smsParty) {
+	    bool odd = (addrLen & 0x01) != 0;
+	    if (l <= len)
+		decodeBCDNumber(b,l,*smsParty,smsPartyPlan,smsPartyType,odd);
+	    else
+		l = len;
+	}
+	else if (l > len)
+	    l = len;
+	b += l;
+	len -= l;
+	if (!len)
+	    return 0;
+	// Done if text is not required
+	if (!smsText)
+	    return 0;
+	// Skip Protocol Identifier
+	b++;
+	len--;
+	if (!len)
+	    return 0;
+	// Data Coding scheme, handle only GSM 7bit
+	if (*b)
+	    return 0;
+	b++;
+	len--;
+	if (!len)
+	    return 0;
+	// Skip validity period if present
+	uint8_t vp = ((tp >> 3) & 0x03);
+	if (vp) {
+	    l = (vp == 2) ? 1 : 7;
+	    if (l > len)
+		l = len;
+	    b += l;
+	    len -= l;
+	    if (!len)
+		return 0;
+	}
+	// User data length
+	l = *b++;
+	len--;
+	if (!len || l > len)
+	    return 0;
+	// User data
+	// Skip 1 byte header if present
+	if ((tp & 0x40) != 0) {
+	    Debug(&__plugin,DebugNote,"Can't decode SMS text with header");
+	    return 0;
+	}
+	GSML3Codec::decodeGSM7Bit(b,l,*smsText);
+	if (smsText->length() > l)
+	    *smsText = smsText->substr(0,l);
+	// Remove
+	if (smsTextEnc)
+	    *smsTextEnc = "gsm7bit";
+    }
+    return 0;
 }
 
 // Append an xml element from list parameter
@@ -5548,7 +5683,9 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	uint8_t rpMsgType = 0;
 	uint8_t rpMsgRef = 0;
 	String called, plan, type;
-	int res = decodeRP(*rpdu,rpMsgType,rpMsgRef,&called,&plan,&type);
+	String smsCalled, smsCalledPlan, smsCalledType, smsText, smsTextEnc;
+	int res = decodeRP(*rpdu,rpMsgType,rpMsgRef,&called,&plan,&type,
+	    &smsCalled,&smsCalledPlan,&smsCalledType,&smsText,&smsTextEnc);
 	if (res) {
 	    if (res > 0)
 		SMS_CPDATA_DONE_MILD("invalid RPDU string");
@@ -5591,6 +5728,15 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	    th->msg().addParam("called",called);
 	    th->msg().addParam("callednumplan",plan,false);
 	    th->msg().addParam("callednumtype",type,false);
+	}
+	if (smsCalled) {
+	    th->msg().addParam("sms.called",smsCalled);
+	    th->msg().addParam("sms.called.plan",smsCalledPlan,false);
+	    th->msg().addParam("sms.called.nature",smsCalledType,false);
+	}
+	if (smsText) {
+	    th->msg().addParam("text",smsText);
+	    th->msg().addParam("text.encoding",smsTextEnc);
 	}
 	th->msg().addParam("rpdu",*rpdu);
 	if (th->startup())
@@ -6086,6 +6232,17 @@ void YBTSDriver::stopPeer()
     m_peerPid = 0;
 }
 
+static inline void setHalfByteDigits(uint8_t*& buf, uint8_t value)
+{
+    if (value < 100) {
+	if (value < 10)
+	    *buf = (value << 4);
+	else
+	    *buf = ((value % 10) << 4) | (value / 10);
+    }
+    buf++;
+}
+
 bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 {
     if ((m_state != RadioUp) || !m_mm) {
@@ -6106,6 +6263,117 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     NamedString* rpdu = msg.getParam(YSTRING("rpdu"));
     if (!rpdu)
 	rpdu = msg.getParam(YSTRING("xsip_body"));
+    NamedString tmpRpdu(rpdu ? rpdu->name().c_str() : "rpdu");
+    while (TelEngine::null(rpdu)) {
+	const String& type = msg[YSTRING("operation")];
+	if (type && type != YSTRING("deliver")) {
+	    Debug(this,DebugNote,"MT SMS: unknown operation '%s'",type.c_str());
+	    break;
+	}
+	String enc = msg[YSTRING("text.encoding")];
+	if (enc && enc.toLower() != YSTRING("gsm7bit")) {
+	    Debug(this,DebugNote,"MT SMS: unknown encoding '%s'",enc.c_str());
+	    break;
+	}
+	const String& text = msg[YSTRING("text")];
+	if (!text) {
+	    Debug(this,DebugNote,"MT SMS: empty text");
+	    break;
+	}
+	DataBlock rp;
+	uint8_t n = 0;
+	// ETSI TS 124.011 Section 7.3 and 8.2:
+	// 1 byte (3 bits): message type
+	// 1 byte message reference
+	uint8_t hdr[2] = {RPDataFromNetwork,0};
+	rp.assign(hdr,2);
+	// RP-Originator Address
+	const String& caller = msg[YSTRING("caller")];
+	uint8_t* c = new uint8_t[2 + (caller.length() + 1) / 2];
+	unsigned int l = encodeBCDNumber(c + 1,caller.length(),caller,
+	    msg.getValue(YSTRING("callernumplan")),msg.getValue(YSTRING("callernumtype")));
+	// ETSI TS 124.011 Section 8.2.5.1: max len of IE is 11
+	if (l > 11) {
+	    delete[] c;
+	    Debug(this,DebugNote,"MT SMS: invalid caller '%s' length",caller.c_str());
+	    break;
+	}
+	// Empty caller: put something there, section 8.2.5.1 says IE len is at least 2
+	if (l == 1) {
+	    c[2] = 0xf0;
+	    l = 2;
+	}
+	c[0] = l;
+	rp.append(c,l + 1);
+	delete[] c;
+	// RP-Destination Address
+	rp.append(&n,1);
+	// RP-User Data: IE length + TPDU
+	// TPDU: SMS DELIVER, ETSI TS 123.040 Section 9.2.2.1
+	DataBlock tpdu;
+	// TP-Originating-Address
+	const String& smsCaller = msg[YSTRING("sms.caller")];
+	uint8_t* orig = new uint8_t[2 + (smsCaller.length() + 1) / 2];
+	unsigned int origLen = encodeBCDNumber(orig + 1,smsCaller.length(),smsCaller,
+	    msg.getValue(YSTRING("sms.caller.plan")),
+	    msg.getValue(YSTRING("sms.caller.nature")));
+	// TS 123.040 Section 9.1.2.5: max len is 12
+	if (origLen + 1 > 12) {
+	    delete[] orig;
+	    Debug(this,DebugNote,"MT SMS: invalid SMS caller '%s' length",
+		smsCaller.c_str());
+	    break;
+	}
+	uint8_t nDigits = (origLen - 1) * 2;
+	if ((orig[origLen] & 0xf0) == 0xf0)
+	    nDigits--;
+	orig[0] = nDigits;
+	tpdu.append(orig,origLen + 1);
+	delete[] orig;
+	// TP-Protocol-Identifier + TP-Coding-Scheme + TP-Service-Centre-Time-Stamp
+	uint8_t extra[9] = {0,0,0,0,0,0,0,0,0};
+	// TP-Service-Centre-Time-Stamp
+	unsigned int smscTs = msg.getIntValue(YSTRING("smsc.timestamp"),Time::secNow(),0);
+	extra[8] = (uint8_t)msg.getIntValue(YSTRING("smsc.tz"));
+	int year = 0;
+	unsigned int month = 0;
+	unsigned int day = 0;
+	unsigned int hour = 0;
+	unsigned int minute = 0;
+	unsigned int sec = 0;
+	if (Time::toDateTime(smscTs,year,month,day,hour,minute,sec) && year >= 0) {
+	    uint8_t* ts = &extra[2];
+	    setHalfByteDigits(ts,year % 100);
+	    setHalfByteDigits(ts,month);
+	    setHalfByteDigits(ts,day);
+	    setHalfByteDigits(ts,hour);
+	    setHalfByteDigits(ts,minute);
+	    setHalfByteDigits(ts,sec);
+	}
+	tpdu.append(extra,9);
+	// TP-User-Data-Length + TP-User-Data
+	DataBlock sms;
+	GSML3Codec::encodeGSM7Bit(text,sms);
+	if (!sms.length()) {
+	    Debug(this,DebugNote,"MT SMS: text leads to empty SMS content");
+	    break;
+	}
+	uint8_t smsLen = sms.length() * 8 / 7;
+	tpdu.append(&smsLen,1);
+	tpdu += sms;
+	// TS 124.011: RP-User-Data IE max len in RP-DATA is 233
+	l = tpdu.length() + 1;
+	if (l > 232) {
+	    Debug(this,DebugNote,"MT SMS: RP-User-Data too long %u (max 233)",l);
+	    break;
+	}
+	uint8_t rpUserHdr[2] = {l,0x04};
+	rp.append(rpUserHdr,2);
+	rp += tpdu;
+	tmpRpdu.hexify(rp.data(),rp.length());
+	rpdu = &tmpRpdu;
+	break;
+    }
     if (TelEngine::null(rpdu)) {
 	Debug(this,DebugNote,"MT SMS to IMSI=%s TMSI=%s: no RPDU",
 	    ue->imsi().c_str(),ue->tmsi().c_str());
@@ -6168,7 +6436,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 #undef YBTS_SMSOUT_DONE
     }
     bool ok = sms->ok();
-    *rpdu = sms->response();
+    msg.setParam(rpdu->name(),sms->response());
     if (!ok)
 	msg.setParam(YSTRING("error"),sms->reason().safe("failure"));
     if (ok)
