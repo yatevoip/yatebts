@@ -153,6 +153,11 @@ void startTransceiver()
 		int status;
 		waitpid(gTransceiverPid, &status,0);
 		LOG(EMERG) << "Transceiver quit with status " << status << ". Exiting.";
+		// (paul) Added this for debugging without the radio
+		if (gConfig.getBool("TRX.IgnoreDeath")) {
+			static int foo = 0;
+			pthread_exit(&foo);
+		}
 		exit(2);
 	}
 }
@@ -536,7 +541,10 @@ int main(int argc, char *argv[])
 			std::ostringstream sout;
 			int res = gParser.process(line,sout);
 			free(line);
-			gCmdConn.write(sout.str().c_str());
+			if (sout.str().empty())
+			    gCmdConn.write("\r\n");
+			else if (!gCmdConn.write(sout.str().c_str()))
+				gCmdConn.write("Oops! Error returning command result!");
 			if (res < 0)
 				break;
 		}

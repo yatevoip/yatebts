@@ -43,6 +43,8 @@ static const char* createNeighborTable = {
 
 void NeighborTable::NeighborTableInit(const char* wPath)
 {
+	if (!(wPath && *wPath))
+		wPath = ":memory:";
 	int rc = sqlite3_open(wPath,&mDB);
 	if (rc) {
 		LOG(ALERT) << "Cannot open NeighborTable database: " << sqlite3_errmsg(mDB);

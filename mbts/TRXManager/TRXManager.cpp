@@ -1,6 +1,8 @@
 /*
 * Copyright 2008, 2010 Free Software Foundation, Inc.
 * Copyright 2012 Range Networks, Inc.
+* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses; see the COPYING file in the main directory for licensing information for this specific distribuion.
 *
@@ -93,13 +95,14 @@ void TransceiverManager::clockHandler()
 	if (msgLen<0) {
 		LOG(EMERG) << "TRX clock interface timed out, assuming TRX is dead.";
 		gReports.incr("OpenBTS.Exit.Error.TransceiverHeartbeat");
-#ifdef RN_DEVELOPER_MODE
-		// (pat) Added so you can keep debugging without the radio.
-		static int foo = 0;
-		pthread_exit(&foo);
-#else
-		abort();
-#endif
+		// (paul) Made this configurable at runtime
+		if (gConfig.getBool("TRX.IgnoreDeath")) {
+			// (pat) Added so you can keep debugging without the radio.
+			static int foo = 0;
+			pthread_exit(&foo);
+		}
+		else
+			abort();
 	}
 
 	if (msgLen==0) {
@@ -267,9 +270,10 @@ int ::ARFCNManager::sendCommandPacket(const char* command, char* response)
 	response[0] = '\0';
 
 	LOG(INFO) << "command " << command;
+	int maxRetries = gConfig.getNum("TRX.MaxRetries");
 	mControlLock.lock();
 
-	for (int retry=0; retry<5; retry++) {
+	for (int retry=0; retry<maxRetries; retry++) {
 		mControlSocket.write(command);
 		msgLen = mControlSocket.read(response,1000);
 		if (msgLen>0) {

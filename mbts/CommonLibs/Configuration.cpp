@@ -53,6 +53,7 @@ static const char* gConfMapping[] = {
 	"gprs_advanced", "GPRS.",
 	"tapping",       "Control.GSMTAP.",
 	"control",       "Control.",
+	"peering",       "Peering.",
 	"transceiver",   "TRX.",
 	"sgsn",          "SGSN.",
 	"ggsn",          "GGSN.",
@@ -741,7 +742,7 @@ void ConfigurationTable::find(const string& pat, ostream& os)
 {
 	ScopedLock lock(mLock);
 	for (ConfigurationMap::iterator mp = mCache.begin(); mp != mCache.end(); mp++) {
-		if (mp->first.find(pat)) {
+		if (mp->first.find(pat) != string::npos) {
 			os << mp->first << " ";
 			if (mp->second.value().empty())
 				os << "(disabled)" << endl;

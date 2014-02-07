@@ -59,7 +59,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	ConfigurationKeyMap map;
 	ConfigurationKey *tmp;
 
-	tmp = new ConfigurationKey("Control.GSMTAP.GPRS","0",
+	tmp = new ConfigurationKey("Control.GSMTAP.GPRS","no",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
 		ConfigurationKey::BOOLEAN,
@@ -70,7 +70,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.GSMTAP.GSM","0",
+	tmp = new ConfigurationKey("Control.GSMTAP.GSM","no",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
 		ConfigurationKey::BOOLEAN,
@@ -92,7 +92,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.LUR.AttachDetach","1",
+	tmp = new ConfigurationKey("Control.LUR.AttachDetach","yes",
 		"",
 		ConfigurationKey::CUSTOMER,
 		ConfigurationKey::BOOLEAN,
@@ -105,10 +105,10 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.Reporting.PhysStatusTable","/var/run/ChannelTable.db",
+	tmp = new ConfigurationKey("Control.Reporting.PhysStatusTable","",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
+		ConfigurationKey::FILEPATH_OPT,
 		"",
 		true,
 		"File path for channel status reporting database."
@@ -116,10 +116,10 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.Reporting.StatsTable","/var/log/OpenBTSStats.db",
+	tmp = new ConfigurationKey("Control.Reporting.StatsTable","",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
+		ConfigurationKey::FILEPATH_OPT,
 		"",
 		true,
 		"File path for statistics reporting database."
@@ -152,7 +152,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.VEA","1",
+	tmp = new ConfigurationKey("Control.VEA","yes",
 		"",
 		ConfigurationKey::CUSTOMER,
 		ConfigurationKey::BOOLEAN,
@@ -217,7 +217,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GGSN.IP.TossDuplicatePackets","0",
+	tmp = new ConfigurationKey("GGSN.IP.TossDuplicatePackets","no",
 		"",
 		ConfigurationKey::CUSTOMER,
 		ConfigurationKey::BOOLEAN,
@@ -515,7 +515,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.Debug","0",
+	tmp = new ConfigurationKey("GPRS.Debug","no",
 		"",
 		ConfigurationKey::DEVELOPER,
 		ConfigurationKey::BOOLEAN,
@@ -550,7 +550,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.Enable","1",
+	tmp = new ConfigurationKey("GPRS.Enable","yes",
 
 		"",
 		ConfigurationKey::CUSTOMER,
@@ -563,7 +563,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.LocalTLLI.Enable","1",
+	tmp = new ConfigurationKey("GPRS.LocalTLLI.Enable","yes",
 		"",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::BOOLEAN,
@@ -749,7 +749,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.Reassign.Enable","1",
+	tmp = new ConfigurationKey("GPRS.Reassign.Enable","yes",
 		"",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::BOOLEAN,
@@ -760,7 +760,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.SendIdleFrames","0",
+	tmp = new ConfigurationKey("GPRS.SendIdleFrames","no",
 		"",
 		ConfigurationKey::FACTORY,
 		ConfigurationKey::BOOLEAN,
@@ -793,7 +793,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.TBF.EST","1",
+	tmp = new ConfigurationKey("GPRS.TBF.EST","yes",
 		"",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::BOOLEAN,
@@ -1060,7 +1060,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Channels.C1sFirst","0",
+	tmp = new ConfigurationKey("GSM.Channels.C1sFirst","no",
 		"",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::BOOLEAN,
@@ -1120,7 +1120,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Cipher.Encrypt","0",
+	tmp = new ConfigurationKey("GSM.Cipher.Encrypt","no",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
 		ConfigurationKey::BOOLEAN,
@@ -1142,7 +1142,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Cipher.ScrambleFiller","0",
+	tmp = new ConfigurationKey("GSM.Cipher.ScrambleFiller","no",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
 		ConfigurationKey::BOOLEAN,
@@ -1480,7 +1480,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Radio.NeedBSIC","0",
+	tmp = new ConfigurationKey("GSM.Radio.NeedBSIC","no",
 		"",
 		ConfigurationKey::FACTORY,
 		ConfigurationKey::BOOLEAN,
@@ -1584,7 +1584,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.ShowCountry","0",
+	tmp = new ConfigurationKey("GSM.ShowCountry","no",
 		"",
 		ConfigurationKey::CUSTOMER,
 		ConfigurationKey::BOOLEAN,
@@ -1668,10 +1668,10 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Peering.NeighborTable.Path","/var/run/NeighborTable.db",
+	tmp = new ConfigurationKey("Peering.NeighborTable.Path","",
 		"",
 		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH,
+		ConfigurationKey::FILEPATH_OPT,
 		"",
 		true,
 		"File path for neighbor information database."
@@ -1679,7 +1679,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("SGSN.Debug","0",
+	tmp = new ConfigurationKey("SGSN.Debug","no",
 		"",
 		ConfigurationKey::DEVELOPER,
 		ConfigurationKey::BOOLEAN,
@@ -1845,6 +1845,28 @@ ConfigurationKeyMap getConfigurationKeys()
 		"",
 		false,
 		"Extra arguments for the Transceiver"
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.MaxRetries","5",
+		"",
+		ConfigurationKey::DEVELOPER,
+		ConfigurationKey::VALRANGE,
+		"2:5",// educated guess
+		false,
+		"How many times to try to send a command to the transceiver before giving up."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.IgnoreDeath","no",
+		"",
+		ConfigurationKey::DEVELOPER,
+		ConfigurationKey::BOOLEAN,
+		"",
+		false,
+		"Ignore that the transceiver has died. For development without radio only."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

@@ -64,6 +64,8 @@ static const char* createPhysicalStatus = {
 
 int PhysicalStatus::open(const char* wPath)
 {
+	if (!(wPath && *wPath))
+		wPath = ":memory:";
 	int rc = sqlite3_open(wPath, &mDB);
 	if (rc) {
 		LOG(EMERG) << "Cannot open PhysicalStatus database at " << wPath << ": " << sqlite3_errmsg(mDB);

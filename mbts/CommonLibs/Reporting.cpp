@@ -40,6 +40,8 @@ static const char* createReportingTable = {
 
 ReportingTable::ReportingTable(const char* filename)
 {
+	if (!(filename && *filename))
+		filename = ":memory:";
 	gLogEarly(LOG_INFO | mFacility, "opening reporting table from path %s", filename);
 	// Connect to the database.
 	int rc = sqlite3_open(filename,&mDB);
