@@ -66,9 +66,9 @@ enum BtsErrors {
     ErrInterworking     = 0x7f           // Interworking, unspecified
 };
 
-#define YBTS_MNC_DEFAULT "01"
 #define YBTS_MCC_DEFAULT "001"
-#define YBTS_LAC_DEFAULT 1000
+#define YBTS_MNC_DEFAULT "01"
+#define YBTS_LAC_DEFAULT "1000"
 
 #endif // __YBTS_H
 

@@ -347,14 +347,14 @@ public:
 	{ *this = other; }
     inline const String& lai() const
 	{ return m_lai; }
-    inline void set(const char* mnc, const char* mcc, const char* lac) {
+    inline void set(const char* mcc, const char* mnc, const char* lac) {
 	    reset();
-	    m_mnc_mcc << mnc << mcc;
+	    m_mcc_mnc << mcc << mnc;
 	    m_lac = lac;
-	    m_lai << m_mnc_mcc << "_" << m_lac;
+	    m_lai << m_mcc_mnc << "_" << m_lac;
 	}
     inline void reset() {
-	    m_mnc_mcc.clear();
+	    m_mcc_mnc.clear();
 	    m_lac.clear();
 	    m_lai.clear();
 	}
@@ -364,15 +364,15 @@ public:
     inline bool operator!=(const YBTSLAI& other)
 	{ return m_lai != other.m_lai; }
     inline const YBTSLAI& operator=(const YBTSLAI& other) {
-	    m_mnc_mcc = other.m_mnc_mcc;
+	    m_mcc_mnc = other.m_mcc_mnc;
 	    m_lac = other.m_lac;
 	    m_lai = other.m_lai;
 	    return *this;
 	}
 protected:
-    String m_mnc_mcc;                    // Concatenated MNC + MCC
+    String m_mcc_mnc;                    // Concatenated MCC + MNC
     String m_lac;                        // LAC
-    String m_lai;                        // Concatenated mnc_mcc_lac
+    String m_lai;                        // Concatenated mcc_mnc_lac
 };
 
 
@@ -2338,19 +2338,19 @@ bool YBTSGlobalThread::cancelAll(bool hard, unsigned int waitMs)
 //
 YBTSLAI::YBTSLAI(const XmlElement& xml)
 {
-    const String* mnc_mcc = &String::empty();
+    const String* mcc_mnc = &String::empty();
     const String* lac = &String::empty();
-    getXmlChildTextAll(xml,mnc_mcc,s_PLMNidentity,lac,s_LAC);
-    m_mnc_mcc = *mnc_mcc;
+    getXmlChildTextAll(xml,mcc_mnc,s_PLMNidentity,lac,s_LAC);
+    m_mcc_mnc = *mcc_mnc;
     m_lac = *lac;
-    m_lai << m_mnc_mcc << "_" << m_lac;
+    m_lai << m_mcc_mnc << "_" << m_lac;
 }
 
 XmlElement* YBTSLAI::build() const
 {
     XmlElement* xml = new XmlElement(s_locAreaIdent);
-    if (m_mnc_mcc)
-	xml->addChildSafe(new XmlElement(s_PLMNidentity,m_mnc_mcc));
+    if (m_mcc_mnc)
+	xml->addChildSafe(new XmlElement(s_PLMNidentity,m_mcc_mnc));
     if (m_lac)
 	xml->addChildSafe(new XmlElement(s_LAC,m_lac));
     return xml;
@@ -6602,16 +6602,16 @@ void YBTSDriver::initialize()
     YBTSLAI lai;
     String mcc = gsm.getValue(YSTRING("Identity.MCC"),YBTS_MCC_DEFAULT);
     String mnc = gsm.getValue(YSTRING("Identity.MNC"),YBTS_MNC_DEFAULT);
-    String lac = gsm.getValue(YSTRING("Identity.LAC"));
+    String lac = gsm.getValue(YSTRING("Identity.LAC"),YBTS_LAC_DEFAULT);
     if (mcc.length() == 3 && isDigits09(mcc) &&
 	((mnc.length() == 3 || mnc.length() == 2) && isDigits09(mnc))) {
-	int tmp = lac.toInteger(YBTS_LAC_DEFAULT);
+	int tmp = lac.toInteger(-1);
 	if (tmp >= 0 && tmp <= 0xff00) {
 	    uint8_t b[2];
 	    b[0] = tmp >> 8;
 	    b[1] = tmp;
 	    lac.hexify(b,2);
-	    lai.set(mnc,mcc,lac);
+	    lai.set(mcc,mnc,lac);
 	}
     }
     const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));

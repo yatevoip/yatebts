@@ -24,6 +24,7 @@
 #include <string>
 
 #include <Configuration.h>
+#include "ybts.h"
 
 ConfigurationKeyMap getConfigurationKeys()
 {
@@ -1238,7 +1239,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Identity.LAC","1000",
+	tmp = new ConfigurationKey("GSM.Identity.LAC",YBTS_LAC_DEFAULT,
 		"",
 		ConfigurationKey::CUSTOMERSITE,
 		ConfigurationKey::VALRANGE,
@@ -1251,7 +1252,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Identity.MCC","001",
+	tmp = new ConfigurationKey("GSM.Identity.MCC",YBTS_MCC_DEFAULT,
 		"",
 		ConfigurationKey::CUSTOMERSITE,
 		ConfigurationKey::STRING,
@@ -1263,7 +1264,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Identity.MNC","01",
+	tmp = new ConfigurationKey("GSM.Identity.MNC",YBTS_MNC_DEFAULT,
 		"",
 		ConfigurationKey::CUSTOMERSITE,
 		ConfigurationKey::STRING,
