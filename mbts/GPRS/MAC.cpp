@@ -135,7 +135,7 @@ bool GPRSConfig::IsEnabled()
 	// BEGINCONFIG
 	// 'GPRS.Enable',1,0,0,'Enable GPRS service: 0 or 1.  If enabled, GPRS service is advertised in the C0T0 beacon, and GPRS service may be started on demand.  See also GPRS.Channels.*'
 	// ENDCONFIG
-	if (gConfig.getNum("GPRS.Enable")) return true;
+	if (gConfig.getBool("GPRS.Enable")) return true;
 	return false;	// nope
 }
 
