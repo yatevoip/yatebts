@@ -82,6 +82,8 @@ At least one transceiver package must also be installed for interfacing with the
 %dir %{moddir}
 %{moddir}/*.yate
 %{moddir}/mbts
+%{_datadir}/yate/scripts/*
+%{_datadir}/yate/sounds/*
 %config(noreplace) %{_sysconfdir}/yate/*.conf
 
 
@@ -98,6 +100,7 @@ RAD1 transceiver executable and support files for Yate-BTS.
 
 %files rad1
 %{moddir}/transceiver-rad1
+%{moddir}/transceiver
 %{moddir}/ezusb.ihx
 %{moddir}/fpga.rbf
 

@@ -269,7 +269,8 @@ AC_CONFIG_FILES([yate-bts.spec
                  mbts/Transceiver52M/Makefile:mbts/Makefile.head.in:mbts/Transceiver52M/Makefile.in:mbts/Makefile.tail.in
                  mbts/TransceiverRAD1/Makefile:mbts/Makefile.head.in:mbts/TransceiverRAD1/Makefile.in:mbts/Makefile.tail.in
                  mbts/sqlite3/Makefile:mbts/Makefile.head.in:mbts/sqlite3/Makefile.in:mbts/Makefile.tail.in
-                 mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in])
+                 mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in
+                 nib/Makefile])
 CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//'`
 AC_SUBST(CONFIGURE_FILES)
 AC_OUTPUT

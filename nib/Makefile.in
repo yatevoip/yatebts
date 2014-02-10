@@ -1,0 +1,64 @@
+# Makefile
+# This file holds the make rules the Yate BTS module and associated executables
+
+# override DESTDIR at install time to prefix the install directory
+DESTDIR :=
+
+SCRIPTS := nib.js subscribers.js welcome.js
+SOUNDS  := welcome.au
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+datarootdir = @datarootdir@
+
+datadir:= @datadir@
+confdir:= @YATE_CFG@
+moddir := @YATE_MOD@
+scrdir := @YATE_SCR@
+shrdir := @YATE_SHR@
+snddir := "$(shrdir)/sounds"
+
+# include optional local make rules
+-include YateLocal.mak
+
+.PHONY: all
+all:
+
+install: all
+	@mkdir -p "$(DESTDIR)$(moddir)/bts" && \
+	for i in $(PROGS) ; do \
+	    install -D "$$i" "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	done
+	@mkdir -p "$(DESTDIR)$(confdir)/" && \
+	lst="`ls -1 @srcdir@/*.conf @srcdir@/*.sample @srcdir@/*.default @srcdir@/*.sql 2>/dev/null | sed 's/\.sample//g; s/\.default//g; s/[^ ]*\*\.[^ ]*//g' | sort | uniq`" ; \
+	for s in $$lst; do \
+	    d="$(DESTDIR)$(confdir)/`echo $$s | sed 's,.*/,,'`" ; \
+	    if [ -f "$$d" ]; then \
+		echo "Not overwriting existing $$d" ; \
+	    else \
+		if [ ! -f "$$s" ]; then \
+		    test -f "$$s.default" && s="$$s.default" ; \
+		    test -f "$$s.sample" && s="$$s.sample" ; \
+		fi ; \
+		install -m 0644 "$$s" "$$d" ; \
+	    fi ; \
+	done
+	@mkdir -p "$(DESTDIR)$(scrdir)/" && \
+	for i in $(SCRIPTS) ; do \
+	    install -m 0644 @srcdir@/$$i "$(DESTDIR)$(scrdir)/" ; \
+	done
+	@mkdir -p "$(DESTDIR)$(snddir)/" && \
+	for i in $(SOUNDS) ; do \
+	    install -m 0644 @srcdir@/$$i "$(DESTDIR)$(snddir)/" ; \
+	done
+
+uninstall:
+	@-for i in $(SCRIPTS) ; do \
+	    rm -f "$(DESTDIR)$(scrdir)/$$i" ; \
+	done
+	@-rmdir "$(DESTDIR)$(scrdir)"
+	@-for i in $(SOUNDS) ; do \
+	    rm -f "$(DESTDIR)$(snddir)/$$i" ; \
+	done
+	@-rmdir "$(DESTDIR)$(snddir)"
+	@-rmdir "$(DESTDIR)$(shrdir)"

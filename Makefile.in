@@ -107,15 +107,17 @@ install: all
 		install -m 0644 "$$s" "$$d" ; \
 	    fi ; \
 	done
-	@mkdir -p "$(DESTDIR)$(docdir)/api/" && \
+	@mkdir -p "$(DESTDIR)$(docdir)/" && \
 	for i in $(DOCS) ; do \
 	    install -m 0644 @srcdir@/$$i "$(DESTDIR)$(docdir)/" ; \
 	done
 	$(MAKE) -C ./mbts/apps install
 	$(MAKE) -C ./mbts/Transceiver52M install
 	$(MAKE) -C ./mbts/TransceiverRAD1 install
+	$(MAKE) -C ./nib install
 
 uninstall:
+	$(MAKE) -C ./nib uninstall
 	$(MAKE) -C ./mbts/Transceiver52M uninstall
 	$(MAKE) -C ./mbts/TransceiverRAD1 uninstall
 	$(MAKE) -C ./mbts/apps uninstall
