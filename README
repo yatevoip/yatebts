@@ -1,0 +1,55 @@
+What is YateBTS
+---------------
+
+YateBTS is an open source GSM Base Station software.
+
+You can use this software to create a 2G GSM network, either standalone or connected to
+the public telephony network.
+
+The use of a non-DSP aproach for GSM protocol together with a SIP implementation
+that supports an IMS core and SS7 core network makes it a disruptive technology.
+
+
+Please see the INSTALL file for information of how to download, build and install YateBTS.
+
+
+Configuration
+-------------
+
+YateBTS is a module for the Yate telephony engine.
+
+You will need to configure Yate to load it and also YateBTS itself.
+
+
+YateBTS
+-------
+
+The module is configured by the ybts.conf file. Depending on the install method you may
+have just an ybts.conf.sample which you will need to copy as ybts.conf
+
+As a minimum you will need to configure the radio band and frequency (ARFCN) on which
+YateBTS will operate. Please read the minimal instructions at top of ybts.conf.sample
+
+Depending on the transceiver you will need to edit the path setting in ybts.conf:
+
+    [transceiver]
+    Path=./transceiver
+
+replace ./transceiver with ./transceiver-rad1 or ./transceiver-uhd or ./transceiver-usrp1
+
+Alternatively you may create a symbolic link to the desired transceiver:
+
+    cd /usr/lib64/yate/bts    (or wherever it is installed)
+    ln -s transceiver-rad1 transceiver
+
+
+Yate
+----
+
+Yate will need to know to load the ybts.yate module. For this add a line in the yate.conf
+file in section [general]. You will need to create the section if doesn't exist already.
+
+    [general]
+    extrapath=bts
+
+This will tell Yate to load modules from the extra modules directory bts.

@@ -1,0 +1,72 @@
+The following tools are required:
+- A subversion (svn) client; As root go to /usr/src or whereever you'd like to store source code
+- GnuMake: GNU Make is a tool which controls the generation of executables and other non-source files of a program from the program's source files
+- Autoconf: Autoconf is an extensible package of M4 macros that produce shell scripts to automatically configure software source code packages.
+- GCC: GNU Compiler Collection
+- libusb-1.0-0-dev: (2:0.1.12-23.3 and others) Library for programming USB applications without the knowledge of Linux kernel internals
+
+Both YateBTS and Yate can be built from a source tarball. In this case subversion and autoconf are not needed.
+
+
+Yate instalation
+----------------
+
+Below is a short install guide for Yate. For more detailed information please check http://docs.yate.ro/wiki/Compiling_and_installing_Yate_from_SVN
+
+The prerequisites of installing Yate are the same as above. You need at least Yate version 5.1.0
+
+To install Yate:
+
+Download Yate sources from the SVN
+Once you have the svn client installed, getting the sources is simple: you just type the following command in your terminal:
+    cd /usr/src/
+    svn checkout http://voip.null.ro/svn/yate/trunk yate
+
+Install Yate from SVN
+
+Go to directory where Yate was downloded and run autogen.sh. This will generate the configure script that checks dependencies.
+Then run make install-noapi that will compile and install Yate.
+Instead of make install-noapi you can use make install but make sure to install doxygen or kdoc package.
+    cd yate/
+    ./autogen.sh
+    ./configure
+    make install-noapi
+
+If you get any errors when running ./configure you'll probably have to install additional packages.
+
+If you try to run yate and get:
+
+yate: error while loading shared libraries: libyate.so.5.1.0: cannot open shared object file: No such file or directory
+
+Then run:
+    export LD_LIBRARY_PATH=/usr/local/lib/:$LD_LIBRARY_PATH
+
+For additional information about Yate installation and configuration, please see Yate documentation Wiki:
+http://docs.yate.ro/wiki/Beginners_in_Yate
+
+
+Install YateBTS
+---------------
+
+Download YateBTS
+
+You can download the sources in any directory. I choose /usr/src
+    cd /usr/src
+    svn checkout http://voip.null.ro/svn/yatebts/trunk yatebts
+
+Check dependencies
+Run autogen.sh to generate configure script that will check dependencies.
+    cd yatebts/
+    ./autogen.sh
+    ./configure
+
+If you encounter the following error then you need to install libusb1-dev or libusb1-devel and then run ./configure again.
+    checking for libusb-1.0/libusb.h... no
+    configure: error: This header file is required.
+
+Install YateBTS
+
+To compile and install YateBTS run:
+    make install
+
+After this, the YateBTS modules/scripts/configurations will be moved in the appropriate directories where other Yate modules/scripts/configurations are located.
