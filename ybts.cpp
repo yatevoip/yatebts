@@ -1407,6 +1407,7 @@ static unsigned int s_t308 = 5000;       // REL sent (operator specific, no defa
 static unsigned int s_t313 = 5000;       // Send Connect, expect Connect Ack, clear call on expire
 
 static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
+static bool s_tmsiSave = false;          // Save TMSIs to file
 
 static const String s_statusCmd = "status";
 static const String s_startCmd = "start";
@@ -3884,15 +3885,17 @@ void YBTSMM::saveUElist()
     ues = f;
     ues.setValue(YSTRING("tmsi"),"index",(int)m_tmsiIndex);
     int cnt = 0;
-    NamedList* tmsis = ues.createSection(YSTRING("ues"));
-    ObjList* list = tmsis->paramList();
-    for (unsigned int i = 0; i < m_ueHashLen; i++) {
-	for (ObjList* l = m_ueTMSI[i].skipNull(); l; l = l->skipNext()) {
-	    YBTSUE* ue = static_cast<YBTSUE*>(l->get());
-	    String s;
-	    s << ue->imsi() << "," << ue->imei() << "," << ue->msisdn() << "," << ue->expires() << "," << ue->registered();
-	    list = list->append(new NamedString(ue->tmsi(),s));
-	    cnt++;
+    if (s_tmsiSave) {
+	NamedList* tmsis = ues.createSection(YSTRING("ues"));
+	ObjList* list = tmsis->paramList();
+	for (unsigned int i = 0; i < m_ueHashLen; i++) {
+	    for (ObjList* l = m_ueTMSI[i].skipNull(); l; l = l->skipNext()) {
+		YBTSUE* ue = static_cast<YBTSUE*>(l->get());
+		String s;
+		s << ue->imsi() << "," << ue->imei() << "," << ue->msisdn() << "," << ue->expires() << "," << ue->registered();
+		list = list->append(new NamedString(ue->tmsi(),s));
+		cnt++;
+	    }
 	}
     }
     ues.save();
@@ -6623,6 +6626,7 @@ void YBTSDriver::initialize()
     s_t308 = ybts.getIntValue("t308",5000,4000,20000);
     s_t313 = ybts.getIntValue("t313",5000,4000,20000);
     s_tmsiExpire = ybts.getIntValue("tmsi_expire",864000,7200,2592000);
+    s_tmsiSave = ybts.getBoolValue("tmsi_save");
     s_mtSmsTimeout = ybts.getIntValue("sms.timeout",
 	YBTS_MT_SMS_TIMEOUT_DEF,YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     s_globalMutex.lock();
