@@ -8,7 +8,7 @@ INCFILES := ad9862.h bytesex.h commands.h Complex.h DummyLoad.h FactoryCalibrati
     radioInterface.h rnrad1Core.h rnrad1.h sigProcLib.h spi.h Transceiver.h
 
 ifneq (@HAVE_RAD1@,no)
-PROGS:= $(PROGS) transceiver-rad1
+PROGS:= $(PROGS) transceiver-rad1 transceiver
 FILES:= $(FILES) ezusb.ihx fpga.rbf
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= $(PROGS) RAD1ping RAD1RxRawPower RAD1RxRawPowerSweep RAD1Cmd RAD1SN sigProcLibTest
@@ -23,3 +23,6 @@ all:
 
 transceiver-rad1: runTransceiver.cpp $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
 	$(COMPILE) -o $@ $(LOCALFLAGS) $< $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
+
+transceiver: transceiver-rad1
+	ln -s $< $@
