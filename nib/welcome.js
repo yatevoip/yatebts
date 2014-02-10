@@ -1,5 +1,8 @@
 /**
- * Copyright (C) 2013-2014 Null Team
+ * welcome.js
+ * This file is part of the Yate-BTS Project http://www.yatebts.com
+ *
+ * Copyright (C) 2014 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing
@@ -11,6 +14,14 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ */
+
+/*
+ * Network-In-a-Box demo
+ * To use it put in javascript.conf:
+ *
+ * [general]
+ * routing=welcome.js
  */
 
 function getPathPrompt(pprompt)

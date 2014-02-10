@@ -63,6 +63,7 @@ URL:		http://yatebts.com/
 BuildRequires:	gcc-c++
 BuildRequires:	yate-devel = @YATE_VER@
 Requires:	yate = @YATE_VER@
+Requires:	yate-scripts = @YATE_VER@
 Requires:	%{name}-transceiver = %{version}-%{release}
 
 %define prefix	/usr

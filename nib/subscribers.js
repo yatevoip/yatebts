@@ -1,8 +1,10 @@
 /**
  * subscribers.js
  * Configure subscribers individually or set regular expression to accept imsis
-
- * Copyright (C) 2013-2014 Null Team
+ *
+ * This file is part of the Yate-BTS Project http://www.yatebts.com
+ *
+ * Copyright (C) 2014 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing
@@ -15,7 +17,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
- 
+
 /*
 var subscribers = {
 "00101000000000":
