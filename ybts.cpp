@@ -824,8 +824,8 @@ public:
     YBTSMedia();
     inline YBTSTransport& transport()
 	{ return m_transport; }
-    YBTSDataSource* buildSource(unsigned int connId);
-    YBTSDataConsumer* buildConsumer(unsigned int connId);
+    void setSource(YBTSChan* chan);
+    void setConsumer(YBTSChan* chan);
     void addSource(YBTSDataSource* src);
     void removeSource(YBTSDataSource* src);
     void cleanup(bool final);
@@ -3612,20 +3612,27 @@ YBTSMedia::YBTSMedia()
     m_transport.setDebugPtr(this,this);
 }
 
-YBTSDataSource* YBTSMedia::buildSource(unsigned int connId)
+void YBTSMedia::setSource(YBTSChan* chan)
 {
+    if (!chan)
+	return;
     String format;
     getGlobalStr(format,s_format);
-    YBTSDataSource* src = new YBTSDataSource(format,connId,this);
+    YBTSDataSource* src = new YBTSDataSource(format,chan->connId(),this);
     addSource(src);
-    return src;
+    chan->setSource(src);
+    TelEngine::destruct(src);
 }
 
-YBTSDataConsumer* YBTSMedia::buildConsumer(unsigned int connId)
+void YBTSMedia::setConsumer(YBTSChan* chan)
 {
+    if (!chan)
+	return;
     String format;
     getGlobalStr(format,s_format);
-    return new YBTSDataConsumer(format,connId,this);
+    YBTSDataConsumer* cons = new YBTSDataConsumer(format,chan->connId(),this);
+    chan->setConsumer(cons);
+    TelEngine::destruct(cons);
 }
 
 void YBTSMedia::addSource(YBTSDataSource* src)
@@ -5226,9 +5233,9 @@ void YBTSChan::handleMediaStartRsp(bool ok)
     }
     if (__plugin.media()) {
 	if (!getSource())
-	    setSource(__plugin.media()->buildSource(connId()));
+	    __plugin.media()->setSource(this);
 	if (!getConsumer())
-	    setConsumer(__plugin.media()->buildConsumer(connId()));
+	    __plugin.media()->setConsumer(this);
     }
 }
 
@@ -5422,8 +5429,8 @@ void YBTSChan::callAccept(Message& msg)
 {
     Channel::callAccept(msg);
     if (__plugin.media()) {
-	setSource(__plugin.media()->buildSource(connId()));
-	setConsumer(__plugin.media()->buildConsumer(connId()));
+	__plugin.media()->setSource(this);
+	__plugin.media()->setConsumer(this);
     }
 }
 
