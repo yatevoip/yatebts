@@ -869,7 +869,6 @@ Counters.Assign=10
 ; sms.timeout: integer: Interval, in milliseconds, to wait for a MT SMS to complete
 ; This interval includes paging if needed
 ; This parameter can be overridden in the msg.execute message by a 'timeout' parameter
-;  with non 0 value
 ; This parameter is applied on reload
 ; Interval allowed: 5000..600000
 ; Defaults to 300000
@@ -878,9 +877,18 @@ Counters.Assign=10
 ; ussd.session_timeout: integer: Timeout, in milliseconds, of USSD sessions
 ; This parameter configures the overall USSD session duration
 ; When timed out a session will be terminated
+; This parameter can be overridden in the msg.execute message by a 'timeout' parameter
 ; This parameter is applied on reload
 ; Minimum allowed value is 30000
 ; Defaults to 600000 (10 minutes)
 ;ussd.session_timeout=600000
 
-
+; export_xml_as: string: Specify in which way the XML will be passed along into
+;  Yate messages
+; Allowed values are:
+;  - string: pass the XML as a string
+;  - object: pass the XML as an object
+;  - both: pass the XML as a string and object
+; This parameter is applied on reload
+; Defaults to object
+;export_xml_as=object
