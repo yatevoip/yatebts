@@ -386,6 +386,8 @@ function onRoute(msg)
     var route_type = msg.route_type;
     if (route_type=="msg")
 	return onRouteSMS(msg);
+    if (route_type!="" && route_type!="call")
+	return false;
 
     Engine.debug(Engine.DebugInfo,"onRoute " + msg.caller + " -> " + msg.called);
 
@@ -461,64 +463,57 @@ function onRegister(msg)
 	return false;
     }
 
-    // add imsi in registered list, msisdn should be the key
-    if (msg.msisdn!="")
-	msisdn = msg.msisdn;
-    else {
-	if (subscribers != undefined) {
-	    Engine.debug(Engine.DebugInfo,"Searching imsi in subscribers.");
-	    msisdn = getSubscriberMsisdn(imsi);
-	    if (msisdn==null || msisdn=="") {
+    if (subscribers != undefined) {
+	Engine.debug(Engine.DebugInfo,"Searching imsi in subscribers.");
+	msisdn = getSubscriberMsisdn(imsi);
+	if (msisdn==null || msisdn=="") {
+	    // check if imsi is already registered so we don't allocate a new number
+	    msisdn = alreadyRegistered(imsi);
+	    if (msisdn==false) {
+		Engine.debug(Engine.DebugInfo,"Located imsi without msisdn. Allocated random number");
+		msisdn = newNumber();
+		//sendGreetingMessage(imsi, msisdn);
+	    }
+	} else if (msisdn==false) {
+	    addRejected(imsi);
+	    msg.error = "forbidden";
+	    return false;
+	}
+    } else {
+	if (regexp == undefined) {
+	    Engine.debug(Engine.DebugWarn,"Please configure accepted subscribers or regular expression to accept by");
+
+	    // maybe reject everyone until system is configured ??
+	    // addRejected(imsi);
+	    msg.error = "forbidden";
+	    return false;
+	} else {
+	    // check that imsi is valid against regexp
+
+	    if (imsi.match(regexp)) {
 		// check if imsi is already registered so we don't allocate a new number
 		msisdn = alreadyRegistered(imsi);
 		if (msisdn==false) {
-		    Engine.debug(Engine.DebugInfo,"Located imsi without msisdn. Allocated random number");
+		    Engine.debug(Engine.DebugInfo,"Allocated random number");
 		    msisdn = newNumber();
-		    //sendGreetingMessage(imsi, msisdn);
+		    //sendGreetingMessagie(imsi, msisdn);
 		}
-	    } else if (msisdn==false) {
+	    } else {
 		addRejected(imsi);
 		msg.error = "forbidden";
-		return true;
-	    }
-
-	} else {
-	    if (regexp == undefined) {
-		Engine.debug(Engine.DebugWarn,"Please configure accepted subscribers or regular expression to accept by");
-
-		// maybe reject everyone until system is configured ??
-		// addRejected(imsi);
-		msg.error = "forbidden";
-		return true;
-	    } else {
-		// check that imsi is valid against regexp
-
-		if (imsi.match(regexp)) {
-		    // check if imsi is already registered so we don't allocate a new number
-		    msisdn = alreadyRegistered(imsi);
-		    if (msisdn==false) {
-			Engine.debug(Engine.DebugInfo,"Allocated random number");
-			msisdn = newNumber();
-			//sendGreetingMessagie(imsi, msisdn);
-		    }
-		} else {
-		    addRejected(imsi);
-		    msg.error = "forbidden";
-		    return true;
-		}
+		return false;
 	    }
 	}
     }
-
-    // if we do this, in the future it will be copied in call.route messages(after this is implemented in ybts.cpp)
-    if (!msg.msisdn)
-    	msg.msisdn = msisdn;
 
     if (alreadyRegistered(imsi)==false)
 	sendGreetingMessage(imsi, msisdn);
     
     if (msisdn.substr(0,1)!="+")
 	msisdn = "+"+msisdn;
+
+    // if we do this, in the future it will be copied in call.route messages(after this is implemented in ybts.cpp)
+    msg.msisdn = msisdn;
 
     regUsers[msisdn] = imsi;
     Engine.debug(Engine.DebugInfo,"Registered imsi "+imsi+" with number "+msisdn);
@@ -528,11 +523,8 @@ function onRegister(msg)
 function onUnregister(msg)
 {
     var imsi = msg.username;
-    if (imsi=="") {
-	// this should not happen
-	Engine.debug(Engine.DebugWarn,"Got user.unregister with NULL username(imsi).");
+    if (imsi=="")
 	return false;
-    }
 
     msisdn = msg.msisdn;
     if (msisdn=="") {
