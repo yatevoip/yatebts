@@ -4112,7 +4112,9 @@ void YBTSMM::locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t c
     Debug(this,level,"IMSI=%s register %s [%p]",
 	ue->imsi().c_str(),ok ? "succeeded" : "failed",this);
     ue->m_registered = ok;
-    // TODO: Update data from parameters
+    ue->m_msisdn = params[YSTRING("msisdn")];
+    if (ue->m_msisdn[0] == '+')
+	ue->m_msisdn = ue->m_msisdn.substr(1);
     XmlElement* ch = 0;
     const char* what = ok ? "LocationUpdatingAccept" : "LocationUpdatingReject";
     XmlElement* mm = valid ? buildMM(ch,what) : 0;
