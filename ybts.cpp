@@ -71,6 +71,10 @@ namespace { // anonymous
 // USSD
 #define YBTS_USSD_TIMEOUT_DEF 600000
 #define YBTS_USSD_TIMEOUT_MIN 30000
+// Paging
+#define YBTS_PAGING_TIMEOUT_DEF 10000
+#define YBTS_PAGING_TIMEOUT_MIN 5000
+#define YBTS_PAGING_TIMEOUT_MAX 150000
 
 #define YBTS_SET_REASON_BREAK(s) { reason = s; break; }
 
@@ -420,7 +424,7 @@ public:
 	const char* id = 0)
 	: String(id),
 	m_type(t), m_callRef(callRef), m_incoming(incoming), m_sapi(sapi),
-	m_timeout(0), m_connId(-1), m_paging(false), m_cid(-1)
+	m_timeout(0), m_pddTout(0), m_connId(-1), m_paging(false), m_cid(-1)
 	{}
     ~YBTSTid();
     inline  const char* typeName() const
@@ -463,6 +467,7 @@ public:
     bool m_incoming;                     // Transaction direction
     uint8_t m_sapi;                      // SAPI to use
     uint64_t m_timeout;
+    uint64_t m_pddTout;
     int m_connId;                        // Connection id (less then 0: no connection)
     RefPointer<YBTSUE> m_ue;             // Used UE, may not be set
     bool m_paging;                       // Paging the UE
@@ -1580,6 +1585,7 @@ static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
 static String s_ueFile;                  // File to save UE information
 static bool s_askIMEI = true;            // Ask the IMEI identity
+static unsigned int s_pagingTout = YBTS_PAGING_TIMEOUT_DEF;// Paging timeout to be used on MT services
 static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
 static unsigned int s_ussdTimeout = YBTS_USSD_TIMEOUT_DEF;    // USSD session timeout interval
 static unsigned int s_bufLenLog = 16384; // Read buffer length for log interface
@@ -1971,6 +1977,24 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
 	    *smsTextEnc = "gsm7bit";
     }
     return 0;
+}
+
+static inline unsigned int getPagingTout(const NamedList& list, const String& param,
+    unsigned int defVal = YBTS_PAGING_TIMEOUT_DEF)
+{
+    return list.getIntValue(param,defVal,YBTS_PAGING_TIMEOUT_MIN,
+	YBTS_PAGING_TIMEOUT_MAX);
+}
+
+static inline unsigned int getMaxPddPaging(const NamedList& list, unsigned int minVal,
+    unsigned int maxVal)
+{
+    unsigned int defVal = (s_pagingTout < maxVal ? s_pagingTout : maxVal);
+    if (minVal > s_pagingTout)
+	minVal = s_pagingTout;
+    if (minVal > defVal)
+	minVal = defVal;
+    return list.getIntValue(YSTRING("maxpdd"),defVal,minVal,maxVal);
 }
 
 static void moveList(ObjList& dest, ObjList& src)
@@ -6014,7 +6038,10 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
     YBTSTid* ss = new YBTSTid(YBTSTid::Ussd,"0",false,0,ssId);
     unsigned int tout = msg.getIntValue(YSTRING("timeout"),s_ussdTimeout,
 	YBTS_USSD_TIMEOUT_MIN);
-    ss->m_timeout = Time::now() + (uint64_t)tout * 1000;
+    unsigned int maxPdd = getMaxPddPaging(msg,YBTS_USSD_TIMEOUT_MIN,tout);
+    ss->m_pddTout = ss->m_timeout = Time::now();
+    ss->m_timeout += (uint64_t)tout * 1000;
+    ss->m_pddTout += (uint64_t)maxPdd * 1000;
     ss->m_data = facility;
     ss->m_peerId = msg[YSTRING("id")];
     ss->m_startCID = "0";
@@ -6746,7 +6773,7 @@ void YBTSDriver::checkMtSsTout(const Time& time)
     m_mtSsMutex.lock();
     for (ObjList* o = m_mtSs.skipNull(); o;) {
 	YBTSTid* ss = static_cast<YBTSTid*>(o->get());
-	if (ss->m_timeout <= time) {
+	if (ss->m_pddTout <= time) {
 	    list.append(o->remove(false));
 	    o = o->skipNull();
 	}
@@ -6758,7 +6785,7 @@ void YBTSDriver::checkMtSsTout(const Time& time)
     for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
 	YBTSTid* ss = static_cast<YBTSTid*>(o->get());
 	Debug(this,DebugInfo,"Idle MT USSD '%s' timed out",ss->c_str());
-	enqueueSS(ss->ssMessage(false),0,false,"timeout");
+	enqueueSS(ss->ssMessage(false),0,false,"postdialdelay");
     }
 }
 
@@ -7143,7 +7170,9 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     checkMtSms(*list);
     unsigned int intervals = msg.getIntValue(YSTRING("timeout"),s_mtSmsTimeout,
 	YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
+    unsigned int maxPdd = getMaxPddPaging(msg,YBTS_MT_SMS_TIMEOUT_MIN,intervals);
     intervals = threadIdleIntervals(intervals);
+    maxPdd = threadIdleIntervals(maxPdd);
     while (sms->active()) {
 #define YBTS_SMSOUT_DONE(reason) { sms->terminate(false,reason); break; }
 	Thread::idle();
@@ -7155,6 +7184,11 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    intervals--;
 	    if (!intervals)
 		YBTS_SMSOUT_DONE("timeout");
+	}
+	if (maxPdd && !sms->sent()) {
+	    maxPdd--;
+	    if (!maxPdd)
+		YBTS_SMSOUT_DONE("postdialdelay");
 	}
 	if (list->ue()->removed() || list->ue()->imsiDetached())
 	    YBTS_SMSOUT_DONE("offline");
@@ -7345,6 +7379,8 @@ void YBTSDriver::initialize()
 	    lai.set(mcc,mnc,lac);
 	}
     }
+    const NamedList& gsmAdvanced = safeSect(cfg,YSTRING("gsm_advanced"));
+    s_pagingTout = getPagingTout(gsmAdvanced,YSTRING("Timer.T3113"));
     const NamedList& ybts = safeSect(cfg,YSTRING("ybts"));
     s_restartMax = ybts.getIntValue("max_restart",
 	YBTS_RESTART_COUNT_DEF,YBTS_RESTART_COUNT_MIN);
