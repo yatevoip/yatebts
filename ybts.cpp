@@ -6838,6 +6838,12 @@ void YBTSDriver::stop()
     channels().clear();
     if (stopped && m_stopped)
 	Debug(this,DebugNote,"Stopped, waiting for command to start");
+    if (Engine::exiting()) {
+	m_restart = false;
+	m_restartTime = 0;
+	m_error = true;
+	m_stopped = true;
+    }
 }
 
 bool YBTSDriver::startPeer()
