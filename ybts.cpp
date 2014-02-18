@@ -1575,6 +1575,7 @@ protected:
 
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
+static Mutex s_callStartMutex(false,"YBTSCallStart"); // Serialize channel creation to avoid duplicates for the same UE
 static uint64_t s_startTime = 0;
 static uint64_t s_idleTime = Time::now();
 static YBTSLAI s_lai;
@@ -3006,6 +3007,7 @@ bool YBTSSignalling::sendRRMStatus(uint16_t connId, uint8_t code)
     XmlElement* ch =  new XmlElement(s_message);
     ch->setAttribute(s_type,"RRStatus");
     ch->addChildSafe(new XmlElement("RRCause",String(code)));
+    rrm->addChildSafe(ch);
     return sendL3Conn(connId,rrm);
 }
 
@@ -5008,6 +5010,7 @@ YBTSChan::YBTSChan(YBTSConn* conn)
 // Outgoing
 YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
     : Channel(__plugin,0,true),
+    YBTSConnIdHolder(conn ? conn->connId() : 0),
     m_mutex(true,"YBTSChan"),
     m_conn(conn),
     m_ue(ue),
@@ -5316,6 +5319,7 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 	}
 	return;
     }
+    allocTraffic();
     m_waitForTraffic = !conn->startTraffic();
     if (m_waitForTraffic)
 	return;
@@ -5654,14 +5658,22 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
 	return;
     }
+    bool regular = (*type == s_ccSetup);
+    bool emergency = !regular && (*type == s_ccEmergency);
+    Lock lckCallStart(0);
+    if (regular || emergency)
+	lckCallStart.acquire(s_callStartMutex);
     const String* callRef = 0;
     bool tiFlag = false;
     getTID(*m.xml(),callRef,tiFlag);
     if (conn) {
 	RefPointer<YBTSChan> chan;
 	findChan(conn->connId(),chan);
-	if (chan && chan->handleCC(*xml,callRef,tiFlag))
-	    return;
+	if (chan) {
+	    lckCallStart.drop();
+	    if (chan->handleCC(*xml,callRef,tiFlag))
+		return;
+	}
     }
     String cref;
     if (callRef)
@@ -5670,8 +5682,6 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	cref = "with no reference";
     DDebug(this,DebugAll,"Handling '%s' in call %s conn=%u [%p]",
 	type->c_str(),cref.c_str(),m.connId(),this);
-    bool regular = (*type == s_ccSetup);
-    bool emergency = !regular && (*type == s_ccEmergency);
     if (regular || emergency) {
 	if (!conn)
 	    Debug(this,DebugNote,"Refusing new GSM call, no connection");
@@ -5690,6 +5700,7 @@ void YBTSDriver::handleCC(YBTSMessage& m, YBTSConn* conn)
 	    }
 	    Debug(this,DebugNote,"Refusing new GSM call, full or exiting");
 	}
+	lckCallStart.drop();
 	if (!TelEngine::null(callRef))
 	    YBTSCallDesc::sendGSMRel(false,*callRef,!tiFlag,"noconn",m.connId());
 	return;
@@ -7470,11 +7481,12 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
 	Debug(this,DebugWarn,"GSM call found but no data channel!");
 	return false;
     }
-    if ((m_state != RadioUp) || !m_mm) {
+    if ((m_state != RadioUp) || !(m_mm && m_signalling)) {
 	Debug(this,DebugWarn,"GSM call: Radio is not up!");
 	msg.setParam(s_error,"interworking");
 	return false;
     }
+    Lock lckCallStart(s_callStartMutex);
     RefPointer<YBTSUE> ue;
     if (!m_mm->findUESafe(ue,dest)) {
 	// We may consider paging UEs that are not in the TMSI table
@@ -7492,17 +7504,13 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
 	Debug(this,DebugStub,"CW call not implemented");
 	return false;
     }
-    if (!m_signalling)
-	return false;
     RefPointer<YBTSConn> conn;
-    if (m_signalling->findConn(conn,ue)) {
-	// TODO
-	Debug(this,DebugStub,"Call on existing connection not implemented");
-	return false;
-    }
-    chan = new YBTSChan(ue);
+    m_signalling->findConn(conn,ue);
+    chan = new YBTSChan(ue,conn);
+    bool ok = chan->initOutgoing(msg);
+    lckCallStart.drop();
     chan->deref();
-    if (chan->initOutgoing(msg)) {
+    if (ok) {
 	CallEndpoint* ch = YOBJECT(CallEndpoint,msg.userData());
 	if (ch && chan->connect(ch,msg.getValue(YSTRING("reason")))) {
 	    chan->callConnect(msg);
