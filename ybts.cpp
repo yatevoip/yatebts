@@ -605,6 +605,7 @@ protected:
 class YBTSSignalling : public GenObject, public DebugEnabler, public Mutex,
     public YBTSThreadOwner
 {
+    friend class YBTSDriver;
 public:
     enum State {
 	Idle,
@@ -881,6 +882,8 @@ public:
 	{ return m_registered; }
     inline uint32_t expires() const
 	{ return m_expires; }
+    inline uint32_t pageCnt() const
+	{ return m_pageCnt; }
     inline bool removed() const
 	{ return m_removed; }
     inline bool imsiDetached() const
@@ -1066,6 +1069,8 @@ public:
     void newTMSI(String& tmsi);
     void locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t connId,
 	bool ok, const NamedList& params);
+    void completeUe(String& buf, const String& partWord,
+	bool imsi = true, bool tmsi = false, bool imei = false);
 protected:
     void handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
@@ -1512,6 +1517,8 @@ protected:
 	    m_restartIndex = 0;
 	}
     void ybtsStatus(String& line, String& retVal);
+    bool msgStatusUE(Message& msg, String& line);
+    bool msgStatusConn(Message& msg, String& line);
     void btsStatus(Message& msg);
     virtual void initialize();
     virtual bool msgExecute(Message& msg, String& dest);
@@ -1553,6 +1560,10 @@ protected:
     ObjList m_mtSs;                      // List of pending MT SS
     bool m_mtSsNotEmpty;                 // List of MT SS is not empty
     int m_exportXml;                     // Export xml as string(-1), obj(1) or both(0)
+    String m_statusCmd;
+    String m_statusOverCmd;
+    String m_statusUeCmd;
+    String m_statusConnCmd;
 };
 
 class YBTSMsgHandler : public MessageHandler
@@ -1609,6 +1620,11 @@ static const String s_statusCmd = "status";
 static const String s_startCmd = "start";
 static const String s_stopCmd = "stop";
 static const String s_restartCmd = "restart";
+static const String s_all = "all";
+static const String s_statusUeImsi = "imsi";
+static const String s_statusUeTmsi = "tmsi";
+static const String s_statusUeImei = "imei";
+static const String s_statusUeMsisdn = "msisdn";
 
 ObjList YBTSGlobalThread::s_threads;
 Mutex YBTSGlobalThread::s_threadsMutex(false,"YBTSGlobalThread");
@@ -4184,6 +4200,26 @@ void YBTSMM::locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t c
     TelEngine::destruct(mm);
 }
 
+void YBTSMM::completeUe(String& buf, const String& partWord,
+    bool imsi, bool tmsi, bool imei)
+{
+    Lock lck(m_ueMutex);
+    for (unsigned int i = 0; i < m_ueHashLen; i++) {
+	for (ObjList* o = m_ueIMSI[i].skipNull(); o; o = o->skipNext()) {
+	    YBTSUE* ue = static_cast<YBTSUE*>(o->get());
+	    Lock lckUe(ue);
+	    if (imsi)
+		Module::itemComplete(buf,ue->imsi(),partWord);
+	    else if (tmsi)
+		Module::itemComplete(buf,ue->tmsi(),partWord);
+	    else if (imei)
+		Module::itemComplete(buf,ue->imei(),partWord);
+	    else
+		Module::itemComplete(buf,ue->msisdn(),partWord);
+	}
+    }
+}
+
 void YBTSMM::loadUElist()
 {
     s_globalMutex.lock();
@@ -4843,6 +4879,7 @@ void YBTSMM::ueRemoved(YBTSUE& ue, const char* reason)
 	ue.imsi().c_str(),ue.tmsi().c_str(),reason,this);
 }
 
+
 //
 // YBTSCallDesc
 //
@@ -5293,9 +5330,9 @@ bool YBTSChan::canAcceptMT()
 // Start a pending MT call
 void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 {
-    Lock lck(m_mutex);
     if (pagingRsp)
-	m_paging = false;
+	stopPaging();
+    Lock lck(m_mutex);
     if (conn && !m_conn) {
 	m_conn = conn;
 	m_connId = conn->connId();
@@ -5304,7 +5341,7 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
     else
 	conn = m_conn;
     if (!conn) {
-	if (pagingRsp || !m_paging) {
+	if (pagingRsp) {
 	    lck.drop();
 	    hangup("failure");
 	}
@@ -5603,6 +5640,10 @@ YBTSDriver::YBTSDriver()
 {
     Output("Loaded module YBTS");
     m_ssIdPrefix << prefix() << "ss/";
+    m_statusCmd = "status " + name();
+    m_statusOverCmd = "status overview " + name();
+    m_statusUeCmd = m_statusCmd + " ue";
+    m_statusConnCmd = m_statusCmd + " conn";
 }
 
 YBTSDriver::~YBTSDriver()
@@ -6522,8 +6563,10 @@ void YBTSDriver::checkMtSs(YBTSConn* conn)
     m_mtSsMutex.unlock();
     for (ObjList* o = list.skipNull(); o; o = o->skipNull()) {
 	YBTSTid* ss = static_cast<YBTSTid*>(o->remove(false));
-	ss->m_ue->stopPaging();
-	ss->m_paging = false;
+	if (ss->m_paging) {
+	    ss->m_ue->stopPaging();
+	    ss->m_paging = false;
+	}
 	if (startMtSs(conn,ss))
 	    continue;
 	if (ss) {
@@ -7364,6 +7407,123 @@ void YBTSDriver::ybtsStatus(String& line, String& retVal)
     retVal << "\r\n";
 }
 
+static inline void addTout(String& dest, uint64_t toutUs, bool msec)
+{
+    if (!toutUs)
+	return;
+    Time t;
+    if (toutUs > t)
+	dest << ((toutUs - t) / (msec ? 1000 : 1000000)) << (msec ? "ms" : "s");
+    else
+	dest << "expired";
+}
+
+bool YBTSDriver::msgStatusUE(Message& msg, String& line)
+{
+    String& s = msg.retValue();
+    s << "name=" << name();
+    if (!line || line == s_all) {
+	unsigned int n = 0;
+	String tmp;
+	if (m_mm) {
+	    bool details = msg.getBoolValue(YSTRING("details"),true);
+	    Lock lck(m_mm->m_ueMutex);
+	    for (unsigned int i = 0; i < m_mm->m_ueHashLen; i++) {
+		for (ObjList* o = m_mm->m_ueIMSI[i].skipNull(); o; o = o->skipNext()) {
+		    n++;
+		    if (!details)
+			continue;
+		    YBTSUE* ue = static_cast<YBTSUE*>(o->get());
+		    Lock lckUe(ue);
+		    tmp.append(ue->imsi(),",") << "=";
+		    tmp << ue->tmsi() << "|" << ue->registered();
+		}
+	    }
+	}
+	s.append("format=",",") << "TMSI|Registered";
+	s << ";count=" << n;
+	s.append(tmp,";");
+    }
+    else if (m_mm) {
+	RefPointer<YBTSUE> ue;
+	if (line.startSkip(s_statusUeImsi))
+	    m_mm->findUESafe(ue,"IMSI" + line);
+	else if (line.startSkip(s_statusUeTmsi))
+	    m_mm->findUESafe(ue,"TMSI" + line);
+	else if (line.startSkip(s_statusUeImei))
+	    m_mm->findUESafe(ue,"IMEI" + line);
+	else if (line.startSkip(s_statusUeMsisdn))
+	    m_mm->findUESafe(ue,"+" + line);
+	if (ue) {
+	    Lock lck(ue);
+	    s.append("imsi=",";") << ue->imsi();
+	    s << ",tmsi=" << ue->tmsi();
+	    s << ",imei=" << ue->imei();
+	    s << ",msisdn=" << ue->msisdn();
+	    s << ",registered=" << ue->registered();
+	    s << ",paging=" << ue->paging() << "/" << ue->pageCnt();
+	    s << ",expires=";
+	    addTout(s,(uint64_t)ue->expires() * 1000000,false);
+	}
+    }
+    s << "\r\n";
+    return true;
+}
+
+bool YBTSDriver::msgStatusConn(Message& msg, String& line)
+{
+    String& s = msg.retValue();
+    s << "name=" << name();
+    if (!line || line == s_all) {
+	unsigned int n = 0;
+	String tmp;
+	if (m_signalling) {
+	    bool details = msg.getBoolValue(YSTRING("details"),true);
+	    Lock lck(m_signalling->m_connsMutex);
+	    for (ObjList* o = m_signalling->m_conns.skipNull(); o; o = o->skipNext()) {
+		n++;
+		if (!details)
+		    continue;
+		YBTSConn* c = static_cast<YBTSConn*>(o->get());
+		tmp.append(String(c->connId()),",") << "=";
+		if (c->ue()) {
+		    Lock lckUe(c->ue());
+		    tmp << c->ue()->imsi();
+		}
+		tmp << "|" << c->m_usage;
+	    }
+	}
+	s.append("format=",",") << "IMSI|Usage";
+	s << ";count=" << n;
+	s.append(tmp,";");
+    }
+    else if (m_signalling) {
+	RefPointer<YBTSConn> c;
+	line.trimBlanks();
+	if (m_signalling->findConn(c,line.toInteger(),false)) {
+	    Lock lck(c);
+	    s.append("id=",";") << c->connId();
+	    s << ",imsi=";
+	    if (c->ue()) {
+		Lock lckUe(c->ue());
+		s << c->ue()->imsi();
+	    }
+	    String buf;
+	    buf.hexify(&c->m_sapiUp,1);
+	    s << ",sapi=0x" << buf;
+	    s << ",usage=" << c->m_usage;
+	    s << ",traffic=" << c->m_traffic;
+	    s << ",waitfortraffic=" <<
+		(c->m_waitForTraffic ? String(c->m_waitForTraffic).c_str() : "");
+	    s << ",ss=" << String::boolText(c->m_ss != 0);
+	    s << ",timeout=";
+	    addTout(s,c->m_timeout,true);
+	}
+    }
+    s << "\r\n";
+    return true;
+}
+
 void YBTSDriver::btsStatus(Message& msg)
 {
     msg.retValue() << "name=" << BTS_CMD << ",type=misc;state=" << stateName() << "\r\n";
@@ -7599,6 +7759,12 @@ bool YBTSDriver::received(Message& msg, int id)
 		    if (dest)
 			return true;
 		}
+		else if (dest.startSkip(name()) && dest) {
+		    if (dest.startSkip("ue"))
+			return msgStatusUE(msg,dest);
+		    if (dest.startSkip("conn"))
+			return msgStatusConn(msg,dest);
+		}
 	    }
 	    break;
     }
@@ -7661,10 +7827,47 @@ bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const Str
 	itemComplete(msg.retValue(),s_stopCmd,partWord);
 	itemComplete(msg.retValue(),s_restartCmd,partWord);
     }
-    if (partLine == YSTRING("debug"))
+    else if (partLine == m_statusCmd || partLine == m_statusOverCmd) {
+	itemComplete(msg.retValue(),YSTRING("ue"),partWord);
+	itemComplete(msg.retValue(),YSTRING("conn"),partWord);
+    }
+    else if (partLine == YSTRING("debug"))
 	itemComplete(msg.retValue(),YSTRING("transceiver"),partWord);
-    if ((partLine == YSTRING("debug")) || (partLine == YSTRING("status")))
+    else if ((partLine == YSTRING("debug")) || (partLine == YSTRING("status")))
 	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
+    if (partLine == m_statusUeCmd) {
+	itemComplete(msg.retValue(),s_all,partWord);
+	itemComplete(msg.retValue(),s_statusUeImsi,partWord);
+	itemComplete(msg.retValue(),s_statusUeTmsi,partWord);
+	itemComplete(msg.retValue(),s_statusUeImei,partWord);
+	itemComplete(msg.retValue(),s_statusUeMsisdn,partWord);
+	return true;
+    }
+    if (partLine.startsWith(m_statusUeCmd)) {
+	if (!m_mm)
+	    return true;
+	String tmp = partLine.substr(m_statusUeCmd.length() + 1);
+	if (tmp == s_statusUeImsi)
+	    m_mm->completeUe(msg.retValue(),partWord);
+	else if (tmp == s_statusUeTmsi)
+	    m_mm->completeUe(msg.retValue(),partWord,false,true);
+	else if (tmp == s_statusUeImei)
+	    m_mm->completeUe(msg.retValue(),partWord,false,false,true);
+	else if (tmp == s_statusUeMsisdn)
+	    m_mm->completeUe(msg.retValue(),partWord,false);
+	return true;
+    }
+    if (partLine == m_statusConnCmd) {
+	itemComplete(msg.retValue(),s_all,partWord);
+	if (m_signalling) {
+	    Lock lck(m_signalling->m_connsMutex);
+	    for (ObjList* o = m_signalling->m_conns.skipNull(); o; o = o->skipNext()) {
+		YBTSConn* c = static_cast<YBTSConn*>(o->get());
+		itemComplete(msg.retValue(),String(c->connId()),partWord);
+	    }
+	}
+	return true;
+    }
     if (m_command && ((partLine == YSTRING(BTS_CMD)) || (partLine == YSTRING(BTS_CMD " help")))) {
 	if (!m_helpCache && (m_state >= Running) && lock(100000)) {
 	    String tmp;
