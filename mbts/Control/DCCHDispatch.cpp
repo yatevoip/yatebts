@@ -133,6 +133,8 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 	const LogicalChannel* ch = gConnMap.find(id);
 	if (ch == chan)
 		gSigConn.send(Connection::SigConnLost,0,id);
+	else if (!ch)
+		chan->send(GSM::RELEASE);
 	LOG(INFO) << "ending dispatch loop for connection " << id <<
 		(ch ? ((ch == chan) ? " (remote release)" : " (reassigned)") : " (local close)");
 }
