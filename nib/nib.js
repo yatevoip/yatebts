@@ -541,12 +541,35 @@ function onUnregister(msg)
     return true;
 }
 
+// Perform one command line completion
+function oneCompletion(msg,str,part)
+{
+	if (part != "" && str.indexOf(part) != 0)
+		return;
+	var ret = msg.retValue();
+	if (ret != "")
+		ret += "\t";
+	msg.retValue(ret + str);
+}
+
+function onComplete(msg, line, part)
+{
+    switch (line) {
+	case "nib":
+	    oneCompletion(msg,"list",part);
+	    break;
+	case "nib list":
+	    oneCompletion(msg,"registered",part);
+	    oneCompletion(msg,"sms",part);
+	    oneCompletion(msg,"rejected",part);
+	    break;
+    }
+}
+
 function onCommand(msg)
 {
-    // To DO: implement commands
-
     if (!msg.line) {
-	//onComplete(msg,msg.partline,msg.partword);
+	onComplete(msg,msg.partline,msg.partword);
 	return false;
     }
     switch (msg.line) {
