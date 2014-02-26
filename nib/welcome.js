@@ -40,7 +40,7 @@ function getPathPrompt(pprompt)
 
 function sendToConference()
 {
-    m = new Message("chan.masquerade");
+    var m = new Message("chan.masquerade");
     m.message = "call.execute";
     m.id = partycallid;
     m.callto = "conf/333";
@@ -50,7 +50,7 @@ function sendToConference()
 
 function makeCall()
 {
-    m = new Message("chan.masquerade");
+    var m = new Message("chan.masquerade");
     m.message = "call.execute";
     m.id = partycallid;
     m.callto = "iax/iax:32843@83.166.206.79/32843";
@@ -61,38 +61,83 @@ function makeCall()
 
 function startEchoTest()
 {
-    m = new Message("chan.masquerade");
+    var m = new Message("chan.masquerade");
     m.message = "call.execute";
     m.id = partycallid;
     m.callto = "external/playrec/echo.sh";
+    m.timeout = 0;
     m.dispatch();
 }
 
-function ChanDtmf(msg)
+function playEchoPrompt()
 {
-    Engine.debug(Engine.DebugInfo,"Got dtmf "+msg.text+" for "+partycallid);
+    var m = new Message("chan.masquerade");
+    m.message = "call.execute";
+    m.id = partycallid;
+    m.callto = "wave/play/"+getPathPrompt("echo.au");
+    m.dispatch();
+}
+
+function onChanDtmf(msg)
+{
+    Engine.debug(Engine.DebugInfo,"Got dtmf "+msg.text+" for "+partycallid+" in state='"+state+"'");
+    if (state != "")
+	// Ignore dtmfs after state changed
+	// Otherwise users can continue changing between states
+	return;
+
+    if (timeout_started==true) {
+	// reset timeout if it was started
+	var m = new Message("chan.control");
+	m.targetid = partycallid;
+	m.timeout = 0;
+	m.dispatch();
+    }
 
     if(msg.text == 1) {
-        startEchoTest();
+	state = "echoTest";
+	playEchoPrompt();
     } else if (msg.text == 2) {
+	state = "conf";
 	sendToConference()
     } else if (msg.text == 3) {
+	state = "call";
 	makeCall();
     }
 }
 
-function welcome_ivr(msg)
+function welcomeIVR(msg)
 {
     Engine.debug(Engine.DebugInfo,"Got call to welcome IVR.");
     partycallid = msg.id;
     partycaller = "yatebts";
 
-    Message.install(ChanDtmf, "chan.dtmf", 90, "id", msg.id);
+    Message.install(onChanDtmf, "chan.dtmf", 90, "id", msg.id);
     Channel.callTo("wave/play/"+getPathPrompt("welcome.au"));
-    //Channel.timeout = "10000";
-    Channel.callJust("wave/record/-");
+
+    if (state == "") {
+	// No digit was pressed
+	// Wait for 10 seconds to see if digit is pressed
+	var m = new Message("chan.control");
+	m.targetid = partycallid;
+	m.timeout = 10000;
+	m.dispatch();
+	timeout_started = true;
+
+	Channel.callTo("wave/record/-");
+    }
+
+    Engine.debug(Engine.DebugInfo,"Returned to main function in state '"+state+"'");
+    if (state == "echoTest") {
+	startEchoTest();
+	return;
+    }
 }
 
+state = "";
+timeout_started = false;
+
+Engine.debugName("welcome");
 // 32843 -> david
 if (message.called=="32843")
-    welcome_ivr(message);
+    welcomeIVR(message);
