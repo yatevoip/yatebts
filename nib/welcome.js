@@ -26,13 +26,17 @@
 
 function getPathPrompt(pprompt)
 {
-    if (File.exists("/usr/share/yate/sounds/"+pprompt))
-	return "/usr/share/yate/sounds/"+pprompt;
-    else if (File.exists("/usr/local/share/yate/sounds/"+pprompt))
-	return "/usr/local/share/yate/sounds/"+pprompt;
-    else if (File.exists("/var/spool/yatebts/"+pprompt))
-	return "/var/spool/yatebts/"+pprompt;
+    if (prompts_dir!="" && File.exists(prompts_dir+pprompt))
+	return prompts_dir+pprompt;
 
+    var dirs = ["/usr/share/yate/sounds/", "/usr/local/share/yate/sounds/", "/var/spool/yatebts/"];
+    for (var i=0; i<dirs.length; i++) { 
+	if (File.exists(dirs[i]+pprompt)) {
+	    prompts_dir = dirs[i];
+	    return prompts_dir+pprompt;
+	}
+    }
+    
     //this should not happen
     Engine.debug(Debug.Warn,"Don't have path for prompt "+pprompt);
     return false;
@@ -136,6 +140,7 @@ function welcomeIVR(msg)
 
 state = "";
 timeout_started = false;
+prompts_dir = "";
 
 Engine.debugName("welcome");
 // 32843 -> david
