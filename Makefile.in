@@ -15,7 +15,8 @@ DEFS :=
 INCLUDES := -I@top_srcdir@
 CCFLAGS:= -O2 @YATE_DEF@
 CFLAGS := $(subst -fno-check-new,,$(CCFLAGS))
-LDFLAGS:= @YATE_LIB@
+LDFLAGS:= @YATE_LNK@
+YATELIBS:= @YATE_LIB@
 MODSTRIP:= @YATE_STR@
 
 PROGS := ybts.yate
@@ -169,7 +170,7 @@ rpm: tarball
 	$(COMPILE) -c $<
 
 %.yate: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
-	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS)
+	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS) $(YATELIBS)
 
 ybts.yate: ybts.cpp ybts.h
 ybts.yate: LOCALLIBS = -lyategsm

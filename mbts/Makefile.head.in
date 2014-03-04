@@ -53,7 +53,6 @@ FILES:=
 LIBTHR := @THREAD_LIB@
 CFLAGS := @YATE_INC@
 LDFLAGS:= @LDFLAGS@
-YATELIBS := @YATE_LNK@
 
 # Makefile.head end
 

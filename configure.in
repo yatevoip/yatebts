@@ -96,8 +96,9 @@ fi
 AC_MSG_CHECKING([for Yate using $yc])
 YATE_VER=`"$yc" --version 2>/dev/null`
 YATE_DEF="$YATE_DEF "`"$yc" --c-all 2>/dev/null`
-YATE_LNK="$YATE_LIB "`"$yc" --libs 2>/dev/null`
-YATE_LIB="$YATE_LIB "`"$yc" --ld-nostrip 2>/dev/null`
+YATE_LNK="$YATE_LIB "`"$yc" --ld-nostrip 2>/dev/null`
+YATE_LIB="-l${YATE_LNK##* -l}"
+YATE_LNK="${YATE_LNK%% -l*}"
 YATE_STR=`"$yc" --ld-strip 2>/dev/null`
 YATE_MOD=`"$yc" --modules 2>/dev/null`
 YATE_SCR=`"$yc" --scripts 2>/dev/null`
