@@ -31,22 +31,22 @@ clean:
 	@-$(RM) $(PROGS) $(LIBS) $(OBJS) $(EXTRACLEAN) core 2>/dev/null
 
 install: $(PROGS)
-	@mkdir -p "$(DESTDIR)$(moddir)/bts" && \
+	@mkdir -p "$(DESTDIR)$(moddir)/server/bts" && \
 	for i in $(PROGS) ; do \
-	    install -D "$$i" "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    install -D "$$i" "$(DESTDIR)$(moddir)/server/bts/$$i" ; \
 	done
 	for i in $(FILES) ; do \
-	    install -m 0644 "$$i" "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    install -m 0644 "$$i" "$(DESTDIR)$(moddir)/server/bts/$$i" ; \
 	done
 
 uninstall:
 	@-for i in $(FILES) ; do \
-	    rm -f "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    rm -f "$(DESTDIR)$(moddir)/server/bts/$$i" ; \
 	done
 	@-for i in $(PROGS) ; do \
-	    rm -f "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    rm -f "$(DESTDIR)$(moddir)/server/bts/$$i" ; \
 	done
-	@-test -d "$(DESTDIR)$(moddir)/bts" && rmdir "$(DESTDIR)$(moddir)/bts"
+	@-test -d "$(DESTDIR)$(moddir)/server/bts" && rmdir "$(DESTDIR)$(moddir)/server/bts"
 
 %.o: @srcdir@/%.cpp $(INCFILES)
 	$(COMPILE) -c $<

@@ -41,7 +41,7 @@ namespace { // anonymous
 
 #include "ybts.h"
 
-#define BTS_DIR "bts"
+#define BTS_DIR "server/bts"
 #define BTS_CMD "mbts"
 
 // Handshake interval (timeout)

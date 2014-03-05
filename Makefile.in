@@ -90,9 +90,9 @@ strip: all
 	-strip --strip-debug --discard-locals $(PROGS)
 
 install: all
-	@mkdir -p "$(DESTDIR)$(moddir)/bts" && \
+	@mkdir -p "$(DESTDIR)$(moddir)/server" && \
 	for i in $(PROGS) ; do \
-	    install -D "$$i" "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    install -D "$$i" "$(DESTDIR)$(moddir)/server/$$i" ; \
 	done
 	@mkdir -p "$(DESTDIR)$(confdir)/" && \
 	lst="`ls -1 @srcdir@/*.conf @srcdir@/*.sample @srcdir@/*.default @srcdir@/*.sql 2>/dev/null | sed 's/\.sample//g; s/\.default//g; s/[^ ]*\*\.[^ ]*//g' | sort | uniq`" ; \
@@ -123,9 +123,9 @@ uninstall:
 	$(MAKE) -C ./mbts/TransceiverRAD1 uninstall
 	$(MAKE) -C ./mbts/apps uninstall
 	@-for i in $(PROGS) ; do \
-	    rm -f "$(DESTDIR)$(moddir)/bts/$$i" ; \
+	    rm -f "$(DESTDIR)$(moddir)/server/$$i" ; \
 	done
-	@-test -d "$(DESTDIR)$(moddir)/bts" && rmdir "$(DESTDIR)$(moddir)/bts"
+	@-test -d "$(DESTDIR)$(moddir)/server" && rmdir "$(DESTDIR)$(moddir)/server"
 	@-test -d "$(DESTDIR)$(moddir)" && rmdir "$(DESTDIR)$(moddir)"
 	@-if [ -d "$(DESTDIR)$(confdir)" ]; then \
 	    rmdir "$(DESTDIR)$(confdir)" || echo "Remove conf files by hand if you want so"; \

@@ -801,16 +801,16 @@ Counters.Assign=10
 ;max_start=10
 
 ; peer_cmd: string: Command used to run the MBTS application
-; Defaults to expansion of ${modulepath}/bts/mbts
-;peer_cmd=${modulepath}/bts/mbts
+; Defaults to expansion of ${modulepath}/server/bts/mbts
+;peer_cmd=${modulepath}/server/bts/mbts
 
 ; peer_arg: string: Optional command line parameter for the MBTS application
 ; Defaults to no parameter
 ;peer_arg=
 
 ; peer_dir: string: Directory to change after forking the MBTS application
-; Defaults to expansion of ${modulepath}/bts
-;peer_dir=${modulepath}/bts
+; Defaults to expansion of ${modulepath}/server/bts
+;peer_dir=${modulepath}/server/bts
 
 ; print_msg: boolean/string: Print sent/received messages to output if debug is at level 9
 ; Allowed values are boolean values or string
