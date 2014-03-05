@@ -5,7 +5,7 @@
 DESTDIR :=
 
 SCRIPTS := nib.js subscribers.js welcome.js
-SOUNDS  := welcome.au
+SOUNDS  := welcome.au echo.au
 
 prefix = @prefix@
 exec_prefix = @exec_prefix@
