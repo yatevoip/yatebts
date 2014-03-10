@@ -486,6 +486,12 @@ class YBTSConn : public RefObject, public Mutex, public YBTSConnIdHolder
     friend class YBTSMM;
     friend class YBTSDriver;
 public:
+    enum Flags {
+	FNull = 0,
+	FMoSms = 0x01,
+	FMtSms = 0x02,
+	FCmSms = 0x10,
+    };
     ~YBTSConn();
     inline YBTSUE* ue()
 	{ return m_ue; }
@@ -567,7 +573,7 @@ protected:
     // The following data is used by YBTSSignalling and protected by conns list mutex
     uint64_t m_timeout;                  // Connection timeout
     unsigned int m_usage;                // Usage counter
-    bool m_mtSms;                        // MT SMS was used on this connection
+    int m_extTout;                       // Use extended conn timeout
 };
 
 class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
@@ -684,10 +690,18 @@ public:
     void dropAllSS(const char* reason = "net-out-of-order");
     // Increase/decrease connection usage. Update its timeout
     // Return false if connection is not found
-    inline bool setConnUsage(uint16_t connId, bool on, bool mtSms = false) {
+    inline bool setConnUsage(uint16_t connId, bool on, int flag = 0,
+	bool update = true) {
 	    Lock lck(m_connsMutex);
 	    YBTSConn* conn = findConnInternal(connId);
-	    return conn && setConnUsageInternal(*conn,on,mtSms);
+	    return conn && setConnUsageInternal(*conn,on,flag,update);
+	}
+    inline bool setConnUsage(YBTSConn* conn, bool on, int flag = 0,
+	bool update = true) {
+	    if (!conn)
+		return false;
+	    Lock lck(m_connsMutex);
+	    return setConnUsageInternal(*conn,on,flag,update);
 	}
     inline void setConnToutCheck(uint64_t tout) {
 	    if (!tout)
@@ -757,7 +771,8 @@ protected:
 	    return false;
 	}
     // Increase/decrease connection usage. Update its timeout
-    bool setConnUsageInternal(YBTSConn& conn, bool on, bool mtSms);
+    bool setConnUsageInternal(YBTSConn& conn, bool on, int flag,
+	bool update = true);
     inline void setConnToutCheckInternal(uint64_t tout) {
 	    if (tout && (!m_connsTimeout || tout < m_connsTimeout)) {
 		m_haveConnTout = true;
@@ -2047,6 +2062,14 @@ static inline void getGlobalUInt64(uint64_t& buf, const uint64_t& value)
     buf = value;
 }
 
+inline void setIntMask(int& flags, int mask, bool on = true)
+{
+    if (on)
+	flags |= mask;
+    else
+	flags &= ~mask;
+}
+
 static inline bool isValidStartTime(uint64_t val)
 {
     uint64_t cmp = 0;
@@ -2627,7 +2650,7 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     m_sapiUp(1),
     m_timeout(0),
     m_usage(0),
-    m_mtSms(false)
+    m_extTout(0)
 {
 }
 
@@ -3189,7 +3212,7 @@ bool YBTSSignalling::addMOSms(YBTSConn* conn, const String& callRef, uint8_t sap
     XDebug(this,DebugAll,"Added MO SMS (%p) tid=%s to conn %u [%p]",
 	i,i->m_callRef.c_str(),conn->connId(),this);
     lck.drop();
-    setConnUsage(conn->connId(),true);
+    setConnUsage(conn->connId(),true,YBTSConn::FMoSms);
     return true;
 }
 
@@ -3208,7 +3231,7 @@ YBTSSmsInfo* YBTSSignalling::removeSms(YBTSConn* conn, const String& callRef,
     XDebug(this,DebugAll,"Removed %s SMS (%p) tid=%s from conn %u [%p]",
 	(incoming ? "MO" : "MT"),i,i->m_callRef.c_str(),conn->connId(),this);
     lck.drop();
-    setConnUsage(conn->connId(),false);
+    setConnUsage(conn,false,incoming ? YBTSConn::FMoSms : 0);
     return i;
 }
 
@@ -3342,18 +3365,31 @@ bool YBTSSignalling::findConnSSTid(RefPointer<YBTSConn>& conn, const String& ssI
 }
 
 // Increase/decrease connection usage. Update its timeout
-bool YBTSSignalling::setConnUsageInternal(YBTSConn& conn, bool on, bool mtSms)
+bool YBTSSignalling::setConnUsageInternal(YBTSConn& conn, bool on, int flag, bool update)
 {
+    switch (flag) {
+	case YBTSConn::FMoSms:
+	    if (on)
+		setIntMask(conn.m_extTout,YBTSConn::FCmSms,false);
+	    break;
+	case YBTSConn::FMtSms:
+	    if (on)
+		setIntMask(conn.m_extTout,YBTSConn::FMtSms);
+	    break;
+	case YBTSConn::FCmSms:
+	    setIntMask(conn.m_extTout,flag,on);
+	    break;
+    }
+    if (!update)
+	return true;
     if (on)
 	conn.m_usage++;
     else if (conn.m_usage)
 	conn.m_usage--;
-    if (mtSms && on)
-	conn.m_mtSms = true;
     if (conn.m_usage)
 	conn.m_timeout = 0;
     else if (!conn.m_timeout) {
-	if (!conn.m_mtSms)
+	if (!conn.m_extTout)
 	    conn.m_timeout = Time::now() + (uint64_t)m_connIdleIntervalMs * 1000;
 	else
 	    conn.m_timeout = Time::now() + (uint64_t)m_connIdleMtSmsIntervalMs * 1000;
@@ -4085,7 +4121,7 @@ void YBTSMtSmsList::destroyed()
 {
     stopPaging();
     if (m_conn && __plugin.signalling())
-	__plugin.signalling()->setConnUsage(m_conn->connId(),false,true);
+	__plugin.signalling()->setConnUsage(m_conn,false,YBTSConn::FMtSms);
 }
 
 
@@ -4621,6 +4657,7 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	return;
     }
     RefPointer<YBTSUE> ue = conn->ue();
+    bool isSms = false;
     if (!ue) {
 	XmlElement* cmServType = 0;
 	XmlElement* identity = 0;
@@ -4633,7 +4670,8 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    return;
 	}
 	const String& type = cmServType->getText();
-	if (type == s_cmMOCall || type == s_cmSMS || type == s_cmSS)
+	isSms = (type == s_cmSMS);
+	if (isSms || type == s_cmMOCall || type == s_cmSS)
 	    ;
 	else {
 	    Debug(this,DebugNote,
@@ -4679,6 +4717,8 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
     }
     ue->stopPagingNow();
     sendCMServiceRsp(m,conn,0);
+    if (isSms && __plugin.signalling())
+	__plugin.signalling()->setConnUsage(conn,true,YBTSConn::FCmSms,false);
     __plugin.checkMtService(ue,conn);
 }
 
@@ -6517,7 +6557,7 @@ bool YBTSDriver::checkMtSms(YBTSMtSmsList& list)
 	    return true;
 	}
 	list.stopPaging();
-	signalling()->setConnUsage(list.m_conn->connId(),true,true);
+	signalling()->setConnUsage(list.m_conn,true,YBTSConn::FMtSms);
     }
     // Wait for traffic to start (channel mode change was requested)
     if (list.m_conn->waitForTraffic())
