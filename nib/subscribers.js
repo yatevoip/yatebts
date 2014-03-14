@@ -19,17 +19,31 @@
  */
 
 /*
+// Note! Subscribers are accepted by either matching the IMSI against a configured regular expression 
+// or by individually configuring each acceptable IMSI
+
 var subscribers = {
-"00101000000000":
+"001990010001014":
 {
-    "imsi":"00101000000000",
-    "msisdn":"074433", // oficial phone number
+    "msisdn":"074434", // oficial phone number
     "active":1,
-    "ki":"3",
-    "op":""
-    "short_number":"45454" //short number to be called by other yatebts-nib users
+    "ki":"00112233445566778899aabbccddeeff",
+    "op":"00000000000000000000000000000000",
+    "imsi_type":"3G",
+    "short_number":"" //short number to be called by other yatebts-nib users
+},
+"001990010001015":
+{
+    "msisdn":"074434", // oficial phone number
+    "active":1,
+    "ki":"00112233445566778899aabbccddeeff",
+    "op":"",
+    "imsi_type":"2G",
+    "short_number":"" //short number to be called by other yatebts-nib users
 }
 };
 */
 
+// Note! If a regular expression is used, 2G/3G authentication cannot be used. 
+// To use 2G/3G authentication, please set subscribers individually.
 var regexp = /^001/;

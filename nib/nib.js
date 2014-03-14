@@ -27,6 +27,31 @@
 #require "subscribers.js"
 #require "libchatbot.js"
 
+// Helper that returns a left or right aligned fixed length string
+function strFix(str,len,pad)
+{
+    if (str === null)
+	str = "";
+    if (pad == "")
+	pad = " ";
+    if (len < 0) {
+	// right aligned
+	len = -len;
+	if (str.length >= len)
+	    return str.substr(str.length - len);
+    	while (str.length < len)
+	    str = pad + str;
+    }
+    else {
+	// left aligned
+	if (str.length >= len)
+	    return str.substr(0,len);
+	while (str.length < len)
+	    str += pad;
+    }
+    return str;
+}
+ 
 function randomint(modulus)
 {
     if (randomint.count==undefined) {
@@ -37,6 +62,17 @@ function randomint(modulus)
     // Knuth's integer hash.
     var hash =(randomint.count * 2654435761) % 4294967296;
     return hash % modulus;
+}
+
+function rand32()
+{
+    var tmp = Math.random();
+    return strFix(tmp.toString(16),-8,'0');
+}
+ 
+function rand128()
+{
+    return rand32() + rand32() + rand32() + rand32();
 }
  
 function numberAvailable(val)
@@ -135,7 +171,7 @@ function getSubscriberIMSI(msisdn)
 {
     var imsi_key, nr, short_number;
 
-//    Engine.debug(Debug.DebugInfo,"getSubscriberIMSI, msisdn="+msisdn);
+//    Engine.debug(Engine.DebugInfo,"getSubscriberIMSI, msisdn="+msisdn);
 
     for (imsi_key in subscribers) {
 	nr = subscribers[imsi_key].msisdn;
@@ -156,7 +192,7 @@ function getSubscriberIMSI(msisdn)
 		return imsi_key;
     }
 
-//    Engine.debug(Debug.DebugInfo,"could not get imsi for nr="+msisdn);
+//    Engine.debug(Engine.DebugInfo,"could not get imsi for nr="+msisdn);
     return false;
 }
 
@@ -278,11 +314,11 @@ function onIdleAction()
 		    // add sms at the end of pending SMSs
 		    sms.next_try = (Date.now() / 1000) + 5; // current time + 5 seconds 
 		    pendingSMSs.push(sms);
-		    Engine.debug(Debug.DebugInfo,"Could not deliver sms from imsi "+sms.imsi+" to number "+sms.dest+".");
+		    Engine.debug(Engine.DebugInfo,"Could not deliver sms from imsi "+sms.imsi+" to number "+sms.dest+".");
 		} else
-		    Engine.debug(Debug.DebugInfo,"Droped sms from imsi "+sms.imsi+" to number "+sms.dest+". Exceeded attempts.");
+		    Engine.debug(Engine.DebugInfo,"Droped sms from imsi "+sms.imsi+" to number "+sms.dest+". Exceeded attempts.");
 	    } else
-		Engine.debug(Debug.DebugInfo,"Delivered sms from imsi "+sms.imsi+" to number "+sms.dest);
+		Engine.debug(Engine.DebugInfo,"Delivered sms from imsi "+sms.imsi+" to number "+sms.dest);
 	}
     }
 
@@ -454,6 +490,126 @@ function addRejected(imsi)
 	seenIMSIs[imsi] = seenIMSIs[imsi]+1;
 }
 
+function authResync(msg,imsi)
+{
+    var ki   = subscribers[imsi].ki;
+    var op   = subscribers[imsi].op;
+    var sqn  = subscribers[imsi].sqn;
+    var rand = msg.rand;
+    var auts = msg.auts;
+
+    var m = new Message("gsm.auth");
+    m.protocol = "milenage";
+    m.ki = ki;
+    m.op = op;
+    m.rand = rand;
+    m.auts = auts;
+    m.dispatch(true);
+    var ns = m.sqn;
+    if (ns !== null) {
+	Engine.debug(Engine.DebugInfo,"Re-sync " + imsi + " by SQN " + sqn + " -> " + ns);
+	// Since the synchronized sequence was already used increment it
+	sqn = 0xffffffffffff & (0x20 + parseInt(ns,16));
+	sqn = strFix(sqn.toString(16),-12,'0');
+	subscribers[imsi].sqn = sqn;
+
+	// continue with Authentication now
+	return startAuth(msg,imsi);
+    }
+    else {
+	Engine.debug(Engine.DebugWarn,"Re-sync " + imsi + " failed, SQN " + sqn);
+	return false;
+    }
+}
+
+function startAuth(msg,imsi)
+{
+    var ki = subscribers[imsi].ki;
+    var op = subscribers[imsi].op;
+    var imsi_type = subscribers[imsi].imsi_type;
+    var sqn = subscribers[imsi].sqn;
+
+    if (sqn == "")
+	sqn = "000000000000";
+
+    if (ki=="" || ki==null) {
+	Engine.debug(Engine.DebugWarn, "Please configure ki and imsi_type in subscribers.js. You can edit the file directly or use the NIB interface. If you don't wish to authenticate SIMs, please configure regexp instead of individual subscribers.");
+	msg.error = "unacceptable";
+	return false;
+    }
+
+    if (imsi_type=="3G") {
+	rand = rand128();
+	var m = new Message("gsm.auth");
+	m.protocol = "milenage";
+	m.ki = ki;
+	m.op = op;
+	m.rand = rand;
+	m.sqn = sqn;
+	if (!m.dispatch(true)) {
+	    msg.error = "failure";
+	    return false;
+	}
+	// Increment the sequence without changing index
+	sqn = 0xffffffffffff & (0x20 + parseInt(sqn,16));
+	sqn = strFix(sqn.toString(16),-12,'0');
+
+	// remember xres and sqn
+	subscribers[imsi]["xres"] = m.xres;
+	
+	
+    Engine.debug(Engine.DebugNote,"IMSI: " + imsi + " writing xres " + subscribers[imsi]["xres"] + " from " + m.xres);
+	
+	
+	
+	subscribers[imsi]["sqn"] = sqn;
+	// Populate message with auth params
+	msg["auth.rand"] = rand;
+	msg["auth.autn"] = m.autn;
+	msg.error = "noauth";
+	return false;
+    } 
+    else {
+	rand = rand128();
+	var m = new Message("gsm.auth");
+	m.protocol = "comp128";
+	m.ki = ki;
+	m.op = op;
+	m.rand = rand;
+	if (!m.dispatch(true)) {
+	    msg.error = "failure";
+	    return false;
+	}
+	// remember sres
+	subscribers[imsi]["sres"] = m.sres;
+	// Populate message with auth params
+	msg["auth.rand"] = rand;
+	msg.error = "noauth";
+	return false;
+    }
+}
+
+function checkAuth(msg,imsi)
+{
+    var res;
+
+    if (subscribers[imsi]["imsi_type"]=="3G")
+	res = subscribers[imsi]["xres"];
+    else
+	res = subscribers[imsi]["sres"];
+
+    var upper = msg["auth.response"];
+    upper = upper.toUpperCase();
+    
+    Engine.debug(Engine.DebugNote,res + " " + upper);
+    
+    if (res != upper)
+	// it's safe to do this directly, ybts module makes sure this can't start a loop
+	return startAuth(msg,imsi);
+
+    return true;
+}
+
 function onRegister(msg)
 {
     var imsi = msg.username;
@@ -466,6 +622,23 @@ function onRegister(msg)
     if (subscribers != undefined) {
 	Engine.debug(Engine.DebugInfo,"Searching imsi in subscribers.");
 	msisdn = getSubscriberMsisdn(imsi);
+
+	if (subscribers[imsi] != "") {
+	    // start authentication procedure if it was not started
+	    if (msg["auth.response"]=="" && msg["error"]=="" && msg["auth.auts"]=="") {
+		return startAuth(msg,imsi);
+	    }
+	    else if (msg["auth.response"]!="") {
+		if (checkAuth(msg,imsi)==false)
+		    return false;
+	    } 
+	    else if (msg["auth.auts"]) {
+		return authResync(msg,imsi);
+	    }
+	    else
+		return false;
+	}
+
 	if (msisdn==null || msisdn=="") {
 	    // check if imsi is already registered so we don't allocate a new number
 	    msisdn = alreadyRegistered(imsi);
@@ -608,6 +781,7 @@ var sms_attempts = 3;
 var regUsers = {};
 var pendingSMSs = [];
 var seenIMSIs = {};  // imsi:count_rejected
+var ussd_sessions = {};
 
 Engine.debugName("nib");
 Message.install(onUnregister,"user.unregister",80);
