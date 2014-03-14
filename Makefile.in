@@ -52,6 +52,7 @@ all: $(PROGS)
 	$(MAKE) -C ./mbts/apps all
 	$(MAKE) -C ./mbts/Transceiver52M all
 	$(MAKE) -C ./mbts/TransceiverRAD1 all
+	$(MAKE) -C ./nib/auth all
 
 debug:
 	$(MAKE) all DEBUG=-g3 MODSTRIP=
@@ -71,6 +72,7 @@ clean:
 	@for i in mbts/*; do \
 	    test ! -f "$$i/Makefile" || $(MAKE) -C "$$i" clean BUILD_TESTS=yes; \
 	done
+	$(MAKE) -C ./nib/auth clean
 
 check-topdir:
 	@test -f configure || (echo "Must make this target in the top source directory"; exit 1)
@@ -116,8 +118,10 @@ install: all
 	$(MAKE) -C ./mbts/Transceiver52M install
 	$(MAKE) -C ./mbts/TransceiverRAD1 install
 	$(MAKE) -C ./nib install
+	$(MAKE) -C ./nib/auth install
 
 uninstall:
+	$(MAKE) -C ./nib/auth uninstall
 	$(MAKE) -C ./nib uninstall
 	$(MAKE) -C ./mbts/Transceiver52M uninstall
 	$(MAKE) -C ./mbts/TransceiverRAD1 uninstall

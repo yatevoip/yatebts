@@ -60,7 +60,7 @@ AC_C_CONST
 AC_C_INLINE
 AC_TYPE_SIZE_T
 AC_HEADER_TIME
-AC_C_BIGENDIAN
+AC_C_BIGENDIAN(,[CFLAGS="$CFLAGS -DLITTLE_ENDIAN"])
 
 # Check for mandatory features
 AC_CHECK_HEADERS([sys/socket.h sys/time.h pthread.h syslog.h], , [AC_MSG_ERROR([This header file is required.])])
@@ -82,6 +82,7 @@ YATE_SCR=""
 YATE_SHR=""
 YATE_CFG=""
 THREAD_LIB=""
+INSTALL_D=""
 yc="yate-config"
 AC_ARG_WITH(yate,AC_HELP_STRING([--with-yate=DIR],[use Yate from DIR]),[ac_cv_use_yate=$withval],[ac_cv_use_yate=yes])
 if [[ "x$ac_cv_use_yate" = "xno" ]]; then
@@ -105,6 +106,7 @@ YATE_SCR=`"$yc" --scripts 2>/dev/null`
 YATE_SHR=`"$yc" --share 2>/dev/null`
 YATE_CFG=`"$yc" --config 2>/dev/null`
 THREAD_LIB=`"$yc" --param=THREAD_LIB 2>/dev/null`
+INSTALL_D=`"$yc" --param=INSTALL_D 2>/dev/null`
 YATE_INC=`echo "$YATE_DEF -DHAVE_CONFIG_H" | sed 's/-fno-exceptions *//' 2>/dev/null`
 if [[ "x$YATE_VER" = "x" ]]; then
     YATE_VER="no"
@@ -130,6 +132,7 @@ AC_SUBST(YATE_SCR)
 AC_SUBST(YATE_SHR)
 AC_SUBST(YATE_CFG)
 AC_SUBST(THREAD_LIB)
+AC_SUBST(INSTALL_D)
 
 
 HAVE_USB=no
@@ -271,7 +274,8 @@ AC_CONFIG_FILES([yate-bts.spec
                  mbts/TransceiverRAD1/Makefile:mbts/Makefile.head.in:mbts/TransceiverRAD1/Makefile.in:mbts/Makefile.tail.in
                  mbts/sqlite3/Makefile:mbts/Makefile.head.in:mbts/sqlite3/Makefile.in:mbts/Makefile.tail.in
                  mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in
-                 nib/Makefile])
+                 nib/Makefile
+                 nib/auth/Makefile])
 CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//'`
 AC_SUBST(CONFIGURE_FILES)
 AC_OUTPUT

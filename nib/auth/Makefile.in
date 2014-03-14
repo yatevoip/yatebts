@@ -1,0 +1,59 @@
+# Makefile
+# This file holds the make rules the Yate BTS module and associated executables
+
+# override DESTDIR at install time to prefix the install directory
+DESTDIR :=
+
+# override DEBUG at compile time to enable full debug or remove it all
+DEBUG :=
+
+CC  := @CC@ -Wall
+CFLAGS := @CFLAGS@
+INCLUDES := -I@top_srcdir@
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+datarootdir = @datarootdir@
+
+datadir:= @datadir@
+scrdir := @YATE_SCR@
+shrdir := @YATE_SHR@
+
+SCRIPTS := gsm_auth.sh
+PROGS   := do_comp128 do_milenage
+CCOMPILE = $(CC) $(DEFS) $(DEBUG) $(INCLUDES) $(CFLAGS)
+
+MILENAGE:= @srcdir@/milenage/main.c \
+	@srcdir@/milenage/milenage.c @srcdir@/milenage/rijndael.c
+MIL_INC := @srcdir@/milenage/milenage.h @srcdir@/milenage/rijndael.h
+
+# include optional local make rules
+-include YateLocal.mak
+
+.PHONY: all clean
+all: $(PROGS)
+
+install: all
+	@mkdir -p "$(DESTDIR)$(scrdir)/" && \
+	for i in $(SCRIPTS) ; do \
+	    @INSTALL_D@ @srcdir@/$$i "$(DESTDIR)$(scrdir)/" ; \
+	done ; \
+	for i in $(PROGS) ; do \
+	    @INSTALL_D@ "$$i" "$(DESTDIR)$(scrdir)/" ; \
+	done
+
+uninstall:
+	@-for i in $(SCRIPTS) $(PROGS) ; do \
+	    rm -f "$(DESTDIR)$(scrdir)/$$i" ; \
+	done
+	@-rmdir "$(DESTDIR)$(scrdir)"
+	@-rmdir "$(DESTDIR)$(shrdir)"
+
+clean:
+	@-$(RM) $(PROGS) 2>/dev/null
+
+do_comp128: @srcdir@/do_comp128.c
+	$(CCOMPILE) -o $@ $<
+
+do_milenage: $(MILENAGE) $(MIL_INC)
+	$(CCOMPILE) -o $@ $(MILENAGE)
