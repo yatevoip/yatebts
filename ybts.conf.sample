@@ -892,3 +892,29 @@ Counters.Assign=10
 ; This parameter is applied on reload
 ; Defaults to object
 ;export_xml_as=object
+
+[security]
+; This section configures security related parameters
+
+; t3260: integer: Interval (in milliseconds) to wait for a response to authentication
+;  requests
+; Authentication will be aborted on timer expiry
+; This parameter is applied on reload
+; Interval allowed: 5000..3600000
+; Defaults to 720000
+;t3260=720000
+
+; auth.call: boolean: Authenticate MS on MT calls
+; This parameter is applied on reload
+; Defaults to no
+;auth.call=no
+
+; auth.sms: boolean: Authenticate MS on MT SMS
+; This parameter is applied on reload
+; Defaults to no
+;auth.sms=no
+
+; auth.ussd: boolean: Authenticate MS on MT USSD
+; This parameter is applied on reload
+; Defaults to no
+;auth.ussd=no
