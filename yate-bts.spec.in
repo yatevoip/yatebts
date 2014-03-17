@@ -83,11 +83,14 @@ At least one transceiver package must also be installed for interfacing with the
 %dir %{_defaultdocdir}/%{name}-%{version}
 %doc %{_defaultdocdir}/%{name}-%{version}/*
 %dir %{btsdir}
+%dir %{_datadir}/yate/nib_web
 %{moddir}/*.yate
 %{btsdir}/mbts
 %{_datadir}/yate/scripts/*
 %{_datadir}/yate/sounds/*
-%config(noreplace) %{_sysconfdir}/yate/*.conf
+%{_datadir}/yate/nib_web/*
+%config(noreplace) %{_datadir}/yate/nib_web/.htaccess
+%config(noreplace) %{_sysconfdir}/yate/*
 
 
 %if "%{no_rad1}" != "1"
@@ -193,5 +196,8 @@ make install DESTDIR=%{buildroot}
 rm -rf %{buildroot}
 
 %changelog
+* Mon Mar 17 2014 Paul Chitescu <paulc@null.ro>
+- Added NIB Web interface files
+
 * Wed Dec 09 2013 Paul Chitescu <paulc@null.ro>
 - Created specfile

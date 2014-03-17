@@ -4,8 +4,9 @@
 # override DESTDIR at install time to prefix the install directory
 DESTDIR :=
 
-SCRIPTS := nib.js subscribers.js welcome.js
+SCRIPTS := nib.js welcome.js
 SOUNDS  := welcome.au echo.au
+CONFIG  := @srcdir@/subscribers.js
 
 prefix = @prefix@
 exec_prefix = @exec_prefix@
@@ -17,6 +18,7 @@ moddir := @YATE_MOD@
 scrdir := @YATE_SCR@
 shrdir := @YATE_SHR@
 snddir := "$(shrdir)/sounds"
+webdir := "$(shrdir)/nib_web"
 
 # include optional local make rules
 -include YateLocal.mak
@@ -27,7 +29,7 @@ all:
 install: all
 	@mkdir -p "$(DESTDIR)$(confdir)/" && \
 	lst="`ls -1 @srcdir@/*.conf @srcdir@/*.sample @srcdir@/*.default @srcdir@/*.sql 2>/dev/null | sed 's/\.sample//g; s/\.default//g; s/[^ ]*\*\.[^ ]*//g' | sort | uniq`" ; \
-	for s in $$lst; do \
+	for s in $$lst $(CONFIG); do \
 	    d="$(DESTDIR)$(confdir)/`echo $$s | sed 's,.*/,,'`" ; \
 	    if [ -f "$$d" ]; then \
 		echo "Not overwriting existing $$d" ; \
@@ -47,6 +49,11 @@ install: all
 	for i in $(SOUNDS) ; do \
 	    install -m 0644 @srcdir@/$$i "$(DESTDIR)$(snddir)/" ; \
 	done
+	@mkdir -p "$(DESTDIR)$(webdir)/" && \
+	for i in `find "@srcdir@/web" -type f | fgrep -v .svn` ; do \
+	    @INSTALL_D@ -m 0644 "$$i" "$(DESTDIR)$(webdir)/$${i##*/web/}" ; \
+	done ; \
+	chmod +x "$(DESTDIR)$(webdir)/ansql/force_update.php"
 
 uninstall:
 	@-for i in $(SCRIPTS) ; do \
