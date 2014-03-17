@@ -163,7 +163,7 @@ function edit_subscriber($error=null,$error_fields=array())
 		"active" => array("value"=>$active, "display"=>"checkbox"),
 		"imsi_type" => array($imsi_type, "display"=>"select", "column_name"=>"IMSI Type", "required"=>true, "comment"=> "Type of SIM associated to the IMSI"),
 		"ki" => array("value"=>get_param($subscriber,"ki"), "comment"=>"Card secret", "required"=>true),
-		"op" => array("value"=>get_param($subscriber,"op"), "comment"=>"Operator secret. 1/2/3 for 2G IMSIs. Default 0 for 3G IMSIs.")
+		"op" => array("value"=>get_param($subscriber,"op"), "comment"=>"Operator secret. Empty for 2G IMSIs.<br/>00000000000000000000000000000000 for 3G IMSIs.")
 	);
 	if ($imsi && count($subscriber) && !in_array("imsi",$error_fields))
 		$fields["imsi"]["display"] = "fixed";
@@ -201,6 +201,8 @@ function edit_subscriber_write_file()
 		$subscriber[$name] = $val;
 	}
 	$subscriber["active"] = ($subscriber["active"]=="on") ? 1 : 0;
+	if ($subscriber["imsi_type"]=="2G")
+		$subscriber["op"] = "";
 
 	if (!getparam("imsi_val") && isset($subscribers[$imsi]))
 		return edit_subscriber("Subscriber with $imsi is already set.",array("imsi"));
