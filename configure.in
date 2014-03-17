@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(Yate-BTS, 1.0.0)
+AC_INIT(Yate-BTS, 2.0.0)
 AC_CONFIG_SRCDIR([README])
 AC_PREREQ(2.52)
 AC_CONFIG_HEADERS([config.h])
@@ -70,7 +70,7 @@ AC_CHECK_FUNCS([openlog syslog], , [AC_MSG_ERROR([This function is required.])])
 AC_CHECK_HEADERS([byteswap.h])
 
 # Check for Yate (required)
-YATE_REQ="5.1.0"
+YATE_REQ="5.2.0"
 YATE_VER=""
 YATE_DEF=""
 YATE_INC=""
