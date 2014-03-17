@@ -35,7 +35,7 @@ Before using the interface, the permissions for the directories that are
 set in the $yate_conf_dir variable MUST be set.
 
 The command that has to be runned as root (if the default settings are set) is:
-chmod -R a+rwx /usr/local/etc/yatebts_nib/ 
+chmod -R a+rw /usr/local/etc/yatebts_nib/ 
 
 Failing to configure the right permissions will make the interface display some errors
 the first time when it's used.
