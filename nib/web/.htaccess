@@ -1,0 +1,9 @@
+# NOTE: set in httpd.conf for the directory
+# where is the interface: AllowOverride All
+
+# Deny from all and allow the interface to be
+# accessed from 127.0.0.1 uncomment the following:
+
+order deny,allow
+allow from 127.0.0.1 
+deny from all

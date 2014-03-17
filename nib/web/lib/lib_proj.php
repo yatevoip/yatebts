@@ -1,0 +1,330 @@
+<?php
+require_once "ansql/socketconn.php";
+
+function include_formats($formats,$form_identifier)
+{
+	$formats = explode(',',$formats);
+	?>
+	<input type="checkbox" name="<?php print $form_identifier;?>alaw" <?php if (in_array("alaw",$formats)) print "CHECKED";?>>alaw
+	<input type="checkbox" name="<?php print $form_identifier;?>mulaw" <?php if (in_array("mulaw",$formats)) print "CHECKED";?>>mulaw
+	<input type="checkbox" name="<?php print $form_identifier;?>gsm" <?php if (in_array("gsm",$formats)) print "CHECKED";?>>gsm
+	<br/>
+	<input type="checkbox" name="<?php print $form_identifier;?>g729"<?php if (in_array("g729",$formats)) print "CHECKED";?>>g729
+	<input type="checkbox" name="<?php print $form_identifier;?>g723"<?php if (in_array("g723",$formats)) print "CHECKED";?>>g723
+	&nbsp;&nbsp;&nbsp;<input type="checkbox" name="<?php print $form_identifier;?>ilbc"<?php if (in_array("ilbc",$formats)) print "CHECKED";?>>ilbc
+	<?php
+}
+
+function search_box($fields, $submit="Search", $title=NULL)
+{
+	if (!isset($fields[0])) {
+		errormess("Wrong format of params in search_box()","no");
+		return;
+	}
+	if (!isset($fields[1])) {
+		$fields[1] = array();
+		for ($i=0; $i<count($fields[0]); $i++) {
+			$fld = strtolower($fields[0][$i]);
+			if ($fld=="&nbsp;")
+				continue;
+			$fields[1][] = "<input type=\"text\" name=\"s_$fld\" value=\"".getparam("s_".$fld)."\" />";
+		}
+	}
+	if ($submit=="Search")
+		$fields[count($fields)-1][] = "<input type=\"submit\" value=\"Search\" />";
+	start_form();
+	addHidden();
+	formTable($fields,$title);
+	end_form();
+}
+
+function get_imsi_msisdn_cond()
+{
+	$conds = array();
+	if (getparam("s_imsi"))
+		$conds["imsi"] = getparam("s_imsi");
+	if (getparam("s_msisdn"))
+		$conds["msisdn"] = getparam("s_msisdn");
+	if (getparam("s_status"))
+		$conds["status"] = getparam("s_status");
+
+	return $conds;
+}
+
+function valid_address($addr)
+{
+	$expl_addr = explode(".",$addr);
+	if (count($expl_addr)!=4)
+		return false;
+	for ($i=0; $i<4; $i++)
+		if ($expl_addr[$i]<0 || $expl_addr[$i]>255)
+			return false;
+	return true;
+}
+
+function positive_int($val, $max_val=NULL)
+{
+	if (!is_numeric($val) || $val<0 || floor($val)!=$val || substr($val,0,1)=="+")
+		return false;
+	if (strpos($val,"e") || strpos($val,"E"))
+		return false;
+	if ($max_val && $val>$max_val)
+		return false;
+	return true;
+}
+
+function valid_ip_port($val)
+{
+	$val = explode(":",$val);
+	if (count($val)==1)
+		return valid_address($val[0]);
+	elseif (count($val)!=2)
+		return false;
+	$ip = $val[0];
+	$port = $val[1];
+
+	if (!valid_address($ip))
+		return false;
+	if (!positive_int($port))
+		return false;
+	return true;
+}
+
+function module_loaded($level, $module)
+{
+	global $do_not_load;
+
+	if (!isset($_SESSION["current_context"])) {
+		if (is_file("modules/$level/$module.php") && (!isset($do_not_load) || !in_array($module,$do_not_load)))
+			return true;
+	} else {
+		$context = strtolower($_SESSION["current_context"]);
+		if (is_file("modules/$level/$context/$module.php") && (!isset($do_not_load) || !in_array($module,$do_not_load)))
+			return true;
+	}
+	return false;
+}
+
+function  lib_loaded($lib)
+{
+	if (is_file("lib/$lib.php"))
+		return true;
+	return false;
+}
+
+function shell_command($comand)
+{
+	return shell_exec("/usr/libexec/openbts/ctl-apache $comand 2>&1");
+}
+
+function interval_from_seconds($unixtime)
+{
+	$minutes = floor($unixtime/60);
+	$seconds = $unixtime - $minutes*60;
+	$seconds = zero_pad($seconds);
+
+	$hours = floor($minutes/60);
+	$minutes = $minutes-$hours*60;
+	$minutes = zero_pad($minutes);
+
+	$days = floor($hours/24);
+	$hours = $hours-$days*24;
+	$hours = zero_pad($hours);
+
+	if ($days>0)
+		return "$days days $hours:$minutes:$seconds";
+	return "$hours:$minutes:$seconds";
+}
+
+function zero_pad($val,$length_to_pad=1)
+{
+	if (strlen($val)==$length_to_pad)
+		return "0$val";
+	return $val;
+}
+
+function get_suggested_imsis($offset=0)
+{
+	global $lim_recommended;
+
+	if (!isset($lim_recommended))
+		$lim_recommended = 5;
+
+	$recommended = request_api(array("limit"=>$lim_recommended,"offset"=>$offset),"get_suggested_imsis","imsi");
+	return $recommended;
+}
+
+function retrieve_connections()
+{
+	global $api_servers;
+
+	$servers = Model::selection("server");
+	if (!$servers)
+		return false;
+
+	$total = count($servers);
+	for ($i=0; $i<$total; $i++) {
+		$type = strtolower($servers[$i]->type);
+		if (!isset($api_servers[$type]))
+			$api_servers[$type] = array();
+		$server = $servers[$i]->ip;
+		$api_servers[$type][$servers[$i]->server_id] = array("server"=>$server, "secret"=>$servers[$i]->header_password, "name"=>$servers[$i]->server);
+	}
+	if (!count($api_servers))
+		print "No server connections defined. Please check MMI internal database.";
+	return true;
+}
+
+function set_server_conn_from_multiple()
+{
+	$conn = getparam("vlr_conn");
+	$server = Model::selection("server",array("server"=>$conn));
+	if (count($server))
+		$_SESSION["server_id"] = $server[0]->server_id;
+}
+
+function network_settings()
+{
+	global $method;
+	$method = "network_settings";
+
+	$configurations = request_api(array(),"get_configuration","configuration");
+	$fields = array("configuration"=>"key","value"=>"value"/*,"function_display_bit_field:default"=>"default"*/);
+	table($configurations, $fields, "network setting", "setting_id", array("&method=edit_setting"=>"Edit", "&method=delete_setting"=>"Delete"), array("&method=add_setting"=>"Add"));
+}
+
+function edit_setting($error=NULL,$error_fields=array())
+{
+	$allowed_configurations = array("MCC", "MNC");
+	$allowed_configurations["selected"] = getparam("key");
+
+	$fields = array(
+		"configuration" => array($allowed_configurations, "display"=>"select", "compulsory"=>true),
+		"value" => array("value"=>getparam("value"), "compulsory"=>true),
+		/*"default" => array("value"=>getparam("default"),"display"=>"checkbox")*/
+	);
+
+	error_handle($error,$fields,$error_fields);
+	start_form();
+	addHidden("database",array("setting_id"=>getparam("setting_id")));
+	editObject(NULL,$fields,"Set network configuration","Save");
+	end_form();
+}
+
+function edit_setting_database()
+{
+	$setting_id = getparam("setting_id");
+	$params = array("setting_id"=>getparam("setting_id"));
+	$required = array("configuration"=>"key","value"=>"value");
+	foreach ($required as $form_name=>$field_name) {
+		$val = getparam($form_name);
+		if (!$val)
+			return edit_setting("Field $form_name is required.",array($form_name));
+		$params[$field_name] = $val;
+	}
+	//$params["default"] = (getparam("default")=="on") ? "1" : "0";
+
+	$res = request_api($params,"set_configuration",null,"edit_setting");
+	notice("Finished setting ".getparam("configuration"),"network_settings");
+}
+
+function delete_setting()
+{
+	ack_delete("network configuration",getparam("key"),null,"setting_id",getparam("setting_id"),"&key=".getparam("key"));
+}
+
+function delete_setting_database()
+{
+	$res = request_api(array("setting_id"=>getparam("setting_id")),"delete_configuration",null,"network_settings");
+	notice("Finished deleteting ".getparam("key"),"network_settings");
+}
+
+function set_timezone()
+{
+	//Turn off all error reporting
+	//Returns the old error_reporting level 
+	$level = error_reporting(0);
+
+	if (!isset($_SESSION["timezone"])) 
+		$_SESSION["timezone"] = date_default_timezone_get();
+	
+	date_default_timezone_set($_SESSION["timezone"]);
+
+        error_reporting($level);
+}
+
+function nib_note($text)
+{
+	print "<div class='note'>";
+	if (is_file("images/note.jpg"))
+		print "<img src='images/note.jpg' />";
+	else
+		print "Note! ";
+	print $text;
+	print "</div>";
+}
+
+function generate_table_format_from_socket($socket_response)
+{
+	//Ex: $socket_response = string(221) "IMSI MSISDN --------------- --------------- 00101000000000 +4381234 00101001100110 +2500001 00101001100120 +8788783 001900000000002 +6669990 00101000000003 +6789723 00101000000002 +2943456 " 
+	$table_array = array();
+
+	if (!strlen($socket_response))
+		return $table_array;
+
+	$res = explode("--------------- ---------------",$socket_response);
+
+	if (!strlen(trim($res[1])))
+		return $table_array;
+
+	$titles = explode("           ",trim($res[0]));
+	$subs = explode("\n",trim($res[1]));
+	for ($i=0; $i<count($subs); $i++)
+		$data_to_display[] = explode("   ", trim($subs[$i]));
+
+	foreach($data_to_display as $key=>$data)
+		$table_array[$key] = array(trim($titles[0]) => trim($data[0]), trim($titles[1]) => trim($data[1]));
+
+	return $table_array;
+
+}
+
+function get_socket_response($command, $marker_end)
+{
+	global $yate_ip;
+
+	if (!$yate_ip)
+		$yate_ip = "127.0.0.1";
+	
+	$default_ip = "tcp://".$yate_ip;
+        $default_port = '5038';
+        $socket = new SocketConn($default_ip, $default_port);
+	if (strlen($socket->error))
+	           return array(false, "There was a problem with the socket connection. Error reported is: ".$socket->error);
+
+	$res = $socket->command($command,$marker_end);
+	return $res;
+}
+
+function test_default_config()
+{
+	global $yate_conf_dir;
+
+	$res = check_permission($yate_conf_dir);
+	if (!$res[0])
+		return array(false, $res[1]);
+	return array(true);
+}
+
+function check_permission($dir)
+{
+	clearstatcache(null, $dir);
+
+	if (!is_dir($dir))
+		return array(false, "The directory: ".$dir ." was not found on this server. Please create the directory and run this as root: 'chmod a+rwx ".$dir."'");
+	if (substr(decoct(fileperms($dir)), -4) !== "0777")
+		return array(false, "Don't have permission on ". $dir.". Please run this command as root: 'chmod -R a+rwx ".$dir."'");
+
+	return array(true);
+}
+?>

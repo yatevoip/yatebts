@@ -1,0 +1,34 @@
+<?php
+
+$db_host =   "localhost"; //   /*  database server hostname   */
+$db_user = "root";      /*  database server username   */
+$db_database = "dmname";   /*  database name   */
+$db_passwd = '';	//
+$db_type = "mysql";	// or "postgresql"
+$custom_actionlog = false; // if true you can define your own action log class since the default one won't be included
+
+// to define backup connections in case above connection fails
+// define $db_host2,$db_user2,$db_database2,$db_passwd2,$db_type2
+// for even more backups add same varianble with 3,4 ..
+
+// by default script will die if it can't connect to the database
+// if you test the connection separately, set $exit_gracefully = true and connect() will return NULL 
+// $exit_gracefully = false;
+
+// make callback to this function in case backup connection is used
+// log_used_backup_conn(2); // 2/3.. - index of backup connection used 
+// $callback_when_backup = "log_used_backup_conn";
+
+// password to be allowed to control error reporting and displaying of the queries
+$pass_debug_page = "secret_debug";
+
+$limit = 20;  //max number of objects to display on page
+$enable_logging = "on"; // possible values: "on"/"off", true/false, "yes"/"no" 
+
+date_default_timezone_set('Europe/Bucharest');
+$system_standard_timezone = "GMT+3";
+
+// default format id y-m-d
+$date_format = "y-m-d"; // year month day
+
+?>
