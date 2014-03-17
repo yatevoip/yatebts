@@ -43,13 +43,26 @@ Alternatively you may create a symbolic link to the desired transceiver:
     ln -s transceiver-rad1 transceiver
 
 
-Yate
-----
+Network In a Box
+----------------
 
-Yate will need to know to load the ybts.yate module. For this add a line in the yate.conf
-file in section [general]. You will need to create the section if doesn't exist already.
+The Network In a Box (NIB) is a configuration that allows using YateBTS standalone
+with just local subscribers.
 
-    [general]
-    extrapath=bts
+To use it you need to configure in Yate:
 
-This will tell Yate to load modules from the extra modules directory bts.
+In file javascript.conf:
+
+[general]
+routing=welcome.js
+
+[scripts]
+nib=nib.js
+
+In file extmodule.conf:
+
+[scripts]
+gsm_auth.sh
+
+For more info see:
+http://wiki.yatebts.com/index.php/Javascript_NIB
