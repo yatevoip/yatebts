@@ -2651,7 +2651,7 @@ YBTSConnAuthMt::YBTSConnAuthMt(uint16_t connid, YBTSUE* ue, int origin)
 const char* YBTSConnAuthMt::authMt(unsigned int* intervals)
 {
     if (!m_conn)
-	return false;
+	return "net-out-of-order";
     uint64_t time = 0;
     String reason;
     for (int index = 1; true; index++) {
