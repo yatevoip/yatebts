@@ -51,7 +51,7 @@ $iax_fields = array(
 	"trunk_nominits_ts_diff_restart" => array("advanced"=>true, "comment"=>"The difference (in milliseconds) between current timestamp and first timestamp of incoming trunked audio data without miniframe timestamps at which to restart timestamps build data. Minimum allowed value is 1000. Default value is 5000.")
 );
 
-function outgoing()
+function outgoing($notice=false)
 {
 	$res = test_default_config();
 	if (!$res[0]) {//permission errors
@@ -67,6 +67,8 @@ function outgoing()
 	} elseif (!isset($account[1]))
 		// if outgoing is not configured
 		return edit_outgoing(false);
+	if ($notice)
+		notice($notice, "no");
 	display_outgoing($account[1]);
 }
 
@@ -79,7 +81,6 @@ function display_outgoing($account)
 	if (!$protocol)
 		return edit_outgoing();
 
-	
 	$fields = ${$protocol."_fields"};
 
 	foreach ($fields as $name=>$def) {
@@ -263,13 +264,42 @@ function edit_outgoing_write_to_file($prefix='',$prefix_protocol='')
 	if(!$validate_results[0])
 		return edit_outgoing($read_account, $validate_results[1], $validate_results[2]);
 
+
+	$outgoing_file = get_outgoing();
+	if (isset($outgoing_file[0]) && $outgoing_file[0]) {
+		$params_modified = verify_modification_params($params, $outgoing_file[1]);
+
+		if (!$params_modified) {
+			outgoing();
+			return;
+		}
+	}
+
+
 	$res = set_outgoing($params);
 	if (!$res[0])
 		edit_outgoing($read_account, $res[1]);
 
-	outgoing();
+	outgoing("For changes to take effect please restart yate or reload just accfile module from telnet with command: \"reload accfile\".");
 }
 
+function verify_modification_params($edited_params, $file_params)
+{
+	//$edited_params -> params from form
+	//$file_params -> params from file 
+	$modified = false;
+	foreach ($edited_params as $name => $value) {
+		if (!in_array($value,$file_params)) {
+			$modified = true;
+			break;
+		}
+		if (isset($file_params[$name]) && $value != $file_params[$name]) {
+			$modified = true;
+			break;
+		}
+	}
+	return $modified;
+}
 function validate_account($params)
 {
 	if ($params['protocol'] == 'sip') {

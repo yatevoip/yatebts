@@ -7,6 +7,8 @@ function subscribers()
 
 function list_subscribers()
 {
+	global $yate_conf_dir;
+
 	$res = test_default_config();
 	if (!$res[0]) {//permission errors
 		errormess($res[1], "no");
@@ -24,7 +26,14 @@ function list_subscribers()
 			$regexp = $regexp[1];
 			$have_subscribers = false;
 		} else {
-			errormess($res[1], "no");
+			if (!getparam("overwrite_file")) {
+				errormess($res[1]. ". Press <a href=\"main.php?module=subscribers&method=list_subscribers&overwrite_file=yes\">here</a> to overwrite subscribers.js.", "no");
+				return;
+			} else { 
+				$new_file = $yate_conf_dir."subscribers.js.backup".date("Ymdhm");
+				rename($yate_conf_dir."subscribers.js", $new_file);
+				message("Your old old file was moved to $new_file", "no");
+			}
 			$subscribers = array();
 		}
 	} elseif (!count($res[1])) {
@@ -61,7 +70,11 @@ function online_subscribers()
 	$marker_end = "null";
 	$res = get_socket_response($command, $marker_end);
 
-	if (isset($res[0]) && $res===false) {
+	if (isset($res[0]) && $res[0]===false) {
+		if (isset($res[2])) {
+			nib_note($res[1]);
+			return;
+		}
 		errormess($res[1],"no");
 		$online_subscribers = array();
 	} else
@@ -77,7 +90,11 @@ function rejected_imsis()
 	$marker_end = "null";
 	$res = get_socket_response($command, $marker_end);
 
-	if (isset($res[0]) && $res===false) {
+	if (isset($res[0]) && $res[0]===false) {
+		if (isset($res[2])) {
+                       nib_note($res[1]);
+                       return;
+                }
 		errormess($res[1],"no");
 		$rejected_subscribers = array();
 	} else
@@ -119,14 +136,16 @@ function edit_regexp_write_file()
 	if (!$regexp)
 		return edit_regexp("Please set the regular expression!",array("regexp"));
 
-	if (in_array($regexp, $expressions))
-		return edit_regexp("This regex rule is already set.", array("regexp"));
+	if (in_array($regexp, $expressions)) {
+		notice("Finished setting regular expression.", "subscribers");
+		return;
+	}	
 
 	//$write_regexp[count($expressions)] = $regexp;
 	$res = set_regexp($regexp);
 	if (!$res[0])
 		return edit_regexp($res[1]);
-	notice("Finished setting regular expression.", "subscribers");
+	notice("Finished setting regular expression. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\". Please note that after this you will lose existing registrations.", "subscribers");
 }
 
 function edit_subscriber($error=null,$error_fields=array())
@@ -134,7 +153,8 @@ function edit_subscriber($error=null,$error_fields=array())
 	global $method;
 	$method = "edit_subscriber";
 
-	$imsi = getparam("imsi");
+	$imsi = getparam("imsi") ? getparam("imsi") : getparam("imsi_val");
+	
 	if ($imsi) {
 		$subscriber = get_subscriber($imsi);
 		if (!$subscriber[0]) {
@@ -165,6 +185,7 @@ function edit_subscriber($error=null,$error_fields=array())
 		"ki" => array("value"=>get_param($subscriber,"ki"), "comment"=>"Card secret", "required"=>true),
 		"op" => array("value"=>get_param($subscriber,"op"), "comment"=>"Operator secret. Empty for 2G IMSIs.<br/>00000000000000000000000000000000 for 3G IMSIs.")
 	);
+	
 	if ($imsi && count($subscriber) && !in_array("imsi",$error_fields))
 		$fields["imsi"]["display"] = "fixed";
 	if (!count($subscriber))
@@ -204,14 +225,35 @@ function edit_subscriber_write_file()
 	if ($subscriber["imsi_type"]=="2G")
 		$subscriber["op"] = "";
 
+	if (getparam("imsi_val") && isset($subscribers[$imsi])) {
+		$modified = false;
+		//check if there are changes
+		$subs_file = $subscribers[$imsi];
+		foreach ($fields as $name=>$required) {
+			$val = getparam($name);
+			if ($name == "active")
+				$val = (getparam($name) == "on") ? 1 : 0;
+
+			if ($subs_file[$name] != $val) 
+				$modified = true;
+			if ($modified)
+				break;
+		}
+
+		if (!$modified) {
+			notice("Finished setting subscriber with IMSI $imsi.", "subscribers");
+			return;
+		}
+	}
+
 	if (!getparam("imsi_val") && isset($subscribers[$imsi]))
-		return edit_subscriber("Subscriber with $imsi is already set.",array("imsi"));
+		return edit_subscriber("Subscriber with IMSI $imsi is already set.",array("imsi"));
 	$subscribers[$imsi] = $subscriber;
 
 	$res = set_subscribers($subscribers);
 	if (!$res[0])
 		return edit_subscriber($res[1]);
-	notice("Finished setting subscriber with $imsi.", "subscribers");
+	notice("Finished setting subscriber with IMSI $imsi. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".  Please note that after this you will lose existing registrations.", "subscribers");
 }
 
 function delete_subscriber()
@@ -235,7 +277,7 @@ function delete_subscriber_database()
 	if (!$res[0]) 
 		return errormess($res[1],"no");
 
-	notice("Finished removing subscriber with $imsi.", "subscribers");
+	notice("Finished removing subscriber with IMSI $imsi.", "subscribers");
 }
 
 function set_subscribers($subscribers)

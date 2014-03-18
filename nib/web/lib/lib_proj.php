@@ -268,13 +268,14 @@ function generate_table_format_from_socket($socket_response)
 {
 	//Ex: $socket_response = string(221) "IMSI MSISDN --------------- --------------- 00101000000000 +4381234 00101001100110 +2500001 00101001100120 +8788783 001900000000002 +6669990 00101000000003 +6789723 00101000000002 +2943456 " 
 	$table_array = array();
+	$socket_response = trim($socket_response);
 
-	if (!strlen($socket_response))
+	if (!strlen(trim($socket_response)))
 		return $table_array;
 
 	$res = explode("--------------- ---------------",$socket_response);
 
-	if (!strlen(trim($res[1])))
+	if (!isset($res[1]) || !strlen($res[1]))
 		return $table_array;
 
 	$titles = explode("           ",trim($res[0]));
@@ -292,6 +293,10 @@ function generate_table_format_from_socket($socket_response)
 function get_socket_response($command, $marker_end)
 {
 	global $yate_ip;
+	//check if Yate is running
+	//if yate is not running returns NULL otherwize return process ID 
+	if (!shell_exec('pidof yate'))
+		return array(false, "Please start YateBTS before performing this action.", false);
 
 	if (!$yate_ip)
 		$yate_ip = "127.0.0.1";
@@ -319,7 +324,7 @@ function test_default_config()
 function check_permission($dir)
 {
 	if (!is_dir($dir))
-		return array(false, "The directory: ".$dir ." was not found on this server. Please create the directory and run this as root: 'chmod a+rw ".$dir."'");
+		return array(false, "The directory: ".$dir ." was not found on this server. Please create the directory and run this as root: 'chmod -R a+rw ".$dir."'");
 	if (substr(decoct(fileperms($dir)), -4) !== "0777")
 		return array(false, "Don't have permission on ". $dir.". Please run this command as root: 'chmod -R a+rw ".$dir."'");
 
