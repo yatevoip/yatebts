@@ -20,19 +20,21 @@ Rejected IMSIs - lists all the rejected subscribers.
 Requirements
 ------------
 
-PHP is required to run the software.
+PHP, Apache, YateBTS are required to run the software.
+
+Setup
+-----
+
+Assuming you installed YateBTS, this sources are located in /usr/local/share/yate/nib_web
+
+ cd /var/www/html   (or cd /var/www on debian based OS)
+ ln -s /usr/local/share/yate/nib_web yatebts_nib
+
 
 Configuration
 -------------
 
-Configuration files used by the interface are: default.php and config.php.
-
-default.php is a configuration file in which the default parameters are set. 
-Please don't change the default configuration, use file config.php if you need to change 
-parameters values.
-
-Before using the interface, the permissions for the directories that are 
-set in the $yate_conf_dir variable MUST be set.
+The interface needs write right to yate's configuration directory.
 
 The command that has to be runned as root (if the default settings are set) is:
 chmod -R a+rw /usr/local/etc/yatebts_nib/ 
