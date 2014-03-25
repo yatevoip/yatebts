@@ -7992,6 +7992,7 @@ bool YBTSDriver::startPeer()
 	    continue;
 	::close(i);
     }
+    ::dup2(STDERR_FILENO,STDOUT_FILENO);
     // Close all other handles
     for (; i < 1024; i++)
 	::close(i);
