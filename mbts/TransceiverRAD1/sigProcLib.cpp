@@ -710,6 +710,7 @@ complex interpolatePoint(const signalVector &inSig,
   float fracOffset = ix - floor(ix);
   signalVector *sincVector = fetchSincVector(fracOffset);
   signalVector::iterator sincPtr = sincVector->begin();
+  signalVector::iterator sincEnd = sincVector->end();
 
   int start = (int) (floor(ix) - SINCWAVEFORMSIZE/2);
   if (start < 0) {
@@ -723,12 +724,16 @@ complex interpolatePoint(const signalVector &inSig,
   complex pVal = 0.0;
   if (!inSig.isRealOnly()) {
     for (int i = start; i <= end; i++) {
+      if (sincPtr >= sincEnd)
+        break;
       pVal += inSig[i] * sincPtr->real();
       sincPtr++;
     }
   }
   else {
     for (int i = start; i <= end; i++) {
+      if (sincPtr >= sincEnd)
+        break;
       pVal += inSig[i].real() * sincPtr->real();
       sincPtr++;
     }

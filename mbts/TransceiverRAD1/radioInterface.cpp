@@ -178,7 +178,7 @@ void RadioInterface::pushBuffer(void) {
 void RadioInterface::pullBuffer(void)
 {
    
-  bool localUnderrun;
+  bool localUnderrun = false;
 
    // receive receiveVector
   short* shortVector = rcvBuffer+rcvCursor;  
