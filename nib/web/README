@@ -22,26 +22,27 @@ Requirements
 
 PHP, Apache, YateBTS are required to run the software.
 
-Setup
------
+Installing
+----------
 
-Assuming you installed YateBTS, this sources are located in /usr/local/share/yate/nib_web
+Depending on your operating system the main web directory will be /var/www (debian based systems) 
+or /var/www/html otherwise. If you don't have this path, then you need to install Apache server.
 
- cd /var/www/html   (or cd /var/www on debian based OS)
- ln -s /usr/local/share/yate/nib_web yatebts_nib
+Assuming you install YateBTS package or installed by hand(make install), the UI source code is 
+located in /usr/local/share/yate/nib_web.
+
+ > cd /var/www/html   (or cd /var/www on debian based OS)
+ > ln -s /usr/local/share/yate/nib_web yatebts_nib
 
 
 Configuration
 -------------
 
-The interface needs write right to yate's configuration directory.
+Before using the interface, the permissions for the directories that are 
+set in the $yate_conf_dir variable MUST be set.
 
 The command that has to be runned as root (if the default settings are set) is:
-chmod -R a+rw /usr/local/etc/yatebts_nib/ 
+chmod -R a+rw /usr/local/etc/yate/ 
 
 Failing to configure the right permissions will make the interface display some errors
 the first time when it's used.
-
-For listing online or rejected IMSIs, a socket connection is used to communicate with YATE.
-The default IP set in parameter $yate_ip and the default PORT(5038) are used.
-If YATE is not running or if it uses other types of connections (SSL, TLS), the interface will not work.

@@ -21,52 +21,158 @@
 require_once("ansql/lib_files.php");
 require_once("check_validity_fields_ybts.php");
 require_once("ybts_fields.php");
+require_once("ybts_menu.php");
 
-/* Display form fields with their default values or the ones from ybts.conf file. */
+/* Display form fields with their values. */
 function create_form_ybts_section($section, $subsection, $fields= array(), $error=null, $error_fields=array())
 {
 	global $yate_conf_dir;
 
+	$structure = get_fields_structure_from_menu();
         $filename = $yate_conf_dir. "ybts.conf";	
 	
 	//read config parameters from conf file (ybts.conf) 
-	if (file_exists($filename)) {
+	if (file_exists($filename) && !isset($_SESSION["ybts_params"])) {
 		$ybts = new ConfFile($filename);
-
-		if (isset($ybts->structure[$subsection]))
-			$fields = create_fields_from_conffile($ybts->structure[$subsection],$section, $subsection); 
+		$fields = create_fields_from_conffile($ybts->structure); 
 	}
-	
+
+	if (isset($_SESSION["ybts_params"])) {
+		foreach($structure as $m_section => $data) {
+			foreach($data as $key => $m_subsection) 
+				$fields[$m_section][$m_subsection] = $_SESSION["ybts_params"][$m_section][$m_subsection];
+		}
+	}
+ 
 	//if the params are not set in file get the default values to be displayed
-	if (count($fields) == 0)
+	if (count($fields) == 0) 
 		$fields = get_default_fields_ybts();
 
-	if (!isset ($fields[$section][$subsection])) {
-		print "Could not retrieve ybts parameters for $section.";
-		return;
-	}
-	
+	print "<div id=\"err_$subsection\">";	
 	error_handle($error, $fields[$section][$subsection],$error_fields);
+	print "</div>";
 	start_form();
-        editObject(null,$fields[$section][$subsection],"Set parameters values for section [$subsection] to be written in ybts.conf file.");
-	addHidden("database", array('section'=>$section, 'subsection'=>$subsection));
+	foreach($structure as $m_section => $data) {
+		foreach($data as $key => $m_subsection) {
+			$style = $m_subsection == $subsection ? "" : "style='display:none;'";
+			
+			print "<div id=\"$m_subsection\" $style>";
+			if (!isset ($fields[$m_section][$m_subsection])) {
+				print "Could not retrieve ybts parameters for $m_section.";
+				return;
+			}
+			editObject(null,$fields[$m_section][$m_subsection],"Set parameters values for section [$m_subsection] to be written in ybts.conf file.");
+			print "</div>";
+		}
+	}
+	addHidden("database");
 	end_form();
 }
 
-/* Put the value that was set in ybts.conf file for each section. */
-function create_fields_from_conffile($fields_from_file, $section, $subsection)
+function set_fields_in_session()
 {
-	$fields = get_default_fields_ybts();
+	global $yate_conf_dir, $ybts_fields_modified;
+	
 
-	foreach($fields_from_file as $param => $data) {
-		if (is_numeric($param))  //keep the original comments from $fields
-			continue;
-		if ($fields[$section][$subsection][$param]["display"] == "select") {
-			$fields[$section][$subsection][$param][0]["selected"] = $data;
-		}elseif ($fields[$section][$subsection][$param]["display"] == "checkbox")
-			$fields[$section][$subsection][$param]["value"] = $data == "yes" ? "on" : "off";
-		else
-			$fields[$section][$subsection][$param]["value"] = $data; 
+	$fields = array();
+	$filename = $yate_conf_dir. "ybts.conf";
+
+	//global parameter. If false means that the ybts fields were not changed when submitting the forms.
+	$ybts_fields_modified = false;
+
+	$structure = get_fields_structure_from_menu();
+	//read config parameters from conf file (ybts.conf) 
+	if (file_exists($filename)) {
+                   $ybts = new ConfFile($filename);
+		   $fields = create_fields_from_conffile($ybts->structure);
+	}      
+	if (!count($fields))
+		$fields = get_default_fields_ybts();	
+
+	$ybts_fields_modified = get_status_fields($fields, $structure);
+
+	//set values from FORM in session
+	foreach($structure as $m_section => $data) {
+		foreach($data as $key => $m_subsection) {
+			foreach($fields[$m_section][$m_subsection] as $param_name => $data) {
+				$paramname = str_replace(".", "_", $param_name);
+				$_SESSION["ybts_params"][$m_section][$m_subsection][$param_name] = $data;
+
+				$field_param = getparam($paramname);
+				if ($data["display"] == 'select')
+					$_SESSION["ybts_params"][$m_section][$m_subsection][$param_name][0]["selected"] = $field_param;
+				elseif ($data["display"] == "checkbox")
+					$_SESSION["ybts_params"][$m_section][$m_subsection][$param_name]["value"] = $field_param == "on" ? "1" : "0";
+				else
+					$_SESSION["ybts_params"][$m_section][$m_subsection][$param_name]["value"] = $field_param;
+			}
+		}
+	}
+}
+
+/* Returns true if found differences between the fields set in FORM and the ones from file (if file is not set from default fields) */
+function get_status_fields($fields, $structure) {
+
+	$ybts_fields_modified = false;
+
+	foreach($structure as $m_section => $data) {
+		foreach($data as $key => $m_subsection) {
+			foreach($fields[$m_section][$m_subsection] as $param_name => $data) {
+				$paramname = str_replace(".", "_", $param_name);
+				if (isset($_SESSION["ybts_params"][$m_section][$m_subsection][$param_name])) {
+					$val_req = getparam($paramname);
+					if ($data["display"] == 'select')
+						$value = $_SESSION["ybts_params"][$m_section][$m_subsection][$param_name][0]["selected"];
+					elseif ($data["display"] == "checkbox") {
+						$value = $_SESSION["ybts_params"][$m_section][$m_subsection][$param_name]["value"]=="1" ? "on" : "off";
+						$val_req = getparam($paramname) ? getparam($paramname) : "off";
+					} else 
+						$value = $_SESSION["ybts_params"][$m_section][$m_subsection][$param_name]["value"];	
+
+				} else {//if fields are not set in session then compare values from POST with the existing value
+					$val_req = getparam($paramname);
+					if ($data["display"] == 'checkbox') {
+						$value = $data["value"];
+						if ($data["value"] != "on" && $data["value"] != "off")
+							$value = $data["value"] == "1" ? "on" : "off";
+						$val_req = getparam($paramname) ? getparam($paramname) : "off";
+					} elseif ($data["display"] == 'select')
+					       $value = isset($data[0]["selected"]) ? $data[0]["selected"] : "";	
+					else
+						$value = isset($data["value"]) ? $data["value"] : "";
+
+				}
+				if ($value != $val_req) {
+					$ybts_fields_modified = true;
+					break 3;
+				}
+			}
+		}
+	}
+	return $ybts_fields_modified;
+}
+
+/* Put the value that was set in ybts.conf file for each section. */
+function create_fields_from_conffile($fields_from_file)
+{
+	$structure = get_fields_structure_from_menu();
+
+	$fields = get_default_fields_ybts();
+	foreach($structure as $section => $data) {
+                foreach($data as $key => $subsection) {
+			if (isset($fields_from_file[$subsection])) {
+				foreach($fields_from_file[$subsection] as $param => $data) {
+					if (is_numeric($param))  //keep the original comments from $fields
+						continue;
+					if ($fields[$section][$subsection][$param]["display"] == "select") 
+						$fields[$section][$subsection][$param][0]["selected"] = $data;
+					elseif ($fields[$section][$subsection][$param]["display"] == "checkbox") 
+						$fields[$section][$subsection][$param]["value"] = $data == "yes" ? "on" : "off";
+					else 
+						$fields[$section][$subsection][$param]["value"] = $data; 
+				}
+			}
+		}
 	}	
 	return $fields;
 }
@@ -75,9 +181,8 @@ function create_fields_from_conffile($fields_from_file, $section, $subsection)
  * For each param from form apply the specific validity function callback to validate parameter from configuration file.
  * See call_function_from_validity_field for more explanations.
  */ 
-function validate_fields_ybts()
+function validate_fields_ybts($section, $subsection)
 {
-	global $section, $subsection;
 
         // this array contains the name of the params that can be empty in configuration file (ybts.conf)
 	$allow_empty_params = array("Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg");
@@ -163,28 +268,30 @@ function call_function_from_validity_field($validity, $param_name, $field_param)
 	} else {
 		$func_name = $validity[0];
 		if (count($validity)>= 3) {
-				$param1 = $validity[1];
-				$param2 = $validity[2];
-				$param3 = isset($validity[3])? $validity[3] : false;
-				//call to specified validity function
-				$res = $func_name($param_name, $field_param,$param1,$param2,$param3);
-			} else  {
-				if (!isset($validity[1])) 
-					$res = $func_name($param_name, $field_param);
-				else
-					$res = $func_name($param_name, $field_param, getparam($validity[1]));
-			}
+			$param1 = $validity[1];
+			$param2 = $validity[2];
+			$param3 = isset($validity[3])? $validity[3] : false;
+			//call to specified validity function
+			$res = $func_name($param_name, $field_param,$param1,$param2,$param3);
+		} else  {
+			if (!isset($validity[1])) 
+				$res = $func_name($param_name, $field_param);
+			else
+				$res = $func_name($param_name, $field_param, getparam($validity[1]));
+		}
 	}
 	return $res;
 }
 
 /*
- * This function will write the new values of the parameters for a SECTION 
+ * This function will write the new values of the parameters for each SECTION 
  * the comments are written one time when the section is created (they are not overwritten every time the section is updated)
  */ 
 function write_params_conf($fields)
 {
-	global $subsection, $yate_conf_dir;
+	global $yate_conf_dir;
+
+	$structure = get_fields_structure_from_menu(); 
 
 	$filename = $yate_conf_dir. "ybts.conf";
 
@@ -192,29 +299,36 @@ function write_params_conf($fields)
 		$ybts = new ConfFile($filename);
 	else
 		$ybts = new ConfFile($filename, false);
-	$i = 0;
-	foreach ($fields as $param => $data) {
-		//write comments just the first time when section is written in file
-		if (!isset($ybts->structure[$subsection][$i]) )
-			$ybts->structure[$subsection][] = ";".$data["comment"];
-		
-		//prepare the data to be written
-		if (isset($data[0]["selected"]))
-			$value = array($data[0]["selected"]);
-		elseif ($data["display"] == "checkbox")
-			$value = array($data["value"]=="on"? "yes" : "no");
-		else
-			$value = array($data["value"]);
-		
-		$ybts->structure[$subsection][$param] = $value;
-		$i++;
-	}
+	
+	foreach ($fields as $key => $arr) {
+		foreach($arr as $section => $params) {
+			foreach ($params as $subsection => $data1) {
+				$i=0;
+				 foreach ($data1 as $param => $data) {
+					//write comments just the first time when section is written in file
+					if (!isset($ybts->structure[$subsection][$i])) 
+						$ybts->structure[$subsection][$i] = ";".$data["comment"];
 
+					//prepare the data to be written
+					if (isset($data[0]["selected"]))
+						$value = array($data[0]["selected"]);
+					elseif ($data["display"] == "checkbox")
+						$value = array($data["value"]=="on"? "yes" : "no");
+					else
+						$value = array($data["value"]);
+
+					$ybts->structure[$subsection][$param] = $value;
+					$i++;
+				 }
+			}
+
+		}
+	 }
 	$ybts->save();
 
 	if ($ybts->getError())
 		return array(false, $ybts->getError());
-	else
-		return array(true, "Finished configuring section [".$subsection."]. The data was written in ybts.conf file without issues.");
+	else 
+		return array(true, "Finish writting sections in ybts.conf file without issues. For changes to take effect please restart YateBTS.");
 }
 ?>

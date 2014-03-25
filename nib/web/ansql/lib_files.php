@@ -218,7 +218,7 @@ class ConfFile extends GenericFile
 					continue;
 				}
 				$wrote_something = true;
-				fwrite($this->write_handler, "$name=".ltrim($value)."\n");
+				fwrite($this->write_handler, "$name=".ltrim($value)."\n\n");
 				continue;
 			}else
 				fwrite($this->write_handler, "[".$name."]\n");
@@ -227,7 +227,7 @@ class ConfFile extends GenericFile
 			{
 				if (is_array($value)) {
 					foreach($value as $key => $val)
-						fwrite($this->write_handler, $param."=".ltrim($val)."\n");
+						fwrite($this->write_handler, $param."=".ltrim($val)."\n\n");
 				} else {
 					//writing a comment
 					if (in_array(substr($value,0,1),$this->chr_comment) && is_numeric($param)) {
@@ -237,7 +237,7 @@ class ConfFile extends GenericFile
 					}
 
 					$wrote_something = true;
-					fwrite($this->write_handler, "$param=".ltrim($value)."\n");
+					fwrite($this->write_handler, "$param=".ltrim($value)."\n\n");
 				}
 			}
 			fwrite($this->write_handler, "\n");

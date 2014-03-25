@@ -99,12 +99,12 @@ function get_default_fields_ybts()
 				array("selected" => 10, 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80),
 				"display" => "select",
 				"value" => "10",
-				"comment" => "Maximum transmitter attenuation level, in dB wrt full scale on the D/A output. This sets the minimum power output level in the output power control loop.	Interval allowed: 0..80. Defaults to 10 (-10dB)"
+				"comment" => "Maximum transmitter attenuation level, in dB wrt full scale on the D/A output. This sets the minimum power output level in the output power control loop. Interval allowed: 0..80. Defaults to 10 (-10dB)"
 			),
 			"Radio.PowerManager.MinAttenDB" => array( 
 				array("selected" => 0, 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80),
 				"display" => "select",
-				"comment" => "Minimum transmitter attenuation level, in dB wrt full scale on the D/A output. This sets the maximum power output level in the output power control loop.	Interval allowed: 0..80, must be less or equal to Radio.PowerManager.MaxAttenDB. Defaults to  0(dB) (maximum).",
+				"comment" => "Minimum transmitter attenuation level, in dB wrt full scale on the D/A output. This sets the maximum power output level in the output power control loop. Interval allowed: 0..80, must be less or equal to Radio.PowerManager.MaxAttenDB. Defaults to  0(dB) (maximum).",
 				"validity" => array("check_radio_powermanager", "Radio_PowerManager_MaxAttenDB")
 			)
 		),
@@ -115,7 +115,7 @@ function get_default_fields_ybts()
 				"comment" => "Number of Combination-I timeslots to configure. The C-I slot carries a single full-rate TCH, used for speech calling. Interval allowed: 0..100. Default value: 7(all timeslots of a single ARFCN)"
 			),	
 			"Channels.NumC7s" => array(
-				array("selected"=>"0(timeslots)", 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100),
+				array("selected"=>"0", 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100),
 				"display" => "select",
 				"comment" => "Number of Combination-VII timeslots to configure. The C-VII slot carries 8 SDCCHs, useful to handle high registration loads, SMS or USSD. If C0T0 is C-IV, you must have at least one C-VII also. Interval allowed: 0..100. Defaults to 0(timeslots)."
 			),	
@@ -238,7 +238,7 @@ function get_default_fields_ybts()
 			"MS.TA.Max" => array( 
 				array("selected" =>62, 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62),
 				"display" => "select",
-				"comment" => "Maximum allowed timing advance in symbol periods.	One symbol period of round-trip delay is about 0.55 km of distance. RACH bursts with delays greater than this are ignored. Can be used to limit service range. Interval allowed: 1..62. Defaults to 62 (maximum range)"
+				"comment" => "Maximum allowed timing advance in symbol periods. One symbol period of round-trip delay is about 0.55 km of distance. RACH bursts with delays greater than this are ignored. Can be used to limit service range. Interval allowed: 1..62. Defaults to 62 (maximum range)"
 			),
 			"MaxSpeechLatency" => array( 
 				array("selected" => 2, 1,2,3,4,5),
@@ -273,7 +273,7 @@ function get_default_fields_ybts()
 			"Radio.MaxExpectedDelaySpread" => array( 
 				array("selected" => 4, 1,2,3,4),
 				"display" => "select",
-				"comment" => "Expected worst-case delay spread.	Expressed in symbol periods, roughly 3.7 us or 1.1 km per unit. This parameter is dependent on the terrain type in the installation area. Typical values: 1 -> open terrain, small coverage, 4 -> large coverage area. This parameter has a large effect on computational requirements of the software radio.Interval allowed: 1..4. Defaults to 4."
+				"comment" => "Expected worst-case delay spread. Expressed in symbol periods, roughly 3.7 us or 1.1 km per unit. This parameter is dependent on the terrain type in the installation area. Typical values: 1 -> open terrain, small coverage, 4 -> large coverage area. This parameter has a large effect on computational requirements of the software radio.Interval allowed: 1..4. Defaults to 4."
 			),
 			"Radio.NeedBSIC" => array( 
 				"display" => "checkbox",
@@ -306,13 +306,13 @@ function get_default_fields_ybts()
 			"Radio.RSSITarget" => array( 
 				array("selected"=>-50, -75,-74,-73,-72,-71,-70,-69,-68,-67,-66,-65,-64,-63,-62,-61,-60,-59,-58,-57,-56,-55,-54,-53,-52,-51,-50,-49,-48,-47,-46,-45,-44,-43,-42,-41,-40,-39,-38,-37,-36,-35,-34,-33,-32,-31,-30,-29,-28,-27,-26,-25),
 				"display" => "select",
-				"comment" => "Target uplink RSSI for MS power control loop. Expressed in dB wrt to receiver's A/D convertor full scale.	Should be 6-10 dB above the noise floor (see the 'mbts noise' command).	Interval allowed: -75..-25. Defaults to -50",
+				"comment" => "Target uplink RSSI for MS power control loop. Expressed in dB wrt to receiver's A/D convertor full scale. Should be 6-10 dB above the noise floor (see the 'mbts noise' command). Interval allowed: -75..-25. Defaults to -50",
 				"validity" => array("check_radio_rssitarget")
 			),	
 			"Radio.RxGain" => array( 
 				array("selected"=>0, 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75),
 				"display" => "select",
-				"comment" =>" Receiver gain setting in dB. Ideal value is dictated by the hardware; 47 dB for RAD1, less for USRPs. Interval allowed: 0..75. Defaults to 0 (but some radios provide their own calibrated default)" 
+				"comment" => "Receiver gain setting in dB. Ideal value is dictated by the hardware; 47 dB for RAD1, less for USRPs. Interval allowed: 0..75. Defaults to 0 (but some radios provide their own calibrated default)" 
 			),
 			"ShowCountry" => array( 
 				"display" => "checkbox",
@@ -327,7 +327,7 @@ function get_default_fields_ybts()
 			"Timer.T3105" => array( 
 				array("selected"=>50, 25,30,35,40,45,50,55,60,65,70,75),
 				"display" => "select",
-				"comment" => "Milliseconds for handset to respond to physical information. GSM 04.08 11.1.2. Interval allowed 25:75(5).	Defaults to 50"
+				"comment" => "Milliseconds for handset to respond to physical information. GSM 04.08 11.1.2. Interval allowed 25:75(5). Defaults to 50"
 			),
 			"Timer.T3113" => array( 
 				array("selected"=>10000, 5000,5500,6000,6500,7000,7500,8000,8500,9000,9500,10000,10500,11000,11500,12000,12500,13000,13500,14000,14500,15000 ),
@@ -397,7 +397,7 @@ function get_default_fields_ybts()
 			"MS.Power.T_AVG_W" => array(
 				array("selected"=>15, 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25),
 				"display" => "select",
-				"comment" => "MS power control parameter; see GSM 05.08 10.2.1.	Valid range is 0...25. Defaults to 15."
+				"comment" => "MS power control parameter; see GSM 05.08 10.2.1. Valid range is 0...25. Defaults to 15."
 	                 ),
 			 "Multislot.Max.Downlink" => array(
 				 array("selected"=>3, 0,1,2,3,4,5,6,7,8,9,10),

@@ -36,6 +36,22 @@ function get_menu_structure()
 	return $structure;
 }
 
+function get_fields_structure_from_menu()
+{
+	$structure = get_menu_structure();
+	$fields_structure = array();
+	foreach($structure as $section => $data) {
+		if (!$data)
+			$data = array(strtolower($section));
+		foreach($data as $key => $subsection) {
+			$subsection = str_replace(" ", "_",strtolower($subsection));
+			if (!$subsection)
+				$subsection = strtolower($section);
+			$fields_structure[$section][] = $subsection;
+		}
+	}
+	return $fields_structure;
+}
 /* display the menu and the submenu*/
 function ybts_menu()
 {
@@ -55,7 +71,7 @@ function ybts_menu()
 			$css = "open";
 		else
 			$css = "close";
-		print "<td class='menu_$css' id='section_$i'><a class='menu_links' href='main.php?module=bts_configuration&section=$menu&subsection=$subsect'>". $menu."</a></td>";
+		print "<td class='menu_$css' id='section_$i' onclick=\"show_submenu_tabs($i, $total, '$subsect')\">". $menu."</td>";
 		print "<td class='menu_space'>&nbsp;</td>";
 		if ($i == $total-1)
 			print "<td class='menu_empty'>&nbsp;</td>";
@@ -66,11 +82,7 @@ function ybts_menu()
 </table>
 </td>
 </tr>
-<?php
-	if (isset($structure[$section][0])) {
-	
-?>
-<tr><td class="submenu" colspan="2">
+<tr><td class="submenu" id="submenu_line" colspan="2">
 <!--Create the submenu structure -->
 <table class="submenu" cellspacing="0" cellpadding="0">
 <tr> <td>
@@ -91,7 +103,7 @@ function ybts_menu()
 			else
 				$css = "close";
 			$link = str_replace(" ","_",strtolower($name));
-			print "<div class='submenu_$css'><a  class='menu_links' href='main.php?module=bts_configuration&section=$menu&subsection=$link'>".$name."</a></div>";
+			print "<div class='submenu_$css' id=\"tab_$link\" onclick=\"show_submenu_fields('$link')\">".$name."</a></div>";
 			print "<div class='submenu_space'>&nbsp;</div>";
 		}
 		$i++;
@@ -101,12 +113,13 @@ function ybts_menu()
 </td></tr>
 </table>
 <?php
-	}
 }
 
 /* Displayes the explanation of each subsection. */
-function description_ybts_section($subsection)
+function description_ybts_section()
 {
+	global $subsection;
+
 	$section_desc = array(
 		"gsm" => "Section [gsm] controls basic GSM operation.
 		You MUST set and review all parameters here before starting the BTS!",
@@ -126,8 +139,12 @@ function description_ybts_section($subsection)
 		"ybts" => "Section [ybts] configures ybts related parameters."
 	//	"logging" => "Section [logging] controls the logging levels of MBTS."
 	);
-	if (isset($section_desc[$subsection]))
-		print $section_desc[$subsection];
+
+	foreach ($section_desc as $subsect => $desc) {
+		$style = (isset($section_desc[$subsection]) && $subsect == $subsection) ? "" : "style='display:none;'";
+		print "<div id=\"info_$subsect\" $style>". $desc ."</div>";
+	}
+
 }
 
 ?>

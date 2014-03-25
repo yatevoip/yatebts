@@ -1262,13 +1262,14 @@ div.note
 table.page {padding-bottom:20px; width:100%;}
 td.content_form { width:62%; text-align:left;}
 td.submenu { border:1px solid #CCCCCC;border-top:none; width:100%;}
+td.submenu_no_line { border-left:1px solid #CCCCCC; border-right:1px solid #CCCCCC;}
 td.content_form { border-left: 1px solid #CCCCCC; padding-top:20px;text-align:center;padding-left:5px;}  
 td.content_info  {border-right: 1px solid #CCCCCC;vertical-align:top; padding-top:30px;padding-right:30px;padding-left:5px;}
 td.page_space{ border: 1px solid #CCCCCC; border-top:none;height:20px;}
 table.menu { width:100%; text-align:center; font-size:14px; }
 table.menu td { border: 1px solid #ff9600; padding-left: 8px; padding-right:8px; padding-top:3px; padding-bottom:0px; width:50px;}
 table.menu td.menu_open { border:1px solid #CCCCCC; border-bottom:none;}
-table.menu td.menu_close { background-color:#ff9600;}
+table.menu td.menu_close { background-color:#ff9600; color:#ffffff; cursor:pointer;}
 table.menu td.menu_close a.menu_links {  color:#ffffff;}
 table.menu td.menu_space { border: none; border-bottom: 1px solid #CCCCCC; width:10px;padding:0px;}
 table.menu td.menu_empty {width:40%; border: none; border-bottom: 1px solid #CCCCCC;}
@@ -1277,5 +1278,6 @@ a.menu_links { text-decoration: none; color: #1a1a1a;}
 a.menu_links:hover { border-bottom:2px solid #93c300;}
 table.submenu {margin-top:10px;margin-left:10px;}
 div.submenu_open, div.submenu_close, div.submenu_space {display:inline; float:left;padding:5px;padding-bottom:5px; margin-bottom:5px;}
+div.submenu_close { cursor:pointer;}
 div.submenu_open { border-bottom: 2px solid #93c300;padding-bottom:0px;}
 table.menu a.menu_links { border-bottom:none;}

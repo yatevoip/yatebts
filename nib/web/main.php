@@ -18,7 +18,7 @@
  */
 
 require_once("lib/lib_proj.php");
-    set_timezone();
+set_timezone();
 require_once("ansql/set_debug.php");
 require_once("ansql/lib.php");
 require_once("ansql/lib_files.php");
@@ -33,15 +33,9 @@ $module = (!$module) ? getparam("module") : $module;
 if(!$module) {
         $module = "subscribers";
 }
-// Parameters used in MODULE: Bts Configuration 
-$section = getparam('section')? getparam('section') : 'GSM';
-$subsection = getparam('subsection') ? getparam('subsection') :'gsm';
-
-//if (!getparam("force_timezone"))
-//	set_timezone();
-
-//testpath($module);
-//$path = $module;
+// Parameters used in MODULE: BTS Configuration 
+$section = (isset($_SESSION["section"])) ? $_SESSION["section"] : 'GSM';
+$subsection = (isset($_SESSION["subsection"])) ? $_SESSION["subsection"]  :'gsm';
 
 $action = getparam("action");
 $method = (!$method) ? getparam("method") : $method;
@@ -58,8 +52,6 @@ if($method == "manage")
 
 $_SESSION["main"] = "main.php";
 
-//save_page_info();
-
 ?>
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"> 
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
@@ -70,15 +62,8 @@ $_SESSION["main"] = "main.php";
     <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
 <script type="text/javascript" src="ansql/javascript.js"></script>
 <script type="text/javascript" src="javascript.js"></script>
-<?php 
- //if ($method=="configure_base_station") {
-//    print '<link type="text/css" rel="stylesheet" href="css/nib/openbts.css" />';
-//    print '<link type="text/css" rel="stylesheet" href="css/corrections_openbts.css" />';
-//}
-?>
 </head>
 <body class="mainbody">
 <?php   get_content(); ?>
 </body>
 </html>
-

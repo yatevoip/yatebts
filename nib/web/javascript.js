@@ -110,6 +110,53 @@ function advanced(identifier)
 
 	img.src = imgarray.join("/");
 }
+
+function show_submenu_tabs(id, total, name)
+{
+	for(var i=0; i<total; i++) {
+		document.getElementById("section_"+i).className = 'menu_close';
+		if (document.getElementById("submenu_"+i))
+			document.getElementById("submenu_"+i).style.display = 'none';
+	}
+
+	document.getElementById("section_"+id).className = 'menu_open';
+	if (document.getElementById("submenu_"+id))
+		document.getElementById("submenu_"+id).style.display = 'block';
+
+	show_submenu_fields(name);
+
+	if (name == "gsm" || name == "gprs") {
+		if (document.getElementById("submenu_line"))
+			document.getElementById("submenu_line").className = 'submenu';
+	} else {
+		document.getElementById("submenu_line").className = 'submenu_no_line';
+	}
+
+}
+
+function show_submenu_fields(name)
+{
+	var subsections = ["gsm", "gsm_advanced","gprs","gprs_advanced","sgsn","ggsn", "control", "transceiver", "tapping", "test","ybts" ];
+	var forms_ids = ["","info_","err_","file_err_","notice_"];
+	
+	for (var i=0; i<subsections.length; i++) {
+		for (var j=0; j<forms_ids.length; j++) {
+			if (document.getElementById("tab_"+subsections[i]) && document.getElementById("tab_"+subsections[i]).className == 'submenu_open')
+				document.getElementById("tab_"+subsections[i]).className = 'submenu_close';
+	  		if (document.getElementById(forms_ids[j]+subsections[i]) && document.getElementById(forms_ids[j]+subsections[i]).style.display != "none")
+				document.getElementById(forms_ids[j]+subsections[i]).style.display = "none";
+
+			if (subsections[i] == name) {
+				if (document.getElementById("tab_"+subsections[i]))
+					document.getElementById("tab_"+subsections[i]).className = 'submenu_open';
+				if (document.getElementById(forms_ids[j]+subsections[i]) && forms_ids[j]!= "notice_")
+					document.getElementById(forms_ids[j]+subsections[i]).style.display = "block";
+			}
+		}
+	}
+
+}
+
 /*
 function advanced(identifier)
 {
