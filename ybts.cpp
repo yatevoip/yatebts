@@ -4582,6 +4582,7 @@ YBTSSubmit::YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue,
 	m_imsi = ue->imsi();
 	ue->addCaller(m_msg);
     }
+    m_msg.addParam("username",m_imsi,false);
 }
 
 void YBTSSubmit::run()
