@@ -1465,6 +1465,7 @@ protected:
     virtual bool msgText(Message& msg, const char* text);
     virtual bool msgUpdate(Message& msg);
 #endif
+    virtual void endDisconnect(const Message& msg, bool handled);
     virtual void destroyed();
 
     Mutex m_mutex;
@@ -6294,19 +6295,6 @@ void YBTSChan::disconnected(bool final, const char *reason)
     Debug(this,DebugAll,"Disconnected '%s' [%p]",reason,this);
     setReason(reason,&m_mutex);
     Channel::disconnected(final,reason);
-    if (!(isIncoming() && s_noAuth == reason && m_route && m_conn))
-	return;
-    m_authIndex++;
-    if (m_authIndex > 2) {
-	m_conn->owner()->authReject(m_conn);
-	return;
-    }
-    Lock2 lck(driver(),&paramMutex());
-    m_route->clearParam(YSTRING("id"));
-    YBTSConnAuth::authClearParams(*m_route);
-    m_route->copySubParams(parameters(),"auth.",false);
-    lck.drop();
-    startAuthThread();
 }
 
 bool YBTSChan::callRouted(Message& msg)
@@ -6439,6 +6427,25 @@ bool YBTSChan::msgDrop(Message& msg, const char* reason)
     releaseRoute();
     setReason(TelEngine::null(reason) ? "dropped" : reason,&m_mutex);
     return Channel::msgDrop(msg,reason);
+}
+
+void YBTSChan::endDisconnect(const Message& msg, bool handled)
+{
+    if (!handled)
+	return;
+    if (!(isIncoming() && m_route && m_conn && msg[s_error] == s_noAuth))
+	return;
+    m_authIndex++;
+    if (m_authIndex > 2) {
+	m_conn->owner()->authReject(m_conn);
+	return;
+    }
+    Lock lck(driver());
+    m_route->clearParam(YSTRING("id"));
+    YBTSConnAuth::authClearParams(*m_route);
+    m_route->copySubParams(msg,"auth.",false);
+    lck.drop();
+    startAuthThread();
 }
 
 void YBTSChan::destroyed()
