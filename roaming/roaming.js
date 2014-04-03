@@ -1,7 +1,5 @@
 #require "roamingconf.js"
 
-var success_codes = [200,202,204];
-
 /**
  * Handle "auth" message
  * @param msg Object message to be handled
@@ -109,7 +107,6 @@ function onDisconnected(msg)
     var imsi = tempinfo_route[chanid];
     delete tempinfo_route[chanid];
 
-
     var auth = msg["sip_www-authenticate"];
     var realm = ""; 
     res = auth.match(/realm *= *"?([^ "]+)"?/); 
@@ -145,7 +142,7 @@ function onDisconnected(msg)
  */
 function authSuccess(sr,imsi,msg)
 {
-    if (success_codes.indexOf(sr.code)!=-1) {
+    if ((sr.code/100)==2) {
 	var uri = sr["sip_p-associated-uri"];
 	if (uri != "") {
 	    var res = uri.match(/:+?([0-9]+)[@>]/);
@@ -281,7 +278,7 @@ function onMoSMS(msg)
 	return false;
 
     if (m.dispatch(true)) {
-	if (success_codes.indexOf(m.code)!=-1) {
+	if ((m.code/100)==2) {
 	    if (m.xsip_body!="")
                 msg.irpdu = Engine.atoh(m.xsip_body);
 	    return true;
