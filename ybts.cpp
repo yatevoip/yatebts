@@ -2437,14 +2437,13 @@ static inline XmlElement* buildCCCallState(int stat)
 }
 
 // Build Progress Indicator IE
-static inline XmlElement* buildProgressIndicator(const Message& msg,
-    bool earlyMedia = true)
+static inline XmlElement* buildProgressIndicator(const Message& msg, bool earlyMedia)
 {
     const String& s = msg[YSTRING("progress.indicator")];
     if (s)
 	return new XmlElement(s_ccProgressInd,s);
-    if (earlyMedia && msg.getBoolValue("earlymedia"))
-	return new XmlElement(s_ccProgressInd,"inband");
+    if (earlyMedia && msg.getBoolValue(YSTRING("earlymedia"),true))
+	return new XmlElement(s_ccProgressInd,"in-band-information-available");
     return 0;
 }
 
@@ -6352,7 +6351,8 @@ bool YBTSChan::msgProgress(Message& msg)
     if (!call)
 	return false;
     if (call->incoming())
-	call->progressing(buildProgressIndicator(msg));
+	call->progressing(buildProgressIndicator(msg,
+	    msg.getBoolValue(YSTRING("media"),getPeer() && getPeer()->getSource())));
     return true;
 }
 
@@ -6367,7 +6367,8 @@ bool YBTSChan::msgRinging(Message& msg)
     if (!call)
 	return false;
     if (call->incoming() && call->m_state == YBTSCallDesc::CallProceeding)
-	call->alert(buildProgressIndicator(msg));
+	call->alert(buildProgressIndicator(msg,
+	    msg.getBoolValue(YSTRING("media"),getPeer() && getPeer()->getSource())));
     return true;
 }
 
@@ -8713,6 +8714,7 @@ void YBTSDriver::initialize()
     if (s_first) {
 	s_first = false;
 	setup();
+	installRelay(Progress);
 	installRelay(MsgExecute);
 	installRelay(Halt);
 	installRelay(Stop,"engine.stop");
