@@ -119,10 +119,12 @@ install: all
 	$(MAKE) -C ./mbts/TransceiverRAD1 install
 	$(MAKE) -C ./nib install
 	$(MAKE) -C ./nib/auth install
+	$(MAKE) -C ./roaming install
 
 uninstall:
 	$(MAKE) -C ./nib/auth uninstall
 	$(MAKE) -C ./nib uninstall
+	$(MAKE) -C ./roaming uninstall
 	$(MAKE) -C ./mbts/Transceiver52M uninstall
 	$(MAKE) -C ./mbts/TransceiverRAD1 uninstall
 	$(MAKE) -C ./mbts/apps uninstall
