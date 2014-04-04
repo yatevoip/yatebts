@@ -1362,6 +1362,8 @@ public:
     String m_callRef;
     String m_reason;
     String m_called;
+    String m_calledPlan;
+    String m_calledType;
 };
 
 class YBTSChan : public Channel, public YBTSConnIdHolder
@@ -5647,8 +5649,11 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, 
 	if (!x)
 	    continue;
 	const String& s = x->getTag();
-	if (s == s_ccCalled)
+	if (s == s_ccCalled) {
 	    m_called = x->getText();
+	    m_calledPlan = x->attribute(YSTRING("plan"));
+	    m_calledType = x->attribute(YSTRING("nature"));
+	}
     }
 }
 
@@ -5838,6 +5843,8 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
     ue()->addCaller(*m_route);
     ue()->unlock();
     m_route->addParam("called",call->m_called,false);
+    m_route->addParam("callednumtype",call->m_calledType,false);
+    m_route->addParam("callednumplan",call->m_calledPlan,false);
     m_route->addParam("username",ue()->imsi(),false);
     m_route->addParam("imei",ue()->imei(),false);
     m_route->addParam("emergency",String::boolText(!call->m_regular));
@@ -5863,8 +5870,15 @@ bool YBTSChan::initOutgoing(Message& msg)
     if (m_pending)
 	return false;
     m_pending = new ObjList;
-    if (!msg.getBoolValue(YSTRING("privacy")));
-	addXmlFromParam(*m_pending,msg,"CallingPartyBCDNumber",YSTRING("caller"));
+    if (!msg.getBoolValue(YSTRING("privacy"))) {
+	const String& caller = msg[YSTRING("caller")];
+	if (caller) {
+	    XmlElement* x = new XmlElement("CallingPartyBCDNumber",caller);
+	    x->setAttributeValid(YSTRING("plan"),msg.getValue(YSTRING("callernumplan")));
+	    x->setAttributeValid(YSTRING("nature"),msg.getValue(YSTRING("callernumtype")));
+	    m_pending->append(x);
+	}
+    }
     lck.drop();
     initChan();
     return initMT();
