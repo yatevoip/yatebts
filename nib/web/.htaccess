@@ -4,6 +4,6 @@
 # Deny from all and allow the interface to be
 # accessed from 127.0.0.1 uncomment the following:
 
-order deny,allow
-allow from 127.0.0.1 
-deny from all
+#order deny,allow
+#allow from 127.0.0.1 
+#deny from all

@@ -847,8 +847,8 @@ function get_default_fields_ybts()
 			),
 			"peer_cmd" => array(
 				"display" => "text",
-				"value" => "\${modulepath}/bts/mbts",
-				"comment" => "Command used to run the MBTS application. Defaults to expansion of \${modulepath}/bts/mbts"
+				"value" => "\${modulepath}/server/bts/mbts",
+				"comment" => "Command used to run the MBTS application. Defaults to expansion of \${modulepath}/server/bts/mbts"
 			),
 			"peer_arg" => array(
 				"display" => "text",
@@ -857,8 +857,8 @@ function get_default_fields_ybts()
 			),
 			"peer_dir" => array(
 				"display" => "text",
-				"value" => "\${modulepath}/bts",
-				"comment" => "Directory to change after forking the MBTS application. Defaults to expansion of \${modulepath}/bts"
+				"value" => "\${modulepath}/server/bts",
+				"comment" => "Directory to change after forking the MBTS application. Defaults to expansion of \${modulepath}/server/bts"
 			),
 			"print_msg" => array(
 				"display" => "text",
