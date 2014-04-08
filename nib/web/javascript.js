@@ -125,7 +125,7 @@ function show_submenu_tabs(id, total, name)
 
 	show_submenu_fields(name);
 
-	if (name == "gsm" || name == "gprs") {
+	if (name == "gsm" || name == "gprs" || name == "ybts") {
 		if (document.getElementById("submenu_line"))
 			document.getElementById("submenu_line").className = 'submenu';
 	} else {
@@ -136,7 +136,7 @@ function show_submenu_tabs(id, total, name)
 
 function show_submenu_fields(name)
 {
-	var subsections = ["gsm", "gsm_advanced","gprs","gprs_advanced","sgsn","ggsn", "control", "transceiver", "tapping", "test","ybts" ];
+	var subsections = ["gsm", "gsm_advanced","gprs","gprs_advanced","sgsn","ggsn", "control", "transceiver", "tapping", "test","ybts","security" ];
 	var forms_ids = ["","info_","err_","file_err_","notice_"];
 	
 	for (var i=0; i<subsections.length; i++) {

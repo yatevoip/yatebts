@@ -30,7 +30,8 @@ function create_form_ybts_section($section, $subsection, $fields= array(), $erro
 
 	$structure = get_fields_structure_from_menu();
         $filename = $yate_conf_dir. "ybts.conf";	
-	
+	$default_fields = get_default_fields_ybts();
+
 	//read config parameters from conf file (ybts.conf) 
 	if (file_exists($filename) && !isset($_SESSION["ybts_params"])) {
 		$ybts = new ConfFile($filename);
@@ -40,13 +41,16 @@ function create_form_ybts_section($section, $subsection, $fields= array(), $erro
 	if (isset($_SESSION["ybts_params"])) {
 		foreach($structure as $m_section => $data) {
 			foreach($data as $key => $m_subsection) 
-				$fields[$m_section][$m_subsection] = $_SESSION["ybts_params"][$m_section][$m_subsection];
+				if (isset($_SESSION["ybts_params"][$m_section][$m_subsection]))
+					$fields[$m_section][$m_subsection] = $_SESSION["ybts_params"][$m_section][$m_subsection];
+			if (!isset($fields[$m_section][$m_subsection])) 
+				$fields[$m_section][$m_subsection] = $default_fields[$m_section][$m_subsection];
 		}
 	}
- 
+
 	//if the params are not set in file get the default values to be displayed
 	if (count($fields) == 0) 
-		$fields = get_default_fields_ybts();
+		$fields = $default_fields;
 
 	print "<div id=\"err_$subsection\">";	
 	error_handle($error, $fields[$section][$subsection],$error_fields);

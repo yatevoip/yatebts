@@ -921,6 +921,28 @@ function get_default_fields_ybts()
 				"display" => "select",
 				"comment" => "Specify in which way the XML will be passed along into Yate messages. Allowed values are:<br/> - string: pass the XML as a string<br/> - object: pass the XML as an object <br/> - both: pass the XML as a string and object<br/> This parameter is applied on reload. Defaults to object."
 			)
+		),
+		"security" => array(
+			"t3260" => array(
+				"display" => "text",
+				"value" => "720000",
+				"comment" => "Interval (in milliseconds) to wait for a response to authentication requests. Authentication will be aborted on timer expiry. This parameter is applied on reload. Interval allowed: 5000..3600000. Defaults to 720000"
+			),
+			"auth.call" => array(
+				"display" => "checkbox",
+				"value" => "0",
+				"comment" => "Authenticate MS on MT calls. This parameter is applied on reload. Defaults to 'no'."
+			),
+			"auth.sms" => array(
+				"display" => "checkbox",
+				"value" => "0",
+				"comment" => "Authenticate MS on MT SMS. This parameter is applied on reload. Defaults to 'no'."
+			),
+			"auth.ussd" => array(
+				"display" => "checkbox",
+				"value" => "0",
+				"comment" => "Authenticate MS on MT USSD. This parameter is applied on reload. Defaults to 'no'."
+			),
 		)
 	);
 

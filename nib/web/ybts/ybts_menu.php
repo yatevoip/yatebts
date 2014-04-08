@@ -30,7 +30,7 @@ function get_menu_structure()
 		"Transceiver" => array(),
 		"Tapping" => array(),
 		"Test" => array(),
-		"YBTS" => array()
+		"YBTS" => array("YBTS","Security")
 	);
 
 	return $structure;
@@ -75,7 +75,7 @@ function ybts_menu()
 		print "<td class='menu_space'>&nbsp;</td>";
 		if ($i == $total-1)
 			print "<td class='menu_empty'>&nbsp;</td>";
-	$i++;
+		$i++;
 	}
 ?>
 </tr>
@@ -94,8 +94,10 @@ function ybts_menu()
 			$style = "";
 		else
 			$style = "style='display:none;'";
-		if (count($submenu)<1)
+		if (count($submenu)<1) {
+			$i++;
 			continue;
+		}
 		print "<div class='submenu' id='submenu_$i' $style>";
 		foreach ($submenu as $key => $name) {
 			if (str_replace(" ", "_",strtolower($name)) == $subsection) 
@@ -136,7 +138,8 @@ function description_ybts_section()
 		"transceiver" => "Section [transceiver] controls how the radio transceiver is started and operates.",
 		"tapping" => "Section [tapping] - settings control if radio layer GSM and GPRS packets are tapped to Wireshark.",
 		"test" => "Section [test] has special parameters used to simulate errors.",
-		"ybts" => "Section [ybts] configures ybts related parameters."
+		"ybts" => "Section [ybts] configures ybts related parameters.",
+		"security" => "Section [security] configures security related parameters."
 	//	"logging" => "Section [logging] controls the logging levels of MBTS."
 	);
 
