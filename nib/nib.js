@@ -87,7 +87,6 @@ function newNumber()
     var val = goodNumber();
     while (!numberAvailable(val)) {
 	val = goodNumber();
-	//Engine.debug(Engine.DebugInfo,val);
     }
     return val;
 }
@@ -171,11 +170,8 @@ function getSubscriberIMSI(msisdn)
 {
     var imsi_key, nr, short_number;
 
-//    Engine.debug(Engine.DebugInfo,"getSubscriberIMSI, msisdn="+msisdn);
-
     for (imsi_key in subscribers) {
 	nr = subscribers[imsi_key].msisdn;
-	//Engine.debug("nr="+nr);
 	if (nr.length>0) {
 	    // strip + from start of number
 	    if (nr.substr(0,1)=="+")
@@ -192,7 +188,6 @@ function getSubscriberIMSI(msisdn)
 		return imsi_key;
     }
 
-//    Engine.debug(Engine.DebugInfo,"could not get imsi for nr="+msisdn);
     return false;
 }
 
@@ -273,8 +268,6 @@ function routeToRegUser(msg,called)
 	imsi = regUsers[number];
 	if (number.substr(0,1)=="+")
 	    number = number.substr(1);
-
-	//Engine.debug("checking registered user with number "+number);
 
 	if (called.substr(-number.length)==number) {
 	    msg.retValue(getRouteToIMSI(imsi));
@@ -463,7 +456,6 @@ function onRoute(msg)
 
 	if (caller_imsi=="" || subscribers[caller_imsi]==undefined) {
 	    // caller is not in our subscribers
-	    //Engine.debug("caller_imsi='"+caller_imsi+"'and it's not in our subscribers "+subscribers[caller_imsi]);
 	    msg.error = "forbidden";
 	    return true;
 	}
@@ -506,7 +498,7 @@ function authResync(msg,imsi)
     m.auts = auts;
     m.dispatch(true);
     var ns = m.sqn;
-    if (ns !== null) {
+    if (ns != "") {
 	Engine.debug(Engine.DebugInfo,"Re-sync " + imsi + " by SQN " + sqn + " -> " + ns);
 	// Since the synchronized sequence was already used increment it
 	sqn = 0xffffffffffff & (0x20 + parseInt(ns,16));
@@ -556,12 +548,6 @@ function startAuth(msg,imsi)
 
 	// remember xres and sqn
 	subscribers[imsi]["xres"] = m.xres;
-	
-	
-    Engine.debug(Engine.DebugNote,"IMSI: " + imsi + " writing xres " + subscribers[imsi]["xres"] + " from " + m.xres);
-	
-	
-	
 	subscribers[imsi]["sqn"] = sqn;
 	// Populate message with auth params
 	msg["auth.rand"] = rand;
@@ -600,8 +586,6 @@ function checkAuth(msg,imsi)
 
     var upper = msg["auth.response"];
     upper = upper.toUpperCase();
-    
-    Engine.debug(Engine.DebugNote,res + " " + upper);
     
     if (res != upper)
 	// it's safe to do this directly, ybts module makes sure this can't start a loop
