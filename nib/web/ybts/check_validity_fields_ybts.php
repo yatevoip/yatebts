@@ -344,4 +344,19 @@ function check_radio_rssitarget($field_name, $field_value)
 
 	return array(true);
 }
+
+/*
+ * validate t3260
+ */
+function check_t3260($field_name, $field_value)
+{
+	if (!is_valid_number($field_value))
+		return array(false, "Field $field_name is not valid. Interval allowed: 5000..3600000.");
+	$field_value = (int) $field_value;
+
+	if ($field_value<5000 || $field_value>3600000)
+		return array(false, "Field $field_name is not valid. Interval allowed: 5000..3600000.");
+
+	return array(true);
+}
 ?>

@@ -47,7 +47,7 @@ function get_default_fields_ybts()
 				"display" => "select",
 				"comment" => "The GSM operating band. Valid values are 850 (GSM850), 900 (PGSM900), 1800 (DCS1800) and 1900 (PCS1900). For non-multiband units, this value is dictated by the hardware and should not be changed."
 			),
-			 "Radio.C0" => array( 
+			"Radio.C0" => array( 
 				 $radio_c0,
 				"display" => "select",
 				"comment" => "The C0 ARFCN. Also the base ARFCN for a multi-ARFCN configuration.Valid values depend on the selected Radio.Band.<br/>GSM850: 128..251. 900<br/>  EGSM900: 0..124 or 975..1023.<br/> DSC1800: 512..885.<br/> PCS1900: 512..810.<br/> THERE IS NO DEFAULT, YOU MUST SET A VALUE HERE!",
@@ -56,7 +56,7 @@ function get_default_fields_ybts()
 			"Identity.MCC" => array( 
 				"display" => "text",
 				"value" => "001",
-				"comment" => " Mobile country code, must be three digits. The value 001 is reserved for for test networks. Defaults to 001 (Test Network)",
+				"comment" => "Mobile country code, must be three digits. The value 001 is reserved for for test networks. Defaults to 001 (Test Network)",
 				"validity" => array("check_field_validity", false, false, "^[0-9]{3}$")
 			),
 			"Identity.MNC" => array( 
@@ -926,7 +926,8 @@ function get_default_fields_ybts()
 			"t3260" => array(
 				"display" => "text",
 				"value" => "720000",
-				"comment" => "Interval (in milliseconds) to wait for a response to authentication requests. Authentication will be aborted on timer expiry. This parameter is applied on reload. Interval allowed: 5000..3600000. Defaults to 720000"
+				"comment" => "Interval (in milliseconds) to wait for a response to authentication requests. Authentication will be aborted on timer expiry. This parameter is applied on reload. Interval allowed: 5000..3600000. Defaults to 720000",
+				"validity" => array("check_t3260", "t3260")
 			),
 			"auth.call" => array(
 				"display" => "checkbox",
