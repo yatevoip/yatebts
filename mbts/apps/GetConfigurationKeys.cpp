@@ -389,7 +389,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GPRS.Channels.Min.C0","2",
+	tmp = new ConfigurationKey("GPRS.Channels.Min.C0","3",
 		"channels",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::VALRANGE,
@@ -1655,7 +1655,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Timer.T3212","30",
+	tmp = new ConfigurationKey("GSM.Timer.T3212","24",
 		"minutes",
 		ConfigurationKey::DEVELOPER,
 		ConfigurationKey::VALRANGE,

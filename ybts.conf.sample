@@ -502,8 +502,8 @@ Handover.ThresholdDelta=10
 ; Set to 0 to disable periodic registration.
 ; Should be smaller than SIP registration period.
 ; Allowed interval 0:1530(6).
-; Defaults to 30.
-;Timer.T3212=30
+; Defaults to 24.
+;Timer.T3212=24
 
 
 [gprs_advanced]
@@ -605,8 +605,8 @@ Handover.ThresholdDelta=10
 ;Channels.Congestion.Timer=60
 
 ; Channels.Min.C0: integer: Minimum number of channels allocated for GPRS service on ARFCN C0.
-; Interval allowed 0:7. Defaults to 2.
-;Channels.Min.C0=2
+; Interval allowed 0:7. Defaults to 3.
+;Channels.Min.C0=3
 
 ; Channels.Min.CN: integer: Minimum number of channels allocated for GPRS service on ARFCNs other than C0.
 ; Interval allowed 0:100. Defaults to 0. 
