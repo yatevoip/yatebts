@@ -32,7 +32,6 @@ function get_menu_structure()
 		"Test" => array(),
 		"YBTS" => array("YBTS","Security")
 	);
-
 	return $structure;
 }
 
@@ -52,14 +51,45 @@ function get_fields_structure_from_menu()
 	}
 	return $fields_structure;
 }
+
 /* display the menu and the submenu*/
 function ybts_menu()
 {
 	global $section, $subsection;
 	
 	$structure = get_menu_structure();
-	//Create the open/close menu structure
+
+
+//Create the open/close menu structure
 ?>
+<script type="text/javascript">
+	var subsections = new Array();
+	var sect_with_subsect = new Array();
+<?php
+	$i = $j = 0; 
+	foreach ($structure as $j_section => $j_subsections) {
+			$j_section = str_replace(" ", "_",strtolower($j_section));
+		if (count($j_subsections)) {
+			echo "sect_with_subsect[\"" . $j . "\"]='" . $j_section . "';";
+			$j++;
+		} else { 
+			echo "subsections[\"" . $i . "\"]='" . $j_section . "';";
+			$i++;
+		}
+
+
+
+		foreach ($j_subsections as $key => $j_subsection) {
+	                 if (isset($j_subsection)) {
+				 $j_subsection = str_replace(" ", "_",strtolower($j_subsection));
+				 echo "subsections[\"" . $i . "\"]='" . $j_subsection . "';";
+				 $i++;
+			 }  
+		}
+	}
+
+?>	
+</script>
 <table class="menu" cellspacing="0" cellpadding="0">
 <tr>
 <?php
@@ -140,7 +170,6 @@ function description_ybts_section()
 		"test" => "Section [test] has special parameters used to simulate errors.",
 		"ybts" => "Section [ybts] configures ybts related parameters.",
 		"security" => "Section [security] configures security related parameters."
-	//	"logging" => "Section [logging] controls the logging levels of MBTS."
 	);
 
 	foreach ($section_desc as $subsect => $desc) {

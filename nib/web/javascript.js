@@ -125,7 +125,7 @@ function show_submenu_tabs(id, total, name)
 
 	show_submenu_fields(name);
 
-	if (name == "gsm" || name == "gprs" || name == "ybts") {
+	if (in_array(name, sect_with_subsect)) {
 		if (document.getElementById("submenu_line"))
 			document.getElementById("submenu_line").className = 'submenu';
 	} else {
@@ -136,7 +136,8 @@ function show_submenu_tabs(id, total, name)
 
 function show_submenu_fields(name)
 {
-	var subsections = ["gsm", "gsm_advanced","gprs","gprs_advanced","sgsn","ggsn", "control", "transceiver", "tapping", "test","ybts","security" ];
+	//  subsections variable is now built dynamically depending on the detected section in ybts_fields
+        //	var subsections = ["gsm", "gsm_advanced","gprs","gprs_advanced","sgsn","ggsn", "control", "transceiver", "tapping", "test","ybts","security"];
 	var forms_ids = ["","info_","err_","file_err_","notice_"];
 	
 	for (var i=0; i<subsections.length; i++) {
@@ -157,6 +158,15 @@ function show_submenu_fields(name)
 
 }
 
+function in_array(needle, haystack) 
+{
+    var length = haystack.length;
+    for (var i = 0; i < length; i++) {
+        if (haystack[i] == needle) 
+		return true;
+    }
+    return false;
+}
 /*
 function advanced(identifier)
 {

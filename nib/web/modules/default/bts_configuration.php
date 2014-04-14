@@ -45,10 +45,9 @@ function bts_configuration()
 
 function bts_configuration_database()
 {
-	global $section, $subsection, $ybts_fields_modified;
+	global $section, $subsection;
 
 	$structure = get_fields_structure_from_menu();
-	set_fields_in_session();
 	$errors_found = false;
 	foreach ($structure as $m_section => $data) {
 		foreach($data as $key => $m_subsection) {
@@ -60,8 +59,9 @@ function bts_configuration_database()
 				$_SESSION["section"] = $m_section;
 				$_SESSION["subsection"] = $m_subsection;
 				break;
-			} else 
-			       	$fields[] = $res["fields"];  
+			} else {
+				$fields[] = $res["fields"];  
+			}
 		}
 		if ($errors_found)
 		       	break;
@@ -74,13 +74,15 @@ function bts_configuration_database()
 <tr> 
 	<td class="content_form"><?php 
 	if ($errors_found)
-		create_form_ybts_section($section, $subsection, $res["fields"], $res["error"], $res["error_fields"]);
+		create_form_ybts_section($section, $subsection, true, $res["error"], $res["error_fields"]);
 	else {
+		
+		$ybts_fields_modified = get_status_fields($structure);
 		if (!$ybts_fields_modified) {
 			print "<div id=\"notice_$subsection\">";
                         message("Finish editing sections. Nothing to update in ybts.conf file.", "no");
                         print "</div>";
-			create_form_ybts_section($section, $subsection, $fields);
+			create_form_ybts_section($section, $subsection);
 	?></td>
     	<td class="content_info"><?php description_ybts_section(); ?></td>
 </tr>
@@ -89,6 +91,8 @@ function bts_configuration_database()
 <?php
 			return;
 		}
+
+
 		//if no errors encounted on validate data fields then write the data to ybts.conf
 		$res1 = write_params_conf($fields);
 		if (!$res1[0]) {
@@ -96,12 +100,12 @@ function bts_configuration_database()
 			errormess("Errors encountered while writting ybts.conf file: ".$res1[1]);
 			print "</div>";
 		} else {
-			unset($_SESSION["ybts_param"], $_SESSION["section"], $_SESSION["subsection"]);
+			unset($_SESSION["section"], $_SESSION["subsection"]);
 			print "<div id=\"notice_$subsection\">";
 			message($res1[1], "no");
 			print "</div>";
 		}
-		create_form_ybts_section($section, $subsection, $fields);
+		create_form_ybts_section($section, $subsection);
  }
 ?></td>
     <td class="content_info"><?php description_ybts_section(); ?></td>
