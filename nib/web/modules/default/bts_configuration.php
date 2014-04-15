@@ -92,7 +92,6 @@ function bts_configuration_database()
 			return;
 		}
 
-
 		//if no errors encounted on validate data fields then write the data to ybts.conf
 		$res1 = write_params_conf($fields);
 		if (!$res1[0]) {

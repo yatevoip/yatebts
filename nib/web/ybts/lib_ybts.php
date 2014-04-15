@@ -181,7 +181,7 @@ function create_fields_from_conffile($fields_from_file,$exists_in_file = false)
 function validate_fields_ybts($section, $subsection)
 {
         // this array contains the name of the params that can be empty in configuration file (ybts.conf)
-	$allow_empty_params = array("Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg");
+	$allow_empty_params = array("Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg", "RadioFrequencyOffset", "TxAttenOffset", "Radio.RxGain" );
 	
 	$fields = get_default_fields_ybts();
 	$new_fields = array();
@@ -208,17 +208,14 @@ function validate_fields_ybts($section, $subsection)
 			$res = check_valid_values_for_select_field($param_name, $field_param, $data[0]);
 		elseif (isset($data["validity"])) 
 			$res = call_function_from_validity_field($data["validity"], $param_name, $field_param);
-		
+
 		if (!$res[0])
 			$error_field[] = array($res[1], $param_name);
 
-		//skip parameters that are not set (and they are allowed to be empty)
-		if (!valid_param($field_param)) {
-			if (in_array($param_name, $allow_empty_params)){
-				unset($new_fields[$section][$subsection][$param_name]);
-				continue;
-		       }
-		}
+		// set to "" parameters that are not set or are set to "Factory calibrated"
+		// they will be written commented in ybts.conf
+		if (!valid_param($field_param) || $field_param=="Factory calibrated")
+			$field_param = "";
 
 		if ($data["display"] == 'select')
 			$new_fields[$section][$subsection][$param_name][0]["selected"] = $field_param;
@@ -237,6 +234,7 @@ function validate_fields_ybts($section, $subsection)
 		$error .=  $err[0]."<br/>";
 		$error_fields[] =  $err[1];
 	}
+
 	return array(false,"fields"=>$new_fields,"error"=>$error,"error_fields"=>$error_fields);
 }
 
@@ -293,42 +291,36 @@ function write_params_conf($fields)
 	$structure = get_fields_structure_from_menu(); 
 
 	$filename = $yate_conf_dir. "ybts.conf";
-
-	if (file_exists($filename))
-		$ybts = new ConfFile($filename,true,true,"\n\n");
-	else
-		$ybts = new ConfFile($filename,false,true,"\n\n");
+	$ybts = new ConfFile($filename,false,true,"\n\n");
 	
 	foreach ($fields as $key => $arr) {
 		foreach($arr as $section => $params) {
 				$i=0;
 			foreach ($params as $subsection => $data1) {
 				foreach ($data1 as $param => $data) {
-					//write comments just the first time when section is written in file
-					if (!isset($ybts->structure[$subsection][0]) || (!isset($ybts->structure[$subsection][$param]) )) { 
-						if (isset($ybts->structure[$subsection])) {
-							foreach ($ybts->structure[$subsection] as $key => $comment) {
-								if (is_numeric($key))
-									$i++;
-							}
-						}
-					 	$comment_arr = explode("<br/>", $data["comment"]);
-						$total = count($comment_arr);
-						for ($j = 0; $j< $total; $j++) {
-							 $ybts->structure[$subsection][$i] = ";".$comment_arr[$j];
-							 $i++;
-						}
+					// write the comments
+					$comment_arr = explode("<br/>", $data["comment"]);
+					$total = count($comment_arr);
+					for ($j = 0; $j< $total; $j++) {
+						$ybts->structure[$subsection][$i] = ";".$comment_arr[$j];
+						$i++;
 					}
 
 					//prepare the data to be written
 					if (isset($data[0]["selected"]))
-						$value = array($data[0]["selected"]);
+						$value = $data[0]["selected"];
 					elseif ($data["display"] == "checkbox")
-						$value = array($data["value"]=="on"? "yes" : "no");
+						$value = $data["value"]=="on"? "yes" : "no";
 					else
-						$value = array($data["value"]);
+						$value = $data["value"];
 
-					$ybts->structure[$subsection][$param] = $value;
+					if (strlen($value))
+						$ybts->structure[$subsection][$param] = array($value);
+					else {
+						// write field commented
+						$ybts->structure[$subsection][$i] = ";$param=\n";
+						$i++;
+					}
 				}
 			}
 		}

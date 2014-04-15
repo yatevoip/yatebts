@@ -543,6 +543,7 @@ td.left_td
 {
 	text-align:right;
 	width:30%;
+	vertical-align:top;
 }
 
 td.right_td
