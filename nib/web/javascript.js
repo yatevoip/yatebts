@@ -78,9 +78,12 @@ function advanced(identifier)
 
 	var ie = getInternetExplorerVersion();
 
+	var not_advanced = ["imsi","iccid","opc","ki"]; 
 	for(var i=0;i<elems.length;i++)
 	{
 		elem_name = elems[i].name;
+		if(in_array(elem_name, not_advanced))
+			continue;
 		if(identifier.length < elem_name.length && elem_name.substr(0,identifier.length) != identifier)
 			continue;
 		var elem = document.getElementById("tr_"+elem_name); 
@@ -156,6 +159,44 @@ function show_submenu_fields(name)
 		}
 	}
 
+}
+
+function show_hide_cols()
+{
+	var cols = ["tr_imsi", "tr_iccid", "tr_ki", "tr_opc"];
+	 for (var i=0;i<cols.length;i++) {
+		 if (!document.getElementById(cols[i]))
+			 continue;
+		show_hide(cols[i]);
+	 }
+}
+
+function show_hide(element)
+{
+	var ie = getInternetExplorerVersion();
+	var div = document.getElementById(element);
+
+	if (div.style.display == "none") {
+		if(div.tagName == "TR")
+			div.style.display = (ie > 1 && ie<8) ? "block" : "table-row";//"block";//"table-row";
+		else
+			if(div.tagName == "TD")
+				div.style.display = (ie > 1 && ie<8) ? "block" : "table-cell";
+			else
+				div.style.display = "block";
+	}else{
+		div.style.display = "none";
+	}
+}
+
+function show_hide_pysim_traceback(pysim_err)
+{
+	show_hide(pysim_err);
+	if (document.getElementById(pysim_err).style.display == "none") {
+		document.getElementById("err_pysim").innerHTML = "For full PySim traceback <div id=\"err_link_pysim\" class=\"error_link\" onclick=\"show_hide_pysim_traceback('pysim_err')\" style=\"cursor:pointer;\">click here</div></div>";
+	} else {
+		document.getElementById("err_pysim").innerHTML = "To hide full traceback <div id=\"err_link_pysim\" class=\"error_link\" onclick=\"show_hide_pysim_traceback('pysim_err')\" style=\"cursor:pointer;\">click here</div>";
+	}
 }
 
 function in_array(needle, haystack) 

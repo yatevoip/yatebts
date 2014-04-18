@@ -1282,3 +1282,6 @@ div.submenu_open, div.submenu_close, div.submenu_space {display:inline; float:le
 div.submenu_close { cursor:pointer;}
 div.submenu_open { border-bottom: 2px solid #93c300;padding-bottom:0px;}
 table.menu a.menu_links { border-bottom:none;}
+/*WRITE SIM FORM*/
+div.error_link { border-bottom:2px solid #93c300;width:75px;display:inline;}
+div.err_link_pysim { display:inline;}

@@ -97,5 +97,8 @@ if (!isset($yate_conf_dir))
 $yate_ip = "127.0.0.1";
 
 $proj_title = "Yatebts NIB";
-
+# used to run PySim command
+$pysim_path = "/usr/src/pysim";
+# the file used by PySim to write the SIM credentials 
+$pysim_csv = $yate_conf_dir . "sim_data.csv";
 ?>

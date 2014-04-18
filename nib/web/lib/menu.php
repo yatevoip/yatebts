@@ -86,7 +86,7 @@ function get_content()
 ?>
 				</div>
 			</td>
-			<td class="version"><?php/* print get_version();*/?></td>
+			<td class="version">/* print get_version();*/</td>
 		</tr>-->
 	</table>
 	<div class="position"> <br/> </div>
