@@ -26,7 +26,7 @@ function have_pysim_package()
 
 function have_nib_package()
 {
-	return shell_exec("rpm -qa 'nib*'");
+	return shell_exec("rpm -qa 'yate-bts-nib*'");
 }
 
 function include_formats($formats,$form_identifier)
