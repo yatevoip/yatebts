@@ -343,8 +343,8 @@ function check_permission($dir)
 {
 	if (!is_dir($dir))
 		return array(false, "The directory: ".$dir ." was not found on this server. Please create the directory and run this as root: 'chmod -R a+rw ".$dir."'");
-	if (substr(decoct(fileperms($dir)), -4) !== "0777")
-		return array(false, "Don't have permission on ". $dir.". Please run this command as root: 'chmod -R a+rw ".$dir."'");
+	if (!is_readable($dir) || !is_writable($dir))
+		return array(false, "Don't have r/w permission on ". $dir.". Please run this command as root: 'chmod -R a+rw ".$dir."'");
 
 	return array(true);
 }

@@ -90,6 +90,8 @@ $dirs = array("/etc/yate/", "/usr/local/etc/yate/");
 foreach ($dirs as $pos_dir) {
 	if (is_dir($pos_dir))
 		$yate_conf_dir = $pos_dir;
+	if (is_readable($pos_dir) && is_writable($pos_dir))
+		break;
 }
 if (!isset($yate_conf_dir)) 
 	print ("Couldn't detect installed yate. Please install yate first before trying to use the NIB WebGui.");
