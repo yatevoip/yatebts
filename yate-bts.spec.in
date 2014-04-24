@@ -66,7 +66,6 @@ BuildRequires:	gcc-c++
 BuildRequires:	yate-devel >= @YATE_REQ@
 Requires:	yate = @YATE_VER@
 Requires:	yate-gsm = @YATE_VER@
-Requires:	yate-scripts = @YATE_VER@
 Requires:	%{name}-transceiver = %{version}-%{release}
 
 %define prefix	/usr
@@ -85,17 +84,54 @@ At least one transceiver package must also be installed for interfacing with the
 %docdir %{_defaultdocdir}/%{name}-%{version}
 %doc %{_defaultdocdir}/%{name}-%{version}/*
 %dir %{btsdir}
-%dir %{_datadir}/yate/nib_web
 %{moddir}/*.yate
 %{btsdir}/mbts
-%{_datadir}/yate/scripts/*
-%{_datadir}/yate/sounds/*
-%{_datadir}/yate/nib_web/*
-%config(noreplace) %{_datadir}/yate/nib_web/.htaccess
-%config(noreplace) %{_sysconfdir}/yate/*
+%config(noreplace) %{_sysconfdir}/yate/ybts.conf
 
 %postun
 test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
+
+
+%package nib
+Summary:	GSM Network In a Box based on Yate-BTS
+Group:		Applications/Communications
+Requires:	%{name} = %{version}-%{release}
+Requires:	yate-scripts = @YATE_VER@
+Requires:	apache-mod_php
+
+%description nib
+Scripts and support executables that implement a GSM Network In a Box.
+
+%files nib
+%defattr(-, root, root)
+%dir %{_datadir}/yate/nib_web
+%{_datadir}/yate/scripts/gsm_auth.sh
+%{_datadir}/yate/scripts/do_*
+%{_datadir}/yate/scripts/nib.js
+%{_datadir}/yate/scripts/welcome.js
+%{_datadir}/yate/sounds/*
+%{_datadir}/yate/nib_web/*
+/var/www/html/nib
+%config(noreplace) %{_datadir}/yate/nib_web/.htaccess
+%config(noreplace) %{_sysconfdir}/yate/subscribers.js
+
+%post nib
+chgrp -R apache %{_sysconfdir}/yate
+chmod g+rw %{_sysconfdir}/yate
+
+
+%package roaming
+Summary:	SIP based GSM roaming support for Yate-BTS
+Group:		Applications/Communications
+Requires:	%{name} = %{version}-%{release}
+
+%description roaming
+Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE server.
+
+%files roaming
+%defattr(-, root, root)
+%{_datadir}/yate/scripts/roaming.js
+%config(noreplace) %{_sysconfdir}/yate/roamingconf.js
 
 
 %if "%{no_rad1}" != "1"
@@ -110,6 +146,7 @@ Requires:	%{name} = %{version}-%{release}
 RAD1 transceiver executable and support files for Yate-BTS.
 
 %files rad1
+%defattr(-, root, root)
 %{btsdir}/transceiver-rad1
 %{btsdir}/ezusb.ihx
 %{btsdir}/fpga.rbf
@@ -138,6 +175,7 @@ Requires:	%{name} = %{version}-%{release}
 bladeRF transceiver executable and support files for Yate-BTS.
 
 %files bladerf
+%defattr(-, root, root)
 %{btsdir}/transceiver-bladerf
 %{btsdir}/firmware.img
 %{btsdir}/hostedx40.rbf
@@ -167,6 +205,7 @@ Requires:	%{name} = %{version}-%{release}
 USRP1 transceiver executable and support files for Yate-BTS.
 
 %files usrp1
+%defattr(-, root, root)
 %{btsdir}/transceiver-usrp1
 %{btsdir}/std_inband.rbf
 
@@ -194,6 +233,7 @@ Requires:	%{name} = %{version}-%{release}
 UHD transceiver executable and support files for Yate-BTS.
 
 %files uhd
+%defattr(-, root, root)
 %{btsdir}/bts/transceiver-uhd
 
 %post uhd
@@ -241,9 +281,10 @@ make %{stripped}
 
 %install
 make install DESTDIR=%{buildroot}
+mkdir -p %{buildroot}/var/www/html
+ln -sf %{_datadir}/yate/nib_web %{buildroot}/var/www/html/nib
 
 %clean
-# make clean
 rm -rf %{buildroot}
 
 %changelog
