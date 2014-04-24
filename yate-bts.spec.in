@@ -152,6 +152,24 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2
 	EOF
     fi
 fi
+if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/extmodule.conf 2>/dev/null; then
+    if grep -q '^ *\[scripts\]' %{_sysconfdir}/yate/extmodule.conf 2>/dev/null; then
+	awk '/^ *\[/{sect=0}
+	/^ *\[scripts\]/{sect=1}
+	/^ *gsm_auth\.sh/{if(sect==2)sect=3}
+	{if(sect==3){print ";; " $0;sect=2} else print;
+	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\ngsm_auth.sh\n";sect=2}
+	}' <%{_sysconfdir}/yate/extmodule.conf >%{_sysconfdir}/yate/extmodule.conf.tmp
+	mv -f %{_sysconfdir}/yate/extmodule.conf.tmp %{_sysconfdir}/yate/extmodule.conf
+    else
+	cat <<-EOF >>%{_sysconfdir}/yate/extmodule.conf
+	[scripts]
+	; Installed by yate-bts-nib, do not remove this comment line
+	gsm_auth.sh
+
+	EOF
+    fi
+fi
 chgrp -R apache %{_sysconfdir}/yate
 chmod g+rw %{_sysconfdir}/yate
 
