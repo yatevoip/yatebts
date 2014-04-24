@@ -8,7 +8,7 @@ function onAuth(msg)
 {
     var imsi = msg.imsi;
 
-    var sr = buildRegister(imsi,expires);
+    var sr = buildRegister(imsi,expires,msg.imei);
     if (!addAuthParams(sr,msg,imsi))
 	return false;
 
@@ -17,6 +17,8 @@ function onAuth(msg)
 	if (authSuccess(sr,imsi,msg))
 	    return true;
 	return reqResponse(sr,imsi,msg,true);
+    } else {
+	Engine.debug(Engine.debugWarn, "Could not do xsip.generate for method REGISTER in onAuth.");
     }
 
     return false;
@@ -34,7 +36,7 @@ function onRegister(msg)
 
     Engine.debug(Engine.DebugInfo, "Preparing to send REGISTER");
 
-    var sr = buildRegister(imsi,expires);
+    var sr = buildRegister(imsi,expires,msg.imei);
     if (!addAuthParams(sr,msg,imsi))
 	return false;
 
@@ -43,6 +45,8 @@ function onRegister(msg)
 	if (authSuccess(sr,imsi,msg))
 	    return true;
 	return reqResponse(sr,imsi,msg);
+    } else {
+	Engine.debug(Engine.debugWarn, "Could not do xsip.generate for method REGISTER in onRegister.");
     }
 
     return false;
@@ -53,7 +57,7 @@ function onRegister(msg)
  * @param imsi String
  * @param exp Integer Expire time for SIP registration. Min 0, Max 3600 
  */
-function buildRegister(imsi,exp)
+function buildRegister(imsi,exp,imei)
 {
     var sr = new Message("xsip.generate");
     sr.method = "REGISTER";
@@ -61,10 +65,16 @@ function buildRegister(imsi,exp)
     sr.uri = "sip:" + reg_sip;
     sr.sip = "sip:" + sr.user + "@" + my_sip;
     var uri = "<" + sr.sip + ">";
-    sr.sip_From = uri;
-    sr.sip_To = uri;
-    sr.sip_Contact = uri + ";expires=" + exp;
+    var uri_reg = "<sip:" + sr.user + "@" + reg_sip + ">";
+    sr.sip_From = uri_reg;
+    sr.sip_To = uri_reg;
+    sr.sip_Contact = uri + "; expires=" + exp;
+    if (imei!="") {
+	imei = imei.substr(0,8) + "-" + imei.substr(8,6) + "-" + imei.substr(-1);
+	sr.sip_Contact = sr.sip_Contact + "; +sip.instance=\"<urn:gsma:imei:"+ imei +">\"";
+    }
     sr.sip_Expires = exp;
+    sr["sip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
 
     return sr;
 }
@@ -213,7 +223,7 @@ function onUnregister(msg)
     if (imsi=="")
 	return false;
 
-    var sr = buildRegister(imsi,0);
+    var sr = buildRegister(imsi,0,msg.imei);
     sr.enqueue();
     return true;
 }
@@ -273,6 +283,7 @@ function onMoSMS(msg)
     m.xsip_type = "application/vnd.3gpp.sms";
     m.xsip_body_encoding = "hex";
     m.xsip_body = msg.rpdu;
+    m["sip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
     m.wait = true;
     if (!addAuthParams(m,msg,imsi))
 	return false;
@@ -284,7 +295,8 @@ function onMoSMS(msg)
 	    return true;
 	}
 	return reqResponse(m,imsi,msg);
-    }
+    } else
+	Engine.debug(Engine.debugWarn, "Could not do xsip.generate for method MESSAGE");
 
     msg.error = "service unavailable";
     return true;
@@ -308,6 +320,7 @@ function onRoute(msg)
 	    msg.called = "+"+msg.called;
 	
 	tempinfo_route[msg.id] = imsi;
+	msg["osip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
 	msg.retValue("sip/sip:"+msg.called+"@"+reg_sip);
     } 
     else {
@@ -331,18 +344,84 @@ function onRoute(msg)
  */
 function onExecute(msg)
 {
-    if (msg.username!="")
+    if (msg.username!="") {
 	// add auth params if any
     	addAuthParams(msg,msg,msg.username,"osip_Authorization");
+	msg["osip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+    }
 
     return false;	
+}
+
+/*
+ * Read only necessary configuration from [gsm] section in ybts.conf
+ */
+function readYBTSConf()
+{
+    var conf = new ConfigFile(Engine.configFile("ybts"),true);
+    var gsm_section = conf.getSection("gsm");
+
+    mcc = gsm_section.getValue("Identity.MCC");
+    mnc = gsm_section.getValue("Identity.MNC");
+
+    var lac = gsm_section.getValue("Identity.LAC");
+    var ci = gsm_section.getValue("Identity.CI");
+
+    if (mcc=="" || mnc=="" || lac=="" || ci=="")
+	Engine.alarm(alarm_conf, "Please configure Identity.MCC, Identity.MNC, Identity.LAC, Identity.CI in ybts.conf. All this parameters are required in roaming mode.");
+
+    hex_lac = get16bitHexVal(lac);
+    hex_ci = get16bitHexVal(ci);
+    if (hex_lac==false || hex_ci==false)
+	Engine.alarm(alarm_conf, "Wrong configuration for Identity.LAC="+lac+" or Identity.CI="+ci+". Can't hexify value.");
+}
+
+/*
+ * Returns 16 bit(or more) hex value
+ * @param String String representation of int value that should be returned as hex
+ * @return String representing the hex value of @val
+ */ 
+function get16bitHexVal(val)
+{
+    val = parseInt(val);
+    if (isNaN(val))
+	return false;
+
+    val = val.toString(16);
+    val = val.toString();
+    while (val.length<4)
+	val = "0"+val;
+
+    return val;
+}
+
+/*
+ * Read and check configuration from subscribersconf.js and ybts.conf
+ */ 
+function checkConfiguration()
+{
+    if (expires=="" || expires==undefined)
+	expires = 3600;
+
+    if (reg_sip=="" || reg_sip==undefined || reg_sip==null)
+	Engine.alarm(alarm_conf,"Please configure reg_sip parameter in subscribersconf.js located in the configurations directory.");
+    if (my_sip=="" || my_sip==undefined || my_sip==null)
+	Engine.alarm(alarm_conf,"Please configure my_sip parameter in subscribersconf.js located in the configurations directory.");
+    if (gstn_location=="" || gstn_location==undefined || gstn_location==null)
+	Engine.alarm(alarm_conf,"Please configure gstn_location parameter in subscribersconf.js located in the configurations directory.");
+
+    readYBTSConf();
 }
 
 // hold temporary info: nonce and realm for authenticating various requests
 var tempinfo = {};
 // hold temporary chanid-imsi association for authenticating INVITEs
 var tempinfo_route = {};
+// alarm for configuration issues
+var alarm_conf = 3;
 
+Engine.debugName("roaming");
+checkConfiguration();
 Message.install(onRegister,"user.register",80);
 Message.install(onUnregister,"user.unregister",80);
 Message.install(onRoute,"call.route",80);
