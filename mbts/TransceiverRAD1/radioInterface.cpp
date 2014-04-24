@@ -65,6 +65,9 @@ RadioInterface::RadioInterface(RadioDevice *wRadio,
 			       GSM::Time wStartTime)
 
 {
+	// DAVID COMMENT:  Note that wRadioOversampling is ignored, which is probably why setting
+	// SAMPSPERSYM to anything but 1 causes problems.
+	//
   underrun = false;
  
   sendCursor = 0; 
@@ -159,6 +162,15 @@ bool started = false;
 void RadioInterface::pushBuffer(void) {
 
   if (sendCursor < 2*INCHUNK*samplesPerSymbol) return;
+
+  // DAVID COMMENT: So what is samplesPerSymbol here?  You can't tell from the
+  // name, but it is an instance variable of RadioInterace.  It is equal to the
+  // wTransceiverOversampling given to the constructor.  Note that wRadioOversampling is
+  // ignored, so you cannot really oversample the individual ARFCNs.
+  //
+  // DAVID COMMENT: Where the hell is the data for transmission?  In sendBuffer[],
+  // which is actually an instance variable.  And it is already in short and already
+  // scaled (supposedly) to whatever range the radio expects.
 
   // send resampleVector
   int samplesWritten = mRadio->writeSamples(sendBuffer,

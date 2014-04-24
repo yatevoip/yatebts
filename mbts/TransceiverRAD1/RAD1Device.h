@@ -38,28 +38,23 @@
 
 #include "bytesex.h"
 
-#include <Configuration.h>
-
-extern ConfigurationTable gConfig;
-
-/** A class to handle a USRP rev 4, with a two RFX900 daughterboards */
+/** A class to handle a RAD1 board */
 class RAD1Device: public RadioDevice {
 
 private:
 
-  static const double masterClockRate; ///< the USRP clock rate
+  static const double masterClockRate; ///< the RAD1 clock rate
   double desiredSampleRate; 	///< the desired sampling rate
-  rnrad1Rx* m_uRx;	///< the USRP receiver
-  rnrad1Tx* m_uTx;	///< the USRP transmitter
-	
-  double actualSampleRate;	///< the actual USRP sampling rate
-  unsigned int decimRate;	///< the USRP decimation rate
+  rnrad1Rx* m_uRx;	///< the RAD1 receiver
+  rnrad1Tx* m_uTx;	///< the RAD1 transmitter
 
-  unsigned long long samplesRead;	///< number of samples read from USRP
-  unsigned long long samplesWritten;	///< number of samples sent to USRP
+  double actualSampleRate;	///< the actual RAD1 sampling rate
+  unsigned int decimRate;	///< the RAD1 decimation rate
 
-  bool started;			///< flag indicates USRP has started
-  bool skipRx;			///< set if USRP is transmit-only.
+  unsigned long long samplesRead;	///< number of samples read from RAD1
+  unsigned long long samplesWritten;	///< number of samples sent to RAD1
+
+  bool skipRx;			///< set if RAD1 is transmit-only.
 
   static const unsigned int currDataSize_log2 = 21;
   static const unsigned long currDataSize = (1 << currDataSize_log2);
@@ -72,7 +67,6 @@ private:
 
   Mutex writeLock;
 
-  short *currData;		///< internal data buffer when reading from USRP
   TIMESTAMP currTimestamp;	///< timestamp of internal data buffer
   unsigned currLen;		///< size of internal data buffer
 
@@ -85,6 +79,14 @@ private:
 
   double rxGain;
 
+  /** Factory calibration variables */
+  unsigned int sdrsn;
+  unsigned int rfsn;
+  unsigned int band;
+  unsigned int freq;
+  unsigned int rxgain;
+  unsigned int txgain;
+
 #ifdef SWLOOPBACK 
   short loopbackBuffer[1000000];
   int loopbackBufferSize;
@@ -95,7 +97,7 @@ private:
   bool   firstRead;
 #endif
 
-  /** Mess of constants used to control various hardware on the USRP */
+  /** Mess of constants used to control various hardware on the RAD1 */
   static const unsigned POWER_UP = (1 << 7);
   static const unsigned RX_TXN = (1 << 6);
   static const unsigned RX2_RX1N = (1 << 6);
@@ -149,6 +151,9 @@ private:
   //static const int FR_ATR_TXVAL_0 = 21;
   //static const int FR_ATR_RXVAL_0 = 22;
 
+  /** Read factory settings from EEPROM */
+  void readEEPROM(int deviceID);
+
   /** Compute register values to tune daughterboard to desired frequency */
   bool compute_regs(double freq,
 		    unsigned *R,
@@ -161,40 +166,41 @@ private:
 
   /** Set the receiver frequency */
   bool rx_setFreq(double freq, double *actual_freq);
-  
- public:
+
+public:
 
   /** Object constructor */
-  RAD1Device (double _desiredSampleRate);
+  RAD1Device (int sps, bool wSkipRx = false);
 
-  /** Instantiate the USRP */
-  bool make(bool skipRx, int devID); 
+  /** Instantiate the RAD1 */
+  bool open(const std::string &args = "", bool extref = false);
 
-  /** Start the USRP */
+  /** Start the RAD1 */
   bool start();
 
-  /** Stop the USRP */
+  /** Stop the RAD1 */
   bool stop();
 
   /**
-	Read samples from the USRP.
+	Read samples from the RAD1.
 	@param buf preallocated buf to contain read result
 	@param len number of samples desired
 	@param overrun Set if read buffer has been overrun, e.g. data not being read fast enough
 	@param timestamp The timestamp of the first samples to be read
-	@param underrun Set if USRP does not have data to transmit, e.g. data not being sent fast enough
+	@param underrun Set if RAD1 does not have data to transmit, e.g. data not being sent fast enough
 	@param RSSI The received signal strength of the read result
 	@return The number of samples actually read
   */
   int  readSamples(short *buf, int len, bool *overrun, 
+
 		   TIMESTAMP timestamp = 0xffffffff,
 		   bool *underrun = NULL,
 		   unsigned *RSSI = NULL);
   /**
-        Write samples to the USRP.
+        Write samples to the RAD1.
         @param buf Contains the data to be written.
         @param len number of samples to write.
-        @param underrun Set if USRP does not have data to transmit, e.g. data not being sent fast enough
+        @param underrun Set if RAD1 does not have data to transmit, e.g. data not being sent fast enough
         @param timestamp The timestamp of the first sample of the data buffer.
         @param isControl Set if data is a control packet, e.g. a ping command
         @return The number of samples actually written
@@ -256,7 +262,10 @@ private:
   inline double numberRead() { return samplesRead; }
   inline double numberWritten() { return samplesWritten;}
 
+  /** return factory settings */
+  unsigned int getFactoryValue(const std::string &name);
+
+  bool runCustom(const std::string &command) { return false; }
 };
 
 #endif // _RAD1_DEVICE_H_
-

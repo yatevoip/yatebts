@@ -135,6 +135,9 @@ private:
   VectorFIFO  mReceiveFIFO;		      ///< FIFO that holds receive  bursts
 
   RadioDevice *mRadio;			      ///< the USRP object
+
+  // DAVID COMMENT: For the love of All That is Holy, we need to fix these instance variable
+  // names to make them obvious.
  
   short *sendBuffer; //[2*2*INCHUNK];
   unsigned sendCursor;
@@ -200,6 +203,9 @@ public:
   
   /** attach an existing USRP to this interface */
   void attach(RadioDevice *wRadio, int wRadioOversampling) {if (!mOn) {mRadio = wRadio; mRadioOversampling = SAMPSPERSYM;} }
+
+  /** return the radio device */
+  RadioDevice* getDevice() { return mRadio;}
 
   /** return the receive FIFO */
   VectorFIFO* receiveFIFO() { return &mReceiveFIFO;}

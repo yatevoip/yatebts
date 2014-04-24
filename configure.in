@@ -207,12 +207,45 @@ AC_SUBST(UHD_INC)
 AC_SUBST(UHD_LIB)
 
 
+HAVE_BRF=no
+BRF_INC=""
+BRF_LIB=""
+AC_ARG_ENABLE(bladerf,AC_HELP_STRING([--enable-bladerf],[Build bladeRF transceiver if available (default: yes)]),want_brf=$enableval,want_brf=yes)
+if [[ "x$want_brf" = "xyes" ]]; then
+AC_MSG_CHECKING([for bladeRF support using pkg-config])
+ver=`(pkgconfig_check --modversion libbladeRF)`
+if [[ "x$ver" != "x" ]]; then
+if [[ x`pkgconfig_check --modversion 'libbladeRF >= 0.14.0'` != "x" ]]; then
+BRF_INC=`pkgconfig_check --cflags libbladeRF`
+BRF_LIB=`pkgconfig_check --libs libbladeRF`
+HAVE_BRF=yes
+AC_MSG_RESULT([$ver])
+else
+AC_MSG_RESULT([no (old $ver)])
+fi
+else
+AC_MSG_RESULT([no])
+AC_CHECK_HEADERS([libbladeRF.h], [HAVE_BRF=yes])
+fi
+fi
+if [[ "x$BRF_LIB" = "x" ]]; then
+BRF_LIB="-lbladeRF"
+fi
+AC_SUBST(HAVE_BRF)
+AC_SUBST(BRF_INC)
+AC_SUBST(BRF_LIB)
+
+
 # Check for required libraries
 if [[ "x$HAVE_USB" = "xcheck" ]]; then
 AC_CHECK_HEADERS([libusb-1.0/libusb.h], , [AC_MSG_ERROR([This header file is required.])])
 HAVE_USB=yes
+USB_INC=""
+USB_LIB="-lusb-1.0"
 fi
 AC_SUBST(HAVE_USB)
+AC_SUBST(USB_INC)
+AC_SUBST(USB_LIB)
 
 
 # Check for sse3 operations

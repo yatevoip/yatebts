@@ -19,7 +19,6 @@
 #include <stdlib.h>
 
 #include "Transceiver.h"
-#include "RAD1Device.h"
 #include "DummyLoad.h"
 
 #include <time.h>
@@ -28,18 +27,15 @@
 #include <GSMCommon.h>
 #include <Logger.h>
 #include <Configuration.h>
-#include <FactoryCalibration.h>
 
 #include "../Connection/GenConnection.h"
 #include "../Connection/LogConnection.h"
 
 using namespace std;
 
-std::vector<std::string> configurationCrossCheck(const std::string& key);
 static const char *cOpenBTSConfigEnv = "MBTSConfigFile";
 // Load configuration from a file.
 ConfigurationTable gConfig(getenv(cOpenBTSConfigEnv)?getenv(cOpenBTSConfigEnv):"/etc/OpenBTS/OpenBTS.db","transceiver", getConfigurationKeys());
-FactoryCalibration gFactoryCalibration;
 
 /** Connection to YBTS */
 Connection::LogConnection gLogConn(STDERR_FILENO + 1);
@@ -70,20 +66,24 @@ int main(int argc, char *argv[])
   if (gLogConn.valid())
     Log::gHook = Connection::LogConnection::hook;
 
+  // Device specific global initialization
+  RadioDevice::staticInit();
+
   int numARFCN=1;
   if (argc>1) numARFCN = atoi(argv[1]);
 
-  int deviceID = 0;
-  if (argc>2) deviceID = atoi(argv[2]);
-
-  gFactoryCalibration.readEEPROM(deviceID);
- 
+  std::string deviceArgs = "";
+  if (argc>2) deviceArgs = argv[2];
 
   srandom(time(NULL));
 
   int mOversamplingRate = 1;
   switch(numARFCN) {
-   
+
+	  // DAVID COMMENT: I have no way to test this, but I would bet that you can
+	  // just change these numbers to get different oversampling rates for single-ARFCN
+	  // operation..
+
   case 1: 
 	mOversamplingRate = 1;
 	break;
@@ -102,14 +102,25 @@ int main(int argc, char *argv[])
   default:
 	break;
   }
+  int minOver = gConfig.getNum("TRX.MinOversampling");
+  if (mOversamplingRate < minOver)
+    mOversamplingRate = minOver;
   //int mOversamplingRate = numARFCN/2 + numARFCN;
   //mOversamplingRate = 15; //mOversamplingRate*2;
   //if ((numARFCN > 1) && (mOversamplingRate % 2)) mOversamplingRate++;
+
+/*
   RAD1Device *usrp = new RAD1Device(mOversamplingRate*1625.0e3/6.0);
   //DummyLoad *usrp = new DummyLoad(mOversamplingRate*1625.0e3/6.0);
   usrp->make(false, deviceID); 
+*/
+  RadioDevice* usrp = RadioDevice::make(mOversamplingRate);
+  if (!usrp->open(deviceArgs)) {
+    LOG(ALERT) << "Transceiver exiting..." << std::endl;
+    return EXIT_FAILURE;
+  }
 
-  RadioInterface* radio = new RadioInterface(usrp,3,SAMPSPERSYM,mOversamplingRate,false,numARFCN);
+  RadioInterface* radio = new RadioInterface(usrp,3,SAMPSPERSYM,SAMPSPERSYM*mOversamplingRate,false,numARFCN);
   Transceiver *trx = new Transceiver(gConfig.getNum("TRX.Port"),gConfig.getStr("TRX.IP").c_str(),SAMPSPERSYM,GSM::Time(2,0),radio,
 				     numARFCN,mOversamplingRate,false);
   trx->receiveFIFO(radio->receiveFIFO());
@@ -185,6 +196,18 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Hardware-specific gain adjustment for transmitter, matched to the power amplifier, expessed as an attenuationi in dB.  "
 			"Set at the factory.  "
 			"Do not adjust without proper calibration."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("TRX.MinOversampling","1",
+		"",
+		ConfigurationKey::CUSTOMERWARN,
+		ConfigurationKey::VALRANGE,
+		"1:20",// educated guess
+		true,
+		"Minimum signal oversampling unless overriden by device or ARFCNs.  "
+		"This parameter increases computational requirements of the transceiver."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

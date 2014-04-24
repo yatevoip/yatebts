@@ -3,6 +3,7 @@
 # to create a debug info package run rpmbuild --define 'debuginfo 1'
 # to suppress auto dependencies run rpmbuild --define 'nodeps 1'
 # to disable RAD1 support run rpmbuild --define 'norad1 1'
+# to disable bladeRF support run rpmbuild --define 'noblade 1'
 # to disable USRP1 support run rpmbuild --define 'nousrp1 1'
 # to disable UHD support run rpmbuild --define 'nouhd 1'
 
@@ -10,6 +11,7 @@
 %{!?revision:%define revision %{nil}}
 %{?nodeps:%define no_auto_deps 1}
 %{?norad1:%define no_rad1 1}
+%{?noblade:%define no_blade 1}
 %{?nousrp1:%define no_usrp1 1}
 %{?nouhd:%define no_uhd 1}
 
@@ -80,7 +82,7 @@ At least one transceiver package must also be installed for interfacing with the
 
 %files
 %defattr(-, root, root)
-%dir %{_defaultdocdir}/%{name}-%{version}
+%docdir %{_defaultdocdir}/%{name}-%{version}
 %doc %{_defaultdocdir}/%{name}-%{version}/*
 %dir %{btsdir}
 %dir %{_datadir}/yate/nib_web
@@ -91,6 +93,9 @@ At least one transceiver package must also be installed for interfacing with the
 %{_datadir}/yate/nib_web/*
 %config(noreplace) %{_datadir}/yate/nib_web/.htaccess
 %config(noreplace) %{_sysconfdir}/yate/*
+
+%postun
+test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
 
 
 %if "%{no_rad1}" != "1"
@@ -106,13 +111,47 @@ RAD1 transceiver executable and support files for Yate-BTS.
 
 %files rad1
 %{btsdir}/transceiver-rad1
-%{btsdir}/transceiver
 %{btsdir}/ezusb.ihx
 %{btsdir}/fpga.rbf
+
+%post rad1
+test -f %{btsdir}/transceiver || ln -sf transceiver-rad1 %{btsdir}/transceiver
+
+%postun rad1
+test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
 
 %define conf_rad1 --enable-rad1
 %else
 %define conf_rad1 --disable-rad1
+%endif
+
+
+%if "%{no_blade}" != "1"
+
+%package bladerf
+Summary:	bladeRF transceiver support for Yate-BTS
+Group:		Applications/Communications
+Provides:	%{name}-transceiver
+Requires:	%{name} = %{version}-%{release}
+
+%description bladerf
+bladeRF transceiver executable and support files for Yate-BTS.
+
+%files bladerf
+%{btsdir}/transceiver-bladerf
+%{btsdir}/firmware.img
+%{btsdir}/hostedx40.rbf
+%{btsdir}/hostedx115.rbf
+
+%post bladerf
+test -f %{btsdir}/transceiver || ln -sf transceiver-bladerf %{btsdir}/transceiver
+
+%postun bladerf
+test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
+
+%define conf_blade --enable-bladerf
+%else
+%define conf_blade --disable-bladerf
 %endif
 
 
@@ -130,6 +169,12 @@ USRP1 transceiver executable and support files for Yate-BTS.
 %files usrp1
 %{btsdir}/transceiver-usrp1
 %{btsdir}/std_inband.rbf
+
+%post usrp1
+test -f %{btsdir}/transceiver || ln -sf transceiver-usrp1 %{btsdir}/transceiver
+
+%postun usrp1
+test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
 
 %define conf_usrp1 --enable-usrp1
 %else
@@ -150,6 +195,12 @@ UHD transceiver executable and support files for Yate-BTS.
 
 %files uhd
 %{btsdir}/bts/transceiver-uhd
+
+%post uhd
+test -f %{btsdir}/transceiver || ln -sf transceiver-uhd %{btsdir}/transceiver
+
+%postun uhd
+test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
 
 %define conf_uhd --enable-uhd
 %else
@@ -185,7 +236,7 @@ chmod +x %{local_find_requires} %{local_find_provides}
 
 %build
 ./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man \
-    %{conf_usrp1} %{conf_uhd} %{conf_rad1}
+    %{conf_usrp1} %{conf_uhd} %{conf_rad1} %{conf_blade}
 make %{stripped}
 
 %install
@@ -196,8 +247,11 @@ make install DESTDIR=%{buildroot}
 rm -rf %{buildroot}
 
 %changelog
+* Thu Apr 24 2014 Paul Chitescu <paulc@null.ro>
+- Added bladerf subpackage
+
 * Mon Mar 17 2014 Paul Chitescu <paulc@null.ro>
 - Added NIB Web interface files
 
-* Wed Dec 09 2013 Paul Chitescu <paulc@null.ro>
+* Mon Dec 09 2013 Paul Chitescu <paulc@null.ro>
 - Created specfile

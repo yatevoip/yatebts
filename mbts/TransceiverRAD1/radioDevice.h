@@ -15,10 +15,11 @@
 #ifndef __RADIO_DEVICE_H__
 #define __RADIO_DEVICE_H__
 
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
+
+#include "Configuration.h"
 
 /** a 64-bit virtual timestamp for radio data */
 // (pat) TIMESTAMP is defined in someones include file somewheres, so get rid of that.
@@ -32,6 +33,15 @@ typedef unsigned long long TIMESTAMP;
 class RadioDevice {
 
   public:
+
+  /** Prepare device dependent initialization */
+  static void staticInit();
+
+  /** Create an unitialized radio device instance */
+  static RadioDevice *make(int &sps, bool skipRx = false);
+
+  /** Initialize the USRP */
+  virtual bool open(const std::string &args = "", bool extref = false)=0;
 
   /** Start the USRP */
   virtual bool start()=0;
@@ -118,6 +128,11 @@ class RadioDevice {
   virtual double numberRead()=0;
   virtual double numberWritten()=0;
 
+  /** return factory settings */
+  virtual unsigned int getFactoryValue(const std::string &name)=0;
+
+  /** run custom command */
+  virtual bool runCustom(const std::string &command) = 0;
 };
 
 #endif

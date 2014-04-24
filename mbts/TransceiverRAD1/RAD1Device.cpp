@@ -41,7 +41,86 @@
 
 using namespace std;
 
-unsigned char* write_it(unsigned v, unsigned char *s) {
+static int hexval (char ch)
+{
+	if ('0' <= ch && ch <= '9') {
+		return ch - '0';
+	}
+
+	if ('a' <= ch && ch <= 'f') {
+		return ch - 'a' + 10;
+	}
+
+	if ('A' <= ch && ch <= 'F') {
+		return ch - 'A' + 10;
+	}
+
+	return -1;
+}
+
+static unsigned char * hex_string_to_binary(const char *string, int *lenptr)
+{
+	int sl = strlen (string);
+	if (sl & 0x01){
+//		fprintf (stderr, "%s: odd number of chars in <hex-string>\n", prog_name);
+		return 0;
+	}
+
+	int len = sl / 2;
+	*lenptr = len;
+	unsigned char *buf = new unsigned char [len];
+
+	for (int i = 0; i < len; i++){
+		int hi = hexval (string[2 * i]);
+		int lo = hexval (string[2 * i + 1]);
+		if (hi < 0 || lo < 0){
+//			fprintf (stderr, "%s: invalid char in <hex-string>\n", prog_name);
+			delete [] buf;
+			return 0;
+		}
+		buf[i] = (hi << 4) | lo;
+	}
+	return buf;
+}
+
+static bool i2c_write(rnrad1Core& core, int i2c_addr, const char *hex_string)
+{
+	int len = 0;
+	unsigned char *buf = hex_string_to_binary (hex_string, &len);
+	if (buf == 0) {
+		return false;
+	}
+	return core.writeI2c(i2c_addr, buf, len);
+}
+
+static std::string i2c_read(rnrad1Core& core, int i2c_addr, int len)
+{
+	unsigned char *buf = new unsigned char [len];
+	bool result = core.readI2c(i2c_addr, buf, len);
+	if (!result) {
+		return "";
+	}
+
+	char hex[64];
+	for (int i = 0; i < len; i++){
+		sprintf (hex+(2*i), "%02x", buf[i]);
+	}
+
+	return std::string(hex);
+}
+
+static unsigned int hex2dec(std::string hex)
+{
+	unsigned int dec;
+	std::stringstream tempss;
+
+	tempss << std::hex << hex;
+	tempss >> dec;
+
+	return dec;
+}
+
+static unsigned char* write_it(unsigned v, unsigned char *s) {
   s[0] = (v>>16) & 0x0ff;
   s[1] = (v>>8) & 0x0ff;
   s[2] = (v) & 0x0ff;
@@ -163,10 +242,12 @@ bool RAD1Device::rx_setFreq(double freq, double *actual_freq)
 }
 
 
-RAD1Device::RAD1Device (double _desiredSampleRate) 
+RAD1Device::RAD1Device(int sps, bool wSkipRx)
 {
   LOG(INFO) << "creating RAD1 device...";
-  decimRate = (unsigned int) round(masterClockRate/_desiredSampleRate);
+  skipRx = wSkipRx;
+  double desiredRate = sps*1625.0e3/6.0;
+  decimRate = (unsigned int) round(masterClockRate/desiredRate);
   actualSampleRate = masterClockRate/decimRate;
   rxGain = 0;
 
@@ -180,9 +261,10 @@ RAD1Device::RAD1Device (double _desiredSampleRate)
 #endif
 }
 
-bool RAD1Device::make(bool wSkipRx, int devID) 
+bool RAD1Device::open(const std::string &args, bool)
 {
-  skipRx = wSkipRx;
+  int devID = atoi(args.c_str());
+  readEEPROM(devID);
 
   writeLock.unlock();
 
@@ -245,8 +327,6 @@ bool RAD1Device::make(bool wSkipRx, int devID)
 
   samplesRead = 0;
   samplesWritten = 0;
-  started = false;
-  
   return true;
 }
 
@@ -308,11 +388,9 @@ bool RAD1Device::start()
 
  
   if (!skipRx) 
-  started = (m_uRx->start() && m_uTx->start());
+    return (m_uRx->start() && m_uTx->start());
   else
-  started = m_uTx->start();
-
-  return started;
+    return m_uTx->start();
 #else
   gettimeofday(&lastReadTime,NULL);
   return true;
@@ -329,13 +407,9 @@ bool RAD1Device::stop()
   m_uTx->writeIO((~POWER_UP|RX_TXN),(POWER_UP|RX_TXN|ENABLE));
   m_uRx->writeIO(~POWER_UP,(POWER_UP|ENABLE));
   
-  delete[] currData;
-  
-  started = false;
-  return !started;
-#else
-  return true;
+  delete[] data;
 #endif
+  return true;
 }
 
 double RAD1Device::setTxGain(double dB) {
@@ -604,7 +678,6 @@ bool RAD1Device::updateAlignment(TIMESTAMP timestamp)
 {
 #ifndef SWLOOPBACK 
   short data[] = {0x00,0x02,0x00,0x00};
-  uint32_t *wordPtr = (uint32_t *) data;
   bool tmpUnderrun;
   if (writeSamples((short *) data,1,&tmpUnderrun,timestamp & 0x0ffffffffll,true)) {
     pingTimestamp = timestamp;
@@ -617,7 +690,9 @@ bool RAD1Device::updateAlignment(TIMESTAMP timestamp)
 }
 
 bool RAD1Device::setVCTCXO(unsigned int freq_cal) {
+#ifndef SWLOOPBACK 
   m_uRx->writeAuxDac(2,freq_cal << 4);
+#endif
   return true;
 }
 
@@ -658,8 +733,175 @@ bool RAD1Device::setRxFreq(double wFreq, double wAdjFreq) {
 };
 
 #else
-bool RAD1Device::setTxFreq(double wFreq) { return true;};
-bool RAD1Device::setRxFreq(double wFreq) { return true;};
+bool RAD1Device::setTxFreq(double, double) { return true;};
+bool RAD1Device::setRxFreq(double, double) { return true;};
 #endif
 
 
+// Factory calibration handling
+
+unsigned int RAD1Device::getFactoryValue(const std::string &name) {
+	if (name.compare("sdrsn")==0) {
+		return sdrsn;
+
+	} else if (name.compare("rfsn")==0) {
+		return rfsn;
+
+	// TODO : (mike) I thought these should be DEC comparisons but only HEX vals are matching,
+	//		too rushed for 3.1 to figure out why I'm dumb
+	} else if (name.compare("band")==0) {
+		// BAND_85="85" # dec 133
+		if (band == 85) {
+			return 850;
+
+		// BAND_90="90" # dec 144
+		} else if (band == 90) {
+			return 900;
+
+		// BAND_18="18" # dec 24
+		} else if (band == 18) {
+			return 1800;
+
+		// BAND_19="19" # dec 25
+		} else if (band == 19) {
+			return 1900;
+
+		// BAND_21="21" # dec 33
+		} else if (band == 21) {
+			return 2100;
+
+		// BAND_MB="ab" # dec 171
+		} else if (band == 0xab) {
+			return 0;
+
+		// TODO : anything to handle here? for now pretend they have a multi-band
+		} else {
+			return 0;
+		}
+
+	} else if (name.compare("freq")==0) {
+		return freq;
+
+	} else if (name.compare("rxgain")==0) {
+		return rxgain;
+
+	} else if (name.compare("txgain")==0) {
+		return txgain;
+
+	// TODO : need a better error condition here
+	} else {
+		return 0;
+	}
+}
+
+void RAD1Device::readEEPROM(int deviceID) {
+
+	rnrad1Core core(
+		deviceID,
+		RAD1_CMD_INTERFACE,
+		RAD1_CMD_ALTINTERFACE,
+		"fpga.rbf",
+		"ezusb.ihx",
+		false
+	);
+
+	std::string temp;
+	std::string temp1;
+
+	/*
+	SDR_ADDR="0x50"
+	BASEST="df"
+	MKR_ST="ff"
+	./RAD1Cmd i2c_write $SDR_ADDR $BASEST$MKR_ST
+	sleep 1
+	*/
+	i2c_write(core, 0x50, "dfff");
+	sleep(1);
+//	std::cout << "i2c_write = " << ret << std::endl;
+
+	/*
+	TEMP=$( ./RAD1Cmd i2c_read $SDR_ADDR 16 )
+	sleep 1
+	*/
+	temp = i2c_read(core, 0x50, 16);
+	sleep(1);
+//	std::cout << "i2c_read 16 = " << temp << std::endl;
+
+	/*
+	TEMP=$( ./RAD1Cmd i2c_read $SDR_ADDR 32 )
+	*/
+	temp = i2c_read(core, 0x50, 32);
+//	std::cout << "i2c_read 32 = " << temp << std::endl;
+
+	/*
+	# parse SDR serial number
+	TEMP1=$( echo "$TEMP" | cut -c 1-4  )
+	SDRSN=$( printf '%d' 0x$TEMP1 )
+	echo "SDR Serial Number [$SDRSN] hex was [$TEMP1]"
+	*/
+	temp1 = temp.substr(0, 4);
+	sdrsn = hex2dec(temp1);
+//	std::cout << "SDR Serial Number [" << sdrsn << "] hex was [" << temp1 << "]" << std::endl;
+
+	/*
+	# parse RF serial number
+	TEMP1=$( echo "$TEMP" | cut -c 5-8  )
+	RFSN=$( printf '%d' 0x$TEMP1 )
+	echo "RF Serial Number [$RFSN] hex was [$TEMP1]"
+	*/
+	temp1 = temp.substr(4, 4);
+	rfsn = hex2dec(temp1);
+//	std::cout << "RF Serial Number [" << rfsn << "] hex was [" << temp1 << "]" << std::endl;
+
+	/*
+	# BAND
+	BAND=$( echo "$TEMP" | cut -c 9-10  )
+	echo "RF BAND [$BAND]"
+	*/
+	temp1 = temp.substr(8, 2);
+	band = atoi(temp1.c_str());
+//	std::cout << "RF BAND [" << band << "]" << std::endl;
+
+	/*
+	# Frequency Setting
+	TEMP1=$( echo "$TEMP" | cut -c 11-12  )
+	FREQ=$( printf '%d' 0x$TEMP1 )
+	echo "FREQ [$FREQ]"
+	*/
+	temp1 = temp.substr(10, 2);
+	freq = hex2dec(temp1);
+//	std::cout << "FREQ [" << freq << "] hex was [" << temp1 << "]" << std::endl;
+
+	/*
+	# RxGAIN
+	TEMP1=$( echo "$TEMP" | cut -c 13-14  )
+	RXGN=$( printf '%d' 0x$TEMP1 )
+	echo "RxGAIN [$RXGN]"
+	*/
+	temp1 = temp.substr(12, 2);
+	rxgain = hex2dec(temp1);
+//	std::cout << "RxGAIN [" << rxgain << "] hex was [" << temp1 << "]" << std::endl;
+
+	/*
+	# TxGAIN
+	TEMP1=$( echo "$TEMP" | cut -c 15-16  )
+	TXGN=$( printf '%d' 0x$TEMP1 )
+	echo "ATTEN [$TXGN]"
+	*/
+	temp1 = temp.substr(14, 2);
+	txgain = hex2dec(temp1);
+//	std::cout << "TxGAIN/ATTEN [" << txgain << "] hex was [" << temp1 << "]" << std::endl;
+
+}
+
+
+// Device creation factory
+
+RadioDevice *RadioDevice::make(int &sps, bool skipRx)
+{
+  return new RAD1Device(sps, skipRx);
+}
+
+void RadioDevice::staticInit()
+{
+}

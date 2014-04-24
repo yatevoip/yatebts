@@ -40,17 +40,16 @@ int main(int argc, char *argv[]) {
   if (argc>1) gLogInit(argv[1]);
   else gLogInit("DEBUG");
 
-  int deviceID = 0;
-  if (argc>2) deviceID = atoi(argv[2]);
+  std::string deviceArgs = "";
+  if (argc>2) deviceArgs = argv[2];
 
   gLogInit("openbts",argv[1],LOG_LOCAL7);
 
 
   //if (argc>2) gSetLogFile(argv[2]);
 
-  RAD1Device *usrp = new RAD1Device(52.0e6/192.0);
-
-  usrp->make(false, deviceID);
+  RAD1Device *usrp = new RAD1Device(1);
+  usrp->open(deviceArgs);
 
   TIMESTAMP timestamp;
 

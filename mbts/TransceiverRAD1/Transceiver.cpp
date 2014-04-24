@@ -23,10 +23,8 @@
 #include "Transceiver.h"
 #include <Logger.h>
 #include <Configuration.h>
-#include <FactoryCalibration.h>
 
 extern ConfigurationTable gConfig;
-extern FactoryCalibration gFactoryCalibration;
 
 Transceiver::Transceiver(int wBasePort,
 			 const char *TRXAddress,
@@ -42,12 +40,13 @@ Transceiver::Transceiver(int wBasePort,
   //GSM::Time startTime(gHyperframe/2 - 4*216*60,0);
   GSM::Time startTime = mStartTime = GSM::Time(random() % gHyperframe,0);
 
+  mMultipleARFCN = (wNumARFCNs > 1 || wOversamplingRate > 1);
   mFIFOServiceLoopThread = new Thread(2*32768);  ///< thread to push bursts into transmit FIFO
   mRFIFOServiceLoopThread = new Thread(4*32768);
   for (int j = 0; j< wNumARFCNs; j++) { 
     mControlServiceLoopThread[j] = new Thread(32768);
     mTransmitPriorityQueueServiceLoopThread[j] = new Thread(32768);
-    if (wNumARFCNs > 1) mDemodServiceLoopThread[j] = new Thread(32768);
+    if (mMultipleARFCN) mDemodServiceLoopThread[j] = new Thread(32768);
     mDemodFIFO[j] = new VectorFIFO;
     mDataSocket[j] = new UDPSocket(wBasePort+2*(j+1),TRXAddress,wBasePort+100+2*(j+1));
     mControlSocket[j] = new UDPSocket(wBasePort+2*j+1,TRXAddress,wBasePort+100+2*j+1);
@@ -66,7 +65,7 @@ Transceiver::Transceiver(int wBasePort,
   mOversamplingRate = wOversamplingRate;
   mLoadTest = wLoadTest;
 
-  LOG(INFO) << "running " << mNumARFCNs << " ARFCNs";
+  LOG(NOTICE) << "running " << mNumARFCNs << " ARFCNs with oversampling " << wOversamplingRate;
 
   // generate pulse and setup up signal processing library
   gsmPulse = generateGSMPulse(2,mSamplesPerSymbol);
@@ -77,7 +76,6 @@ Transceiver::Transceiver(int wBasePort,
   rxFullScale = mRadioInterface->fullScaleOutputValue();
 
   mFreqOffset = 0.0;
-  mMultipleARFCN = (mNumARFCNs > 1);
 
   // initialize other per-timeslot variables
   for (int tn = 0; tn < 8; tn++) {
@@ -160,6 +158,15 @@ radioVector *Transceiver::fixRadioVector(BitVector &burst,
 				 int ARFCN)
 {
 
+	// DAVID COMMENT: The way that modulateBurst is used in the multi-ARFCN
+	// transceiver, mSamplesPerSymbol is effectively hard-coded to 1.
+	//
+	// DAVID COMMENT: If we ran modulateBurst at the oversampled rate, instead
+	// of at one sample per symbol and then upsampling later, the signal would
+	// be cleaner and the code would be more efficient.  In other words, we could
+	// oversample the binary data stream (cheap and exact) instead of oversampling
+	// the waveforms later (complex and potentially noisy).
+
   // modulate and stick into queue 
   signalVector* modBurst = modulateBurst(burst,*gsmPulse,
 					 8 + (wTime.TN() % 4 == 0),
@@ -168,11 +175,33 @@ radioVector *Transceiver::fixRadioVector(BitVector &burst,
   rScale = rScale/rScale.abs();
   scaleVector(*modBurst,rScale);*/
 
-  float headRoom = (mNumARFCNs > 1) ? 0.5 : 1.0;
+  // DAVID COMMENT: Note that amplitude is scaled by number of ARFCNs, with an additional
+  // factor of 2 down-scaling for >1 ARFCN.
+  //
+  // DAVID COMMENT: Where did txFullScale come from?  You can't tell from the name, but it's actually
+  // an instance variable of Transceiver.  It was set from mRadioInterface->fullScaleOutputValue()
+  // back in the constructor, which comes from the radio device class.  BladeRF "correctly" sets this
+  // to 2040.  Why is "correct" in quotes?  See next comment.
+  //
+  // DAVID COMMENT: Note now that the radioVector is scaled +/- 2040 and all of the gains and 
+  // frequency shift vectors applied to it are scaled +/- 1.  Then, just before transmission, the
+  // samples, supposedly in the +/- 2040 range, are rounded to the nearest integer.  A much cleaner
+  // and less error-prone approach would be to do all of the signal processing math in a +/- 1 scale
+  // and then let the read/write methods on the device itself scale to whatever it expects.
+  //
+  float headRoom = mMultipleARFCN ? 0.5 : 1.0;
   scaleVector(*modBurst,txFullScale * headRoom * pow(10,-RSSI/10)/mNumARFCNs);
   radioVector *newVec = new radioVector(*modBurst,wTime,ARFCN);
   //fillerActive[ARFCN][wTime.TN()] = (ARFCN==0) || (RSSI != 255);
 
+  // DAVID COMMENT: This is the place where the modulated signal is resampled and frequency-shifted
+  // to give multi-ARFCN support in software.
+  //
+  // DAVID COMMENT: Note that we are applying a polyphase filter but with one side of the ratio
+  // hard-coded to 1.  A dedicated upsampler or downsampler would be more efficient, but this
+  // allowed a single resampler to be used for conversion in either direction, upsample on tx
+  // and downsample on rx.
+  //
   // upsample and filter and freq shift
   if (mMultipleARFCN) {
     signalVector *interpVec = polyphaseResampleVector(*((signalVector *)newVec),mOversamplingRate,1,interpolationFilter);
@@ -258,6 +287,10 @@ void Transceiver::pushRadioVector(GSM::Time &nowTime)
   radioVector *sendVec = NULL;
   // if queue contains data at the desired timestamp, stick it into FIFO
   while (radioVector *next = (radioVector*) mTransmitPriorityQueue.getCurrentBurst(nowTime)) {
+	  //
+	  // DAVID COMMENT: This is the part where the mutli-ARFCN signal gets summed up for 
+	  // transmission.  Note that they are already resampled and frequency-shifted.
+	  //
     int CN = next->ARFCN();
 	if (CN >= mNumARFCNs) {
 	  LOG(ERR) << "attempt to send burst on illegal ARFCN. C" << CN << "T" << TN << " FN " << nowTime.FN();
@@ -514,7 +547,7 @@ void Transceiver::driveControl(unsigned ARFCN)
           mTransmitPriorityQueueServiceLoopThread[i]->start((void * (*)(void*))TransmitPriorityQueueServiceLoopAdapter,(void*) cs);
 	  Demodulator *demod = new Demodulator(i,this,mStartTime);
 	  mDemodulators[i] = demod;
-	  if (mNumARFCNs > 1) mDemodServiceLoopThread[i]->start((void * (*)(void*))DemodServiceLoopAdapter,(void*) demod);
+	  if (mMultipleARFCN) mDemodServiceLoopThread[i]->start((void * (*)(void*))DemodServiceLoopAdapter,(void*) demod);
 	}
 
         //mRFIFOServiceLoopThread->start((void * (*)(void*))RFIFOServiceLoopAdapter,(void*) this);
@@ -700,10 +733,14 @@ void Transceiver::driveControl(unsigned ARFCN)
   }
   else if (strcmp(command,"READFACTORY")==0) {
     char param[16];
-    sscanf(buffer,"%3s %s %s",cmdcheck,command,&param);
-    int ret = gFactoryCalibration.getValue(std::string(param));
+    sscanf(buffer,"%3s %s %s",cmdcheck,command,param);
+    int ret = mRadioInterface->getDevice()->getFactoryValue(std::string(param));
     // TODO : this should actually return the param name requested
     sprintf(response,"RSP READFACTORY 0 %d", ret);
+  }
+  else if (strcmp(command,"CUSTOM")==0) {
+    int ret = mRadioInterface->getDevice()->runCustom(std::string(buffer + 11)) ? 0 : 1;
+    sprintf(response,"RSP CUSTOM %d", ret);
   }
   else {
     LOG(ERR) << "bogus command " << command << " on control interface.";
@@ -773,6 +810,13 @@ bool Transceiver::driveTransmitPriorityQueue(unsigned ARFCN)
   
   GSM::Time currTime = GSM::Time(frameNum,timeSlot);
   
+  // DAVID COMMENT: You can't tell from the name, but fixRadioVector
+  // resamples and frequency-shifts to simulate multiple transceivers
+  // in software.
+  //
+  // DAVID COMMENT: It would be more efficient to apply the upsampling and frequency-shifting
+  // later in the transmission process, just before the ARFCNs are summed for transmission.
+  //
   radioVector *newVec = fixRadioVector(newBurst,RSSI,currTime,ARFCN);
   if (fillerFlag) {
 	setFiller(newVec,false,true);
@@ -942,7 +986,7 @@ Demodulator::Demodulator(int wCN,
   mTRXDataSocket = mTRX->dataSocket(mCN);
   mSamplesPerSymbol = mTRX->samplesPerSymbol();
   mDemodFIFO = mTRX->demodFIFO(mCN);
-  signalVector *gsmPulse = mTRX->GSMPulse();
+  //signalVector *gsmPulse = mTRX->GSMPulse();
   mTSC = mTRX->getTSC();
 
   rxFullScale = mRadioInterface->fullScaleOutputValue();
@@ -1069,7 +1113,7 @@ SoftVector *Demodulator::demodRadioVector(radioVector *rxBurst,
   if (corrType==TSC) {
     DEMOD_DEBUG << "looking for TSC at time: " << rxBurst->time();
     signalVector *channelResp;
-    double framesElapsed = rxBurst->time()-channelEstimateTime[timeslot];
+    //double framesElapsed = rxBurst->time()-channelEstimateTime[timeslot];
     bool estimateChannel = false;
     //if ((framesElapsed > 50) || (channelResponse[timeslot]==NULL))
     {	
@@ -1134,7 +1178,7 @@ SoftVector *Demodulator::demodRadioVector(radioVector *rxBurst,
       channelResponse[timeslot] = NULL; 
     }
     else {
-      double framesElapsed = rxBurst->time()-prevFalseDetectionTime;
+      //double framesElapsed = rxBurst->time()-prevFalseDetectionTime;
       //mEnergyThreshold += 0.1F*exp(-framesElapsed);
       prevFalseDetectionTime = rxBurst->time();
       float avgPwr;
