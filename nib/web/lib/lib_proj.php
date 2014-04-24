@@ -19,6 +19,16 @@
 
 require_once "ansql/socketconn.php";
 
+function have_pysim_package()
+{
+	return shell_exec("rpm -qa 'pysim*'");
+}
+
+function have_nib_package()
+{
+	return shell_exec("rpm -qa 'nib*'");
+}
+
 function include_formats($formats,$form_identifier)
 {
 	$formats = explode(',',$formats);

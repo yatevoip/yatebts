@@ -88,7 +88,7 @@ $regexp_suffix = ";";
 
 $dirs = array("/etc/yate/", "/usr/local/etc/yate/");
 foreach ($dirs as $pos_dir) {
-	if (is_dir($pos_dir))
+	if (is_dir($pos_dir)) 
 		$yate_conf_dir = $pos_dir;
 	if (is_readable($pos_dir) && is_writable($pos_dir))
 		break;
@@ -99,8 +99,8 @@ if (!isset($yate_conf_dir))
 $yate_ip = "127.0.0.1";
 
 $proj_title = "Yatebts NIB";
-# used to run PySim command
-$pysim_path = "/usr/src/pysim";
+# the path for pySIM installed from packages; used to run PySim command
+$pysim_path = "/usr/bin";
 # the file used by PySim to write the SIM credentials 
 $pysim_csv = $yate_conf_dir . "sim_data.csv";
 ?>

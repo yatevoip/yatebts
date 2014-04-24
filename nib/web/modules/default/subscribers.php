@@ -385,9 +385,28 @@ function get_subscriber($imsi)
 	return array(true, $subscribers[$imsi]);
 }
 
+function detect_pysim_installed()
+{
+	global $pysim_path;
+
+	if (have_nib_package() && !have_pysim_package()) 
+		return array(false, "The pySIM package is not installed. Please install pySIM from package.");
+
+	if (!have_nib_package() && !is_file($pysim_path.'/'.'pySim-prog.py'))
+		return array(false, "Please create file config.php and set the location for pySIM after instalation. E.g. \$pysim_path = \"/usr/bin\";");
+
+	return array(true);
+}
+
 function manage_sims()
 {
-	global $module, $main;
+	$pysim_installed = detect_pysim_installed();
+
+	if (!$pysim_installed[0]) {
+		errornote($pysim_installed[1]);
+		return;
+	}
+	
 	$all_sim_written = read_csv();
 
 	$formats = array("IMSI"=>"imsi", "ICCID"=>"iccid", "operator_name", "mobile_country_code", "mobile_network_code", "ki", "opc", "function_display_add_into_subscribers:"=>"imsi,ki");
@@ -417,6 +436,13 @@ function display_add_into_subscribers($imsi, $ki)
 function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi = "on",$insert_subscribers = "on")
 {
 	global $yate_conf_dir;
+
+	$pysim_installed = detect_pysim_installed();
+
+        if (!$pysim_installed[0]) {
+                errornote($pysim_installed[1]);
+                return;
+        } 
 
 	$filename = $yate_conf_dir."ybts.conf";
 
@@ -449,7 +475,7 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 		array('card_type_id'=>'sysmosim-gr1', 'card_type'=>'Sysmocom SysmoSIM-GR1'),
 		array('card_type_id'=>'sysmoSIM-GR2', 'card_type'=>'Sysmocom SysmoSIM-GR2' ), 
 		array('card_type_id'=>'sysmoUSIM-GR1', 'card_type'=>'Sysmocom SysmoUSIM-GR1'),
-		array('card_type'=>'auto','card_type_id'=>'auto')//autodetection is implemented in PySim/cards.py only gor classes: FakeMagicSim, SuperSim, MagicSim the other types of card will fail (at this time 2014-04-16)
+		array('card_type'=>'auto','card_type_id'=>'auto')//autodetection is implemented in PySim/cards.py only for classes: FakeMagicSim, SuperSim, MagicSim the other types of card will fail (at this time 2014-04-16)
 	);
 	$type_card["selected"] = "grcardsim"; //type of card that was successfully written 
 
@@ -670,7 +696,7 @@ function execute_pysim($params, $command_manually=false)
 		$output .= $split_errs[count($split_errs)-1];
 		if (preg_match("/Exception AttributeError: \"'PcscSimLink' object has no attribute '_con/", $output))
 			$output .= "\nPlease connect you SIM card reader to your device.\n"; 
-		$output .= "\n<br/><div id=\"err_pysim\">For full PySim traceback <div id=\"err_link_pysim\" class=\"error_link\" onclick=\"show_hide_pysim_traceback('pysim_err')\" style=\"cursor:pointer;\">click here</div></div>";
+		$output .= "\n<br/><div id=\"err_pysim\">For full pySim traceback <div id=\"err_link_pysim\" class=\"error_link\" onclick=\"show_hide_pysim_traceback('pysim_err')\" style=\"cursor:pointer;\">click here</div></div>";
 	} 
 
 	proc_close($process);
