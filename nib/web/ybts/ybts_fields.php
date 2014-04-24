@@ -990,10 +990,10 @@ To disable again, execute 'unconfig GGSN.ShellScript'"
 	$fields["Transceiver"] = array(
 		"transceiver" => array(
 			"Path" => array(
-				array("selected"=>"./transceiver","./transceiver","./transceiver-rad1" ,"./transceiver-usrp1" ,"./transceiver-uhd" ),
+				array("selected"=>"./transceiver", "./transceiver", "./transceiver-bladerf", "./transceiver-rad1", "./transceiver-usrp1", "./transceiver-uhd"),
 				"display" => "select",
 				"comment" => "Path to the transceiver relative to where MBTS is started.
-Should be one of: ./transceiver-rad1 ./transceiver-usrp1 ./transceiver-uhd.
+Should be one of: ./transceiver-bladerf ./transceiver-rad1 ./transceiver-usrp1 ./transceiver-uhd.
 Defaults to ./transceiver"
 			),
 			"Args" => array(
