@@ -63,7 +63,7 @@ Group:		Applications/Communications
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
 URL:		http://yatebts.com/
 BuildRequires:	gcc-c++
-BuildRequires:	yate-devel = @YATE_VER@
+BuildRequires:	yate-devel >= @YATE_REQ@
 Requires:	yate = @YATE_VER@
 Requires:	yate-gsm = @YATE_VER@
 Requires:	yate-scripts = @YATE_VER@

@@ -121,6 +121,7 @@ if [[ "1$yver" -lt "1$yreq" ]]; then
     AC_ERROR([Requires at least Yate version $YATE_REQ])
 fi
 fi
+AC_SUBST(YATE_REQ)
 AC_SUBST(YATE_VER)
 AC_SUBST(YATE_DEF)
 AC_SUBST(YATE_INC)
