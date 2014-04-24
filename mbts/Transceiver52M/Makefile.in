@@ -8,24 +8,27 @@ INCFILES := Complex.h convert.h convolve.h DummyLoad.h radioClock.h radioDevice.
     sigProcLib.h Transceiver.h
 LOCALLIBS = $(GSM_LIBS)
 
+PROGS_UHD := transceiver-uhd
 ifneq (@HAVE_UHD@,no)
-PROGS:= $(PROGS) transceiver-uhd
 ifeq ($(BUILD_TESTS),yes)
-PROGS:= $(PROGS) USRPping-uhd
+PROGS_UHD:= $(PROGS_UHD) USRPping-uhd
 endif
-LOCALLIBS := $(LOCALLIBS) -luhd
+PROGS:= $(PROGS) $(PROGS_UHD)
 endif
+
+PROGS_USRP1:= transceiver-usrp1
 ifneq (@HAVE_USRP1@,no)
-PROGS:= $(PROGS) transceiver-usrp1
 FILES:= $(FILES) std_inband.rbf
 ifeq ($(BUILD_TESTS),yes)
-PROGS:= $(PROGS) USRPping-usrp1
+PROGS_USRP1:= $(PROGS_USRP1) USRPping-usrp1
 endif
-LOCALLIBS := $(LOCALLIBS) -lusb-1.0
+PROGS:= $(PROGS) $(PROGS_USRP1)
 endif
+
 ifeq ($(BUILD_TESTS),yes)
 PROGS:= $(PROGS) sigProcLibTest
 endif
+
 LIBS := libtransceiver.a
 OBJS := DummyLoad.o radioClock.o radioInterface.o radioInterfaceResamp.o radioVector.o \
     Resampler.o sigProcLib.o Transceiver.o convolve.o convert.o
@@ -33,14 +36,20 @@ EXTRACLEAN := runTransceiver.o USRPDevice.o UHDDevice.o
 
 all:
 
-transceiver-usrp1: USRPDevice.cpp USRPDevice.h runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
-	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
+$(PROGS_UHD): LOCALLIBS = $(GSM_LIBS) @UHD_LIB@
+$(PROGS_UHD): LOCALFLAGS = @UHD_INC@
 
 transceiver-uhd: UHDDevice.cpp runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
 	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
 
-USRPping-usrp1: USRPDevice.cpp USRPDevice.h USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+USRPping-uhd: UHDDevice.cpp USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
 	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
 
-USRPping-uhd: UHDDevice.cpp USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+$(PROGS_USRP1): LOCALLIBS = $(GSM_LIBS) @USRP1_LIB@
+$(PROGS_USRP1): LOCALFLAGS = @USRP1_INC@
+
+transceiver-usrp1: USRPDevice.cpp USRPDevice.h runTransceiver.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
+	$(COMPILE) -o $@ $(LOCALFLAGS) $< runTransceiver.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
+
+USRPping-usrp1: USRPDevice.cpp USRPDevice.h USRPping.o $(MKDEPS) $(INCFILES) $(LIBS) $(LIBDEPS)
 	$(COMPILE) -o $@ $(LOCALFLAGS) $< USRPping.o $(LIBS) $(LIBTHR) $(LDFLAGS) $(LOCALLIBS)
