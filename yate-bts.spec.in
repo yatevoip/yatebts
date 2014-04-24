@@ -98,6 +98,8 @@ Group:		Applications/Communications
 Requires:	%{name} = %{version}-%{release}
 Requires:	yate-scripts = @YATE_VER@
 Requires:	apache-mod_php
+Requires(post):	gawk
+Suggests:	pysim
 
 %description nib
 Scripts and support executables that implement a GSM Network In a Box.
@@ -116,6 +118,40 @@ Scripts and support executables that implement a GSM Network In a Box.
 %config(noreplace) %{_sysconfdir}/yate/subscribers.js
 
 %post nib
+if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+    if grep -q '^ *\[general\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+	awk '/^ *\[/{sect=0}
+	/^ *\[general\]/{sect=1}
+	/^ *routing *=/{if(sect==2)sect=3}
+	{if(sect==3){print ";; " $0;sect=2} else print;
+	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nrouting=welcome.js\n";sect=2}
+	}' <%{_sysconfdir}/yate/javascript.conf >%{_sysconfdir}/yate/javascript.conf.tmp
+	mv -f %{_sysconfdir}/yate/javascript.conf.tmp %{_sysconfdir}/yate/javascript.conf
+    else
+	cat <<-EOF >>%{_sysconfdir}/yate/javascript.conf
+	[general]
+	; Installed by yate-bts-nib, do not remove this comment line
+	routing=welcome.js
+
+	EOF
+    fi
+    if grep -q '^ *\[scripts\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+	awk '/^ *\[/{sect=0}
+	/^ *\[scripts\]/{sect=1}
+	/^ *nib *=/{if(sect==2)sect=3}
+	{if(sect==3){print ";; " $0;sect=2} else print;
+	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nnib=nib.js\n";sect=2}
+	}' <%{_sysconfdir}/yate/javascript.conf >%{_sysconfdir}/yate/javascript.conf.tmp
+	mv -f %{_sysconfdir}/yate/javascript.conf.tmp %{_sysconfdir}/yate/javascript.conf
+    else
+	cat <<-EOF >>%{_sysconfdir}/yate/javascript.conf
+	[scripts]
+	; Installed by yate-bts-nib, do not remove this comment line
+	nib=nib.js
+
+	EOF
+    fi
+fi
 chgrp -R apache %{_sysconfdir}/yate
 chmod g+rw %{_sysconfdir}/yate
 
@@ -124,6 +160,7 @@ chmod g+rw %{_sysconfdir}/yate
 Summary:	SIP based GSM roaming support for Yate-BTS
 Group:		Applications/Communications
 Requires:	%{name} = %{version}-%{release}
+Requires(post):	gawk
 
 %description roaming
 Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE server.
@@ -132,6 +169,57 @@ Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE serve
 %defattr(-, root, root)
 %{_datadir}/yate/scripts/roaming.js
 %config(noreplace) %{_sysconfdir}/yate/roamingconf.js
+
+%post roaming
+if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/ysipchan.conf 2>/dev/null; then
+    mv -f -n %{_sysconfdir}/yate/ysipchan.conf %{_sysconfdir}/yate/ysipchan.conf.rpmold
+    cat <<-EOF >%{_sysconfdir}/yate/ysipchan.conf
+	; Installed by yate-bts-roaming, do not remove this comment line
+
+	[general]
+	lazy100=yes
+	transfer=no
+	privacy=yes
+	generate=yes
+	rtp_start=yes
+	auth_foreign=yes
+	autochangeparty=yes
+	update_target=yes
+	body_encoding=hex
+	async_generic=yes
+	sip_req_trans_count=5
+
+	[registrar]
+	auth_required=yes
+
+	[methods]
+	message=no
+
+	[codecs]
+	default=disable
+	alaw=enable
+	gsm=enable
+
+	EOF
+fi
+if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+    if grep -q '^ *\[scripts\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+	awk '/^ *\[/{sect=0}
+	/^ *\[scripts\]/{sect=1}
+	/^ *roaming *=/{if(sect==2)sect=3}
+	{if(sect==3){print ";; " $0;sect=2} else print;
+	 if(sect==1){print "; Installed by yate-bts-roaming, do not remove this comment line\nroaming=roaming.js\n";sect=2}
+	}' <%{_sysconfdir}/yate/javascript.conf >%{_sysconfdir}/yate/javascript.conf.tmp
+	mv -f %{_sysconfdir}/yate/javascript.conf.tmp %{_sysconfdir}/yate/javascript.conf
+    else
+	cat <<-EOF >>%{_sysconfdir}/yate/javascript.conf
+	[scripts]
+	; Installed by yate-bts-roaming, do not remove this comment line
+	roaming=roaming.js
+
+	EOF
+    fi
+fi
 
 
 %if "%{no_rad1}" != "1"
