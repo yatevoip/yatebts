@@ -115,7 +115,7 @@ Scripts and support executables that implement a GSM Network In a Box.
 %{_datadir}/yate/nib_web/*
 /var/www/html/nib
 %config(noreplace) %{_datadir}/yate/nib_web/.htaccess
-%config(noreplace) %{_sysconfdir}/yate/subscribers.js
+%config(noreplace) %{_sysconfdir}/yate/subscribers.conf
 
 %post nib
 if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
