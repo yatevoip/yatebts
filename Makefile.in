@@ -18,6 +18,7 @@ CFLAGS := $(subst -fno-check-new,,$(CCFLAGS))
 LDFLAGS:= @YATE_LNK@
 YATELIBS:= @YATE_LIB@
 MODSTRIP:= @YATE_STR@
+RPMOPT :=
 
 PROGS := ybts.yate
 DOCS  := README COPYING
@@ -138,7 +139,7 @@ uninstall:
 	fi
 	@rm -rf "$(DESTDIR)$(docdir)/"
 
-.PHONY: snapshot tarball rpm
+.PHONY: snapshot tarball rpm srpm
 snapshot tarball: check-topdir clean
 	@if [ $@ = snapshot ]; then ver="`date '+SVN-%Y%m%d'`"; else ver="@PACKAGE_VERSION@-@PACKAGE_RELEASE@"; fi ; \
 	wd=`pwd|sed 's,^.*/,,'`; \
@@ -167,7 +168,10 @@ snapshot tarball: check-topdir clean
 	rm $$wd/tar-exclude
 
 rpm: tarball
-	rpmbuild -tb tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_RELEASE@.tar.gz
+	rpmbuild -tb $(RPMOPT) tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_RELEASE@.tar.gz
+
+srpm: tarball
+	rpmbuild -ta $(RPMOPT) tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_RELEASE@.tar.gz
 
 %.o: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
 	$(CCOMPILE) -c $<
