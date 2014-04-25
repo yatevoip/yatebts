@@ -44,11 +44,11 @@ function list_subscribers()
 			$have_subscribers = false;
 		} else {
 			if (!getparam("overwrite_file")) {
-				errormess($res[1]. ". Press <a href=\"main.php?module=subscribers&method=list_subscribers&overwrite_file=yes\">here</a> to overwrite subscribers.js.", "no");
+				errormess($res[1]. ". Press <a href=\"main.php?module=subscribers&method=list_subscribers&overwrite_file=yes\">here</a> to overwrite subscribers.conf.", "no");
 				return;
 			} else { 
-				$new_file = $yate_conf_dir."subscribers.js.backup".date("Ymdhm");
-				rename($yate_conf_dir."subscribers.js", $new_file);
+				$new_file = $yate_conf_dir."subscribers.conf.backup".date("Ymdhm");
+				rename($yate_conf_dir."subscribers.conf", $new_file);
 				message("Your old old file was moved to $new_file", "no");
 			}
 			$subscribers = array();
@@ -66,9 +66,12 @@ function list_subscribers()
 	}
 
 	if ($have_subscribers) {
-		$all_subscribers = array();
-		foreach($subscribers as $imsi=>$subscr)
-			$all_subscribers[] = $subscr;
+		$all_subscribers = array();$i=0;
+		foreach($subscribers as $imsi=>$subscr) {
+			$all_subscribers[$i] = $subscr;
+			$all_subscribers[$i]["imsi"] = $imsi;
+			$i++;
+		}
 
 		$formats = array("IMSI"=>"imsi","msisdn","short_number","ki","op","IMSI Type"=>"imsi_type","function_display_bit_field:active"=>"active");
 		table($all_subscribers, $formats, "subscriber", "imsi", array("&method=edit_subscriber"=>"Edit","&method=delete_subscriber"=>"Delete"), array("&method=add_subscriber"=>"Add subscriber", "&method=edit_regexp"=>"Accept by REGEXP"));
@@ -130,7 +133,7 @@ function edit_regexp($error=null,$error_fields=array())
 
 	nib_note("If a regular expression is used, 2G/3G authentication cannot be used. For 2G/3G authentication, please set subscribers individually.");
 	$fields = array(
-		"regexp" => array("value"=> $regexp, "required"=>true, "comment"=>"Ex: /^310030/")
+		"regexp" => array("value"=> $regexp, "required"=>true, "comment"=>"Ex: ^001")
 	);
 	error_handle($error,$fields,$error_fields);
         start_form();
@@ -142,12 +145,16 @@ function edit_regexp($error=null,$error_fields=array())
 function edit_regexp_write_file()
 {
 	$expressions = array();
-	$res = get_regexp();
+	$res = get_regexp(true);
 	if (!$res[0]) 
 		errormess($res[1], "no");
-	else
-		$expressions = array($res[1]);
-	
+	else {
+		if (is_array($res[1]) && isset($res[1]["regexp"]))
+			$expressions = array($res[1]["regexp"]);
+		$cc = array();
+		if (isset($res[1]["country_code"]))
+			$cc["country_code"] = $res[1]["country_code"];
+	}
 	$regexp = getparam("regexp");
 
 	if (!$regexp)
@@ -159,10 +166,154 @@ function edit_regexp_write_file()
 	}	
 
 	//$write_regexp[count($expressions)] = $regexp;
-	$res = set_regexp($regexp);
+	$res = set_regexp($regexp, $cc);
 	if (!$res[0])
 		return edit_regexp($res[1]);
 	notice("Finished setting regular expression. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\". Please note that after this you will lose existing registrations.", "subscribers");
+}
+
+function country_code()
+{
+
+	global $yate_conf_dir;
+	$filename = $yate_conf_dir."subscribers.conf";
+
+	if (!is_file($filename)) 
+		edit_country_code();
+	else {
+		$res = get_country_code();
+		$country_code = "";
+		if (is_array($res[1]))
+			$country_code = $res[1]["country_code"];
+		$fields = array("country_code"=>array("value"=>$country_code, "display"=>"fixed"));
+		start_form();
+		addHidden(null,array("method"=>"edit_country_code", "country_code"=>$country_code));
+		editObject(null,$fields,"Country code for the majority of your subscribers.",array("Modify"),null,true);
+	end_form();
+	}
+			
+}
+
+function edit_country_code($error=null,$error_fields=array())
+{
+	$country_code = getparam("country_code");
+
+	$fields = array("country_code"=>array("value"=>$country_code, "compulsory"=>true, "comment"=>" Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK"));
+
+	error_handle($error,$fields,$error_fields);
+        start_form();
+	addHidden("write_file");
+       	editObject(NULL,$fields,"Set Country Code","Save");
+        end_form();
+}
+
+function edit_country_code_write_file()
+{
+	$cc_file = array();
+	$res = get_country_code();
+
+	if (!$res[0])
+		errormess($res[1], "no");
+	else
+		$cc_file = $res[1];
+
+	$cc_param = getparam("country_code");
+
+	if (!$cc_param)
+		return edit_country_code("Please set the country code!", array("country_code"));
+	if (!ctype_digit($cc_param))
+		return edit_country_code("Country Code invalid!", array("country_code"));
+	if (in_array($cc_param, $cc_file)) {
+		notice("Finished setting Country Code.", "country_code");
+		return;
+	}
+
+	$res = set_country_code($cc_param);
+	if (!$res[0])
+		return edit_country_code($res[1]);
+	notice("Finished writting Country Code into subscribers.js.", "country_code");
+}
+
+function get_country_code()
+{
+	global $yate_conf_dir;
+
+	$filename = $yate_conf_dir."subscribers.conf";
+
+	if (!is_file($filename))
+		return array(true,"");
+
+	$subs_file = new ConfFile($yate_conf_dir."subscribers.conf");
+	
+	$content = array();
+	foreach ($subs_file->sections as $name => $value) {
+		if ($name == "general")
+			$content["country_code"] = $value["country_code"];
+	}
+
+	if (!count($content))
+		return array(true, "");
+
+	return array(true, $content);
+}
+
+function set_country_code( $country_code)
+{
+	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment, $subscriber_example;
+
+	//if file subscribers doesn't exist; create the file with adecvate comments
+	if (!is_file($yate_conf_dir."subscribers.conf" )) {
+		$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
+		$subs_file->initial_comment = $global_comment;
+		$content[0] = rtrim($country_code_comment);
+		$content["country_code"] = $country_code."\n";
+		$content[1] = rtrim($regexp_comment);
+		$content[2] = $subscriber_comment;
+		$content[3] = $subscriber_example;	
+		$subs_file->structure["general"] = $content;
+	} else {
+		$subs = new ConfFile($yate_conf_dir."subscribers.conf");
+		$old_data = array();
+		$have_regex = false;
+		foreach ($subs->sections as $name => $value) {
+			if ($name == "general" && isset($value["country_code"]))
+				$value["country_code"] = $country_code;
+			if (isset($value["regexp"])) {
+				$have_regex = true;
+				$regex = $value["regexp"];
+			}
+			if ($name == "general")
+				continue;
+
+
+			$old_data[$name] = $value;
+		}
+		if (!$have_regex) {
+			$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
+			$subs_file->initial_comment = $global_comment;
+			$content[0] = rtrim($country_code_comment);
+			$content["country_code"] = $country_code."\n";
+			$content[1] = $regexp_comment;
+			$content[2] = $subscriber_comment;
+			$subs_file->structure["general"] = $content;
+
+			foreach ($old_data as $name => $value)
+				$subs_file->structure[$name] = $value;
+		} else {
+			$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
+			$subs_file->initial_comment = $global_comment;
+			                $content[0] = rtrim($country_code_comment);
+			                $content["country_code"] = $country_code."\n";
+					$content[1] = rtrim($regexp_comment);
+					$content["regexp"] = $regex."\n";
+					$content[2] = $subscriber_comment;
+					$content[3] = $subscriber_example;
+					$subs_file->structure["general"] = $content;
+		}
+	}
+	$subs_file->save();
+
+	return array(true);
 }
 
 function edit_subscriber($error=null,$error_fields=array())
@@ -191,7 +342,7 @@ function edit_subscriber($error=null,$error_fields=array())
 
 	if (get_param($subscriber,"imsi_type"))
 		$imsi_type["selected"] = get_param($subscriber,"imsi_type");
-	$active = (get_param($subscriber,"active") == 1) ? 't' : 'f';
+	$active = (get_param($subscriber,"active") == "on") ? 't' : 'f';
 
 	$fields = array(
 		"imsi"   => array("value"=>$imsi, "required"=>true, "comment"=>"SIM card id", "column_name"=>"IMSI"),
@@ -217,12 +368,16 @@ function edit_subscriber($error=null,$error_fields=array())
 
 function edit_subscriber_write_file()
 {
-	$res = get_subscribers();
+	$res = get_subscribers(true);
+
 	if (!$res[0]) {
 		//errormess($res[1], "no");
 		$subscribers = array();
-	} else
+	} else {
 		$subscribers = $res[1];
+		$general = $res[1]["general"];
+		unset($subscribers["general"]);
+	}
 
 	$imsi = (getparam("imsi")) ? getparam("imsi") : getparam("imsi_val");
 	if (!$imsi)
@@ -238,7 +393,7 @@ function edit_subscriber_write_file()
 			return edit_subscriber("Field $name is required");
 		$subscriber[$name] = $val;
 	}
-	$subscriber["active"] = ($subscriber["active"]=="on") ? 1 : 0;
+//	$subscriber["active"] = ($subscriber["active"]=="on") ? 1 : 0;
 	if ($subscriber["imsi_type"]=="2G")
 		$subscriber["op"] = "";
 
@@ -248,8 +403,8 @@ function edit_subscriber_write_file()
 		$subs_file = $subscribers[$imsi];
 		foreach ($fields as $name=>$required) {
 			$val = getparam($name);
-			if ($name == "active")
-				$val = (getparam($name) == "on") ? 1 : 0;
+		//	if ($name == "active")
+		//		$val = (getparam($name) == "on") ? 1 : 0;
 
 			if ($subs_file[$name] != $val) 
 				$modified = true;
@@ -267,7 +422,7 @@ function edit_subscriber_write_file()
 		return edit_subscriber("Subscriber with IMSI $imsi is already set.",array("imsi"));
 	$subscribers[$imsi] = $subscriber;
 
-	$res = set_subscribers($subscribers);
+	$res = set_subscribers($subscribers, $general);
 	if (!$res[0])
 		return edit_subscriber($res[1]);
 	notice("Finished setting subscriber with IMSI $imsi. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".  Please note that after this you will lose existing registrations.", "subscribers");
@@ -281,54 +436,97 @@ function delete_subscriber()
 function delete_subscriber_database()
 {
 	$imsi = getparam("imsi");
-	$res = get_subscribers();
+	$res = get_subscribers(true);
 	if (!$res[0])
 		return errormess($res[1], "no");
 	$subscribers = $res[1];
+	$cc = array();
+	if (isset($res[1]["general"])) {
+		$cc = $res[1]["general"];
+		unset($subscribers["general"]);
+	}
 
 	if (!isset($subscribers[$imsi]))
 		return errormess("IMSI $imsi is not in subcribers list.","no");
 
 	unset($subscribers[$imsi]);
-	$res = set_subscribers($subscribers);
+	$res = set_subscribers($subscribers, $cc);
 	if (!$res[0]) 
 		return errormess($res[1],"no");
 
 	notice("Finished removing subscriber with IMSI $imsi.", "subscribers");
 }
 
-function set_subscribers($subscribers)
+function set_subscribers($subscribers, $general = array())
 {
-	global $yate_conf_dir, $subscribers_prefix, $subscribers_suffix;
+	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment;
 
-	$js_file = new JsObjFile($yate_conf_dir."subscribers.js", $subscribers_prefix, $subscribers_suffix, $subscribers);
-	$js_file->safeSave();
+	$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
 
-	if (!$js_file->status())
-		return array(false, $js_file->getError());
-	return array(true);
-}
+	$subs_file->initial_comment = $global_comment;
 
-function set_regexp($regexp)
-{
-	global $yate_conf_dir, $regexp_prefix, $regexp_suffix;
+	$cc[0] = $country_code_comment;
 	
-	$filename = $yate_conf_dir."subscribers.js";
-	$file = new GenericFile($filename);
-	$file->openForWrite();
-	if (!$file->status())
-		return array(false, $file->getError());
-	$fh = $file->getHandler("w");
+	if (isset($general["country_code"])) {
+		$cc[0] = rtrim($country_code_comment);
+		$cc["country_code"] = $general["country_code"]."\n";
+	}
+	$cc[1] = $regexp_comment;
+	$cc[2] = $subscriber_comment;
+	
+	$subs_file->structure["general"] = $cc;
 
-	fwrite($fh, $regexp_prefix.$regexp.$regexp_suffix);
-	$file->close();
+	foreach ($subscribers as $imsi => $data_imsi) {
+		if (isset($data_imsi["imsi"]))
+			unset($data_imsi["imsi"]);
+		$subs_file->structure[$imsi] = $data_imsi;
+	}
+
+	$subs_file->save();
 
 	return array(true);
 }
 
-function get_subscribers()
+function set_regexp($regexp, $general = array())
 {
-	global $yate_conf_dir, $subscribers_prefix, $subscribers_suffix;
+	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment, $subscriber_example;
+
+	$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
+
+	$subs_file->initial_comment = $global_comment;
+
+	$cc[0] = $country_code_comment;
+	if (count($general)) {
+		$cc[0] = rtrim($country_code_comment);
+		$cc["country_code"] = $general["country_code"]."\n";
+	}
+	$cc[1] = rtrim($regexp_comment);
+	$cc["regexp"] = $regexp."\n";
+        $cc[2] = $subscriber_comment;
+	$cc[3] = $subscriber_example;
+
+        $subs_file->structure["general"] = $cc;
+
+	$subs_file->save();
+
+	return array(true);
+}
+
+function get_subscribers($keep_country_code = false)
+{
+	global $yate_conf_dir, $global_comment, $regexp_comment, $subscriber_comment;
+
+        $subs_file = new ConfFile($yate_conf_dir."subscribers.conf");
+
+	$subscribers = array();
+	foreach ($subs_file->sections as $name => $value) {
+		if (!$keep_country_code && $name == "general") 
+			continue;
+		$subscribers[$name] = $value;
+	}
+
+//var_dump($subscribers);
+	/*global $yate_conf_dir, $subscribers_prefix, $subscribers_suffix;
 
 	$filename = $yate_conf_dir."subscribers.js";
 	if (!is_file($filename))
@@ -339,15 +537,46 @@ function get_subscribers()
 	$js_file->read();
 	if (!$js_file->status())
 		return array(false, $js_file->getError());
-	$subscribers = $js_file->getObject();
-	if (!$subscribers)
-		$subscribers = array();
+	$subscribers = $js_file->getObject();*/
 	return array(true, $subscribers);
 }
 
-function get_regexp()
+function get_regexp($keep_country_code = false)
 {
-	global $yate_conf_dir, $regexp_prefix, $regexp_suffix;
+	global $yate_conf_dir;
+
+	$filename = $yate_conf_dir."subscribers.conf";
+
+	$subs_file = new ConfFile($filename);
+
+	if (!is_file($filename))
+		// if subscribers.conf file doesn't exist don't return error, just empty string
+		return array(true,"");
+
+
+	$content = array();
+	foreach ($subs_file->sections as $name => $value) {
+		if ($name !== "general")
+			continue;
+     
+		if ($keep_country_code) {
+			if (isset($value["country_code"])) 
+				$content["country_code"] = $value["country_code"]; 
+			if (isset($value["regexp"]))
+				$content["regexp"] = $value["regexp"];
+		} else {
+	     		if (isset($value["regexp"]))
+				$content = $value["regexp"];
+		}
+	}
+	if (!count($content))
+		 return array(true, "");
+	
+	return array(true, $content);
+
+
+
+/*	global $yate_conf_dir, $regexp_prefix, $regexp_suffix;
 
 	$filename = $yate_conf_dir."subscribers.js";
 	if (!is_file($filename))
@@ -369,7 +598,7 @@ function get_regexp()
 	$content = substr($content,strlen($regexp_prefix));
 	$content = substr($content,0,strlen($content)-strlen($regexp_suffix));
 
-	return array(true, $content);
+	return array(true, $content);*/
 }
 
 function get_subscriber($imsi)
@@ -421,8 +650,12 @@ function manage_sims()
 		<a class="write_sim" href="main.php?module=subscribers&method=write_sim_form"><img title="SIM Programmer" src="images/sim_programmer.png" alt="SIM Programmer" /></a>
 	</div>
 <?php
-        table($all_sim_written, $formats, "written SIM", "sim");
+	table($all_sim_written, $formats, "written SIM", "sim");
+	if (file_exists($pysim_csv)) {
+		?><div class="download_file"><a href="download.php" class="content">Download csv file with all written SIMs</a></div><?php
+	}
 }
+
 
 function display_add_into_subscribers($imsi, $ki)
 {
@@ -505,7 +738,7 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 							array("required" => true,"value" => $mcc, "comment" => "Set Mobile Country Code.");
 	$fields["mobile_network_code"] = $advanced_mnc ? array("required" => true,"advanced"=> true, "value" => $mnc, "comment" => "Set Mobile Network Code.", "javascript"=>" onClick=advanced('sim')") :
 							array("required" => true,"value" => $mnc, "comment" => "Set Mobile Network Code.");
-
+	
 	if (!$generate_random_imsi) {
 		unset($fields["imsi"]["triggered_by"]);
 		unset($fields["iccid"]["triggered_by"]);
@@ -534,7 +767,6 @@ function write_sim_form_to_pysim()
 			$error .= "Invalid integer value for parameter '". ucfirst(str_replace("_"," ",$param)). "': ". getparam($param). ".<br/> \n";
 			$error_fields[] = $param;
 		} elseif ($param == "mobile_country_code" && (int)getparam($param) <= 0 || (int)getparam($param) >= 999) {
-
 			$error .= "Mobile Country Code value must be between 0 and 999. <br/>\n";
 			$error_fields[] = $param;
 		} elseif ($param == "mobile_network_code" && (int)getparam($param) <= 0 ||  (int)getparam($param) >= 999) {
@@ -612,14 +844,20 @@ function write_generated_imsi_to_file($subscribers)
 		return;
 
 	unset($subscribers["iccid"], $subscribers["operator_name"],$subscribers["country_code"],$subscribers["mobile_country_code"],$subscribers["mobile_network_code"]);
-	$res = get_subscribers();
+	$res = get_subscribers(true);
 	if ($res[0])
 		$new = $res[1];	
-	
-	$new[$subscribers["imsi"]] = $subscribers; 
-	$new[$subscribers["imsi"]] = array("imsi"=>$subscribers["imsi"],"msisdn"=> "","short_number"=>"","active"=>"0","ki"=>$subscribers["ki"],"op"=>"","imsi_type"=>"2G");
 
-	$res = set_subscribers($new);
+
+	$cc = array();
+	if (isset($new["general"])) {
+		$cc = $new["general"];
+		unset($new["general"]);
+	}
+
+	
+	$new[$subscribers["imsi"]] = array(/*"imsi"=>$subscribers["imsi"],*/"msisdn"=> "","short_number"=>"","active"=>"off","ki"=>$subscribers["ki"],"op"=>"","imsi_type"=>"2G");
+	$res = set_subscribers($new, $cc);
 
 	if (!$res[0])
 		return errormess($res[1],"no");
@@ -782,8 +1020,4 @@ function test_existing_imsi_in_csv($imsi)
 	return false;
 }
 
-function get_country_code()
-{
-	return null;
-}
 ?>
