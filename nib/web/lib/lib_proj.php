@@ -29,6 +29,11 @@ function have_nib_package()
 	return shell_exec("rpm -qa 'yate-bts-nib*'");
 }
 
+function have_pysim_prog()
+{
+	return shell_exec("which pySim-prog.py");
+}
+
 function include_formats($formats,$form_identifier)
 {
 	$formats = explode(',',$formats);

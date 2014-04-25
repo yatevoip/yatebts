@@ -389,12 +389,18 @@ function detect_pysim_installed()
 {
 	global $pysim_path;
 
-	if (have_nib_package() && !have_pysim_package()) 
-		return array(false, "The pySIM package is not installed. Please install pySIM from package.");
+	if (!have_pysim_prog())
+		return array(false, "Please install pySIM and create file config.php to set the location for pySIM after instalation. E.g. \$pysim_path = \"/usr/bin\";");
 
-	if (!have_nib_package() && !is_file($pysim_path.'/'.'pySim-prog.py'))
-		return array(false, "Please create file config.php and set the location for pySIM after instalation. E.g. \$pysim_path = \"/usr/bin\";");
+	$pysim_prog_path = have_pysim_prog();
+	$pysim_real_path = str_replace(array("/pySim-prog.py","\n"), "", $pysim_prog_path);
 
+	if (!isset($pysim_path)) 
+                $pysim_path = $pysim_real_path;
+
+        if (!is_file($pysim_path.'/'.'pySim-prog.py')) 
+                return array(false, "The path for pySIM set in configuration file is not correct. Please set in file config.php the right location for pySIM. This path was detected: \$pysim_path = \"$pysim_real_path\";");
+	
 	return array(true);
 }
 
@@ -499,8 +505,6 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 							array("required" => true,"value" => $mcc, "comment" => "Set Mobile Country Code.");
 	$fields["mobile_network_code"] = $advanced_mnc ? array("required" => true,"advanced"=> true, "value" => $mnc, "comment" => "Set Mobile Network Code.", "javascript"=>" onClick=advanced('sim')") :
 							array("required" => true,"value" => $mnc, "comment" => "Set Mobile Network Code.");
-	
-
 
 	if (!$generate_random_imsi) {
 		unset($fields["imsi"]["triggered_by"]);
@@ -508,7 +512,6 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 		unset($fields["ki"]["triggered_by"]);
 		unset($fields["opc"]["triggered_by"]);
 	}
-
 
 	error_handle($error,$fields,$error_fields);
 	start_form(NULL,"post",false,"outbound");
@@ -520,7 +523,6 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 function write_sim_form_to_pysim()
 {
 	global $yate_conf_dir;
-
 
 	$error = "";
 	$params = array("operator_name","country_code","mobile_country_code","mobile_network_code", "card_type");
@@ -639,6 +641,14 @@ function execute_pysim($params, $command_manually=false)
 	 *   conflict with anyone. (for eg. your name as <random_string_of_choice> and
 	 *   0 1 2 ... for <card num>).
 	 */
+
+	$pysim_installed = detect_pysim_installed();
+
+        if (!$pysim_installed[0]) {
+                errornote($pysim_installed[1]);
+                return;
+        }
+
 	$params_sim_data = "-e -n ".$params["operator_name"]." -c ".$params["country_code"]." -x ".$params["mobile_country_code"]." -y ".$params["mobile_network_code"]." -z $random_string  -j ". $_SESSION["card_num"];
 
 	$command = 'stdbuf -o0 ' . $pysim_path.'/'.'pySim-prog.py -p 0 -t '. $params["card_type"]." ".$params_sim_data. " --write-csv ".$pysim_csv ;
