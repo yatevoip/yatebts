@@ -174,30 +174,32 @@ function edit_regexp_write_file()
 
 function country_code()
 {
-
 	global $yate_conf_dir;
-	$filename = $yate_conf_dir."subscribers.conf";
 
-	if (!is_file($filename)) 
+	$filename = $yate_conf_dir."subscribers.conf";
+	$res = get_country_code();
+	$country_code = "";
+	if (is_array($res[1]))
+		$country_code = $res[1]["country_code"];
+
+	if (!is_file($filename) || !strlen($country_code)) 
 		edit_country_code();
 	else {
-		$res = get_country_code();
-		$country_code = "";
-		if (is_array($res[1]))
-			$country_code = $res[1]["country_code"];
 		$fields = array("country_code"=>array("value"=>$country_code, "display"=>"fixed"));
 		start_form();
 		addHidden(null,array("method"=>"edit_country_code", "country_code"=>$country_code));
 		editObject(null,$fields,"Country code for the majority of your subscribers.",array("Modify"),null,true);
 	end_form();
 	}
-			
 }
 
 function edit_country_code($error=null,$error_fields=array())
 {
-	$country_code = getparam("country_code");
+	global $method;
 
+	$method = "edit_country_code";
+
+	$country_code = getparam("country_code");
 	$fields = array("country_code"=>array("value"=>$country_code, "compulsory"=>true, "comment"=>" Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK"));
 
 	error_handle($error,$fields,$error_fields);
@@ -223,7 +225,7 @@ function edit_country_code_write_file()
 		return edit_country_code("Please set the country code!", array("country_code"));
 	if (!ctype_digit($cc_param))
 		return edit_country_code("Country Code invalid!", array("country_code"));
-	if (in_array($cc_param, $cc_file)) {
+	if (is_array($cc_file) && in_array($cc_param, $cc_file)) {
 		notice("Finished setting Country Code.", "country_code");
 		return;
 	}
@@ -247,7 +249,7 @@ function get_country_code()
 	
 	$content = array();
 	foreach ($subs_file->sections as $name => $value) {
-		if ($name == "general")
+		if ($name == "general" && isset($value["country_code"]))
 			$content["country_code"] = $value["country_code"];
 	}
 
@@ -284,7 +286,6 @@ function set_country_code( $country_code)
 			}
 			if ($name == "general")
 				continue;
-
 
 			$old_data[$name] = $value;
 		}
@@ -375,8 +376,10 @@ function edit_subscriber_write_file()
 		$subscribers = array();
 	} else {
 		$subscribers = $res[1];
-		$general = $res[1]["general"];
-		unset($subscribers["general"]);
+		if (isset($res[1]["general"])) {
+			$general = $res[1]["general"];
+			unset($subscribers["general"]);
+		}
 	}
 
 	$imsi = (getparam("imsi")) ? getparam("imsi") : getparam("imsi_val");
@@ -525,19 +528,6 @@ function get_subscribers($keep_country_code = false)
 		$subscribers[$name] = $value;
 	}
 
-//var_dump($subscribers);
-	/*global $yate_conf_dir, $subscribers_prefix, $subscribers_suffix;
-
-	$filename = $yate_conf_dir."subscribers.js";
-	if (!is_file($filename))
-		// if subscribers.js file doesn't exist don't return error, just empty subscribers array
-		return array(true, array());
-
-	$js_file = new JsObjFile($yate_conf_dir."subscribers.js", $subscribers_prefix, $subscribers_suffix);
-	$js_file->read();
-	if (!$js_file->status())
-		return array(false, $js_file->getError());
-	$subscribers = $js_file->getObject();*/
 	return array(true, $subscribers);
 }
 
@@ -573,32 +563,6 @@ function get_regexp($keep_country_code = false)
 		 return array(true, "");
 	
 	return array(true, $content);
-
-
-
-/*	global $yate_conf_dir, $regexp_prefix, $regexp_suffix;
-
-	$filename = $yate_conf_dir."subscribers.js";
-	if (!is_file($filename))
-		// if subscribers.js file doesn't exist don't return error, just empty string
-		return array(true,"");
-
-	$file = new GenericFile($filename);
-	$file->openForRead();
-	if (!$file->status())
-		return array(false, $file->getError());
-
-	$fh = $file->getHandler();
-	clearstatcache();
-	$content = fread($fh, filesize($filename));
-	if (substr($content,0,strlen($regexp_prefix))!=$regexp_prefix) {
-		// file doesn't match, we probably have subscribers
-		return array(true, "");
-	}
-	$content = substr($content,strlen($regexp_prefix));
-	$content = substr($content,0,strlen($content)-strlen($regexp_suffix));
-
-	return array(true, $content);*/
 }
 
 function get_subscriber($imsi)
@@ -687,7 +651,11 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 
 	$file = new ConfFile($filename);
 
-	$cc = get_country_code();
+	$res = get_country_code();
+
+	$cc = "";
+	if ($res[0] && is_array($res[1]))
+		$cc = $res[1]["country_code"];
 	$mcc = "001";
 	$mnc = "01";
 	$advanced_mcc = $advanced_mnc = $advanced_op = false;
@@ -732,7 +700,7 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 	//advanced fields if they are set in ybts.conf file
 	$fields["operator_name"] = $advanced_op ? array("required" => true,"advanced"=> true, "value" =>$op, "comment" => "Set Operator name on SIM.") : array("required" => true, "comment" => "Set Operator name on SIM.");
 	if ($cc)
-		$fields["country_code"] = array("required" => true, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK", "advanced"=> true);
+		$fields["country_code"] = array("required" => true, "value"=>$cc, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK", "advanced"=> true);
 	$fields["card_type"] = array($type_card,"advanced"=> true, "required"=>true, "display"=>"select", "column_name"=> "Card Type", "comment" =>" Select the card type for writing SIM credentials. The SIM cards that you received are \"GrcardSim\". For other card types, see the list of cards supported by PySim. It is not guaranteed that your card will be written, even if it is in that list."); 
 	$fields["mobile_country_code"] = $advanced_mcc ? array("required" => true,"advanced"=> true, "value" => $mcc, "comment" => "Set Mobile Country Code.", "javascript"=>" onClick=advanced('sim')") :
 							array("required" => true,"value" => $mcc, "comment" => "Set Mobile Country Code.");
