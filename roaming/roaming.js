@@ -68,8 +68,41 @@ function onRegister(msg)
 
     sr.wait = true;
     if (sr.dispatch(true)) {
-	if (authSuccess(sr,imsi,msg))
-	    return true;
+	if (authSuccess(sr,imsi,msg)) {
+	    // check for expires in Contact header 
+	    var contact = sr["sip_contact"];
+	    var res = contact.match(/expires *= *"?([^ ;]+)"?/);
+	    if (res)
+		expires = res[1];
+	    else 
+		// otherwise check for it in the Expires header
+		expires = sr["sip_expires"];
+
+	    expires = parseInt(expires);
+
+	    if (isNaN(expires)) {
+		var warning = "Missing Expires header or parameter in Contact header.";
+	    } else { 
+		if (expires>=t3212) {
+		    var half = expires/2;
+		    if (half<=t3212) {
+			var errmess = "Configuration issue: Timer.T3212 should be smaller than half the Expire time received from server. Expires="+expires+"(seconds), Timer.T3212="+t3212+"(seconds)";
+			Engine.debug(Engine.debugWarn, errmess);
+		    }
+		    return true;
+		}
+		else
+		    var warning = "Configuration issue: Timer.T3212 is higher than Expires received from server. Expires="+expires+", Timer.T3212="+t3212;
+	    }
+	    Engine.debug(Engine.debugWarn, warning);
+
+	    // deregister from VLR
+	    var sr = buildRegister(imsi,0,msg.imei,warning);
+	    sr.enqueue();
+
+	    msg.error = "location-area-not-allowed";
+	    return false;	    
+	}
 	return reqResponse(sr,imsi,msg);
     } else {
 	Engine.debug(Engine.debugWarn, "Could not do xsip.generate for method REGISTER in onRegister.");
@@ -82,8 +115,10 @@ function onRegister(msg)
  * Build a SIP REGISTER message 
  * @param imsi String
  * @param exp Integer Expire time for SIP registration. Min 0, Max 3600 
+ * @param imei String representing IMEI of device where request comes from
+ * @param warning String - Optional. If set adds Warning header
  */
-function buildRegister(imsi,exp,imei)
+function buildRegister(imsi,exp,imei,warning)
 {
     var sr = new Message("xsip.generate");
     sr.method = "REGISTER";
@@ -101,6 +136,8 @@ function buildRegister(imsi,exp,imei)
     }
     sr.sip_Expires = exp;
     sr["sip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+    if (warning)
+	sr["sip_Warning"] = warning;
 
     return sr;
 }
@@ -167,7 +204,7 @@ function onDisconnected(msg)
     } else 
 	Engine.debug(Engine.DebugWarn,"Invalid header: "+auth);
 
-     return false;
+    return false;
 }
 
 /**
@@ -380,7 +417,7 @@ function onExecute(msg)
 }
 
 /*
- * Read only necessary configuration from [gsm] section in ybts.conf
+ * Read only necessary configuration from [gsm],[gsm_advanced] sections in ybts.conf
  */
 function readYBTSConf()
 {
@@ -400,6 +437,23 @@ function readYBTSConf()
     hex_ci = get16bitHexVal(ci);
     if (hex_lac==false || hex_ci==false)
 	Engine.alarm(alarm_conf, "Wrong configuration for Identity.LAC="+lac+" or Identity.CI="+ci+". Can't hexify value.");
+
+    var gsm_advanced = conf.getSection("gsm_advanced");
+    if (gsm_advanced)
+	t3212 = gsm_advanced.getValue("Timer.T3212");
+   
+    if (t3212 == undefined)
+	t3212 = 1440; // defaults to 24 minutes
+    else {
+	t3212 = parseInt(t3212);
+	if (isNaN(t3212))
+	    Engine.alarm(alarm_conf, "Wrong configuration for Timer.T3212. Value is not numeric: '"+gsm_advanced.getValue("Timer.T3212")+"'");
+	else
+	    t3212 = t3212 * 60;
+    }
+
+    if (t3212 == 0)
+	Engine.alarm(alarm_conf, "Incompatible configuration: Timer.T3212=0. When sending requests to SIP/IMS server Timer.T3212 is in 6..60 range.");
 }
 
 /*
