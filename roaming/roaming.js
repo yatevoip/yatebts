@@ -137,7 +137,7 @@ function buildRegister(imsi,exp,imei,warning)
     sr.sip_Expires = exp;
     sr["sip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
     if (warning)
-	sr["sip_Warning"] = warning;
+	sr["sip_Warning"] = '399 ' + Engine.runParams("nodename") + ' "' + warning + '"';
 
     return sr;
 }
