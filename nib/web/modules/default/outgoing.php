@@ -295,7 +295,7 @@ function edit_outgoing_write_to_file($prefix='',$prefix_protocol='')
 
 	$res = set_outgoing($params);
 	if (!$res[0])
-		edit_outgoing($read_account, $res[1]);
+		return edit_outgoing($read_account, $res[1]);
 
 	outgoing("For changes to take effect please restart yate or reload just accfile module from telnet with command: \"reload accfile\".");
 }

@@ -189,7 +189,7 @@ function country_code()
 		start_form();
 		addHidden(null,array("method"=>"edit_country_code", "country_code"=>$country_code));
 		editObject(null,$fields,"Country code for the majority of your subscribers.",array("Modify"),null,true);
-	end_form();
+		end_form();
 	}
 }
 
@@ -259,7 +259,7 @@ function get_country_code()
 	return array(true, $content);
 }
 
-function set_country_code( $country_code)
+function set_country_code($country_code)
 {
 	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment, $subscriber_example;
 
@@ -303,15 +303,20 @@ function set_country_code( $country_code)
 		} else {
 			$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
 			$subs_file->initial_comment = $global_comment;
-			                $content[0] = rtrim($country_code_comment);
-			                $content["country_code"] = $country_code."\n";
-					$content[1] = rtrim($regexp_comment);
-					$content["regexp"] = $regex."\n";
-					$content[2] = $subscriber_comment;
-					$content[3] = $subscriber_example;
-					$subs_file->structure["general"] = $content;
+			$content[0] = rtrim($country_code_comment);
+			$content["country_code"] = $country_code."\n";
+			$content[1] = rtrim($regexp_comment);
+			$content["regexp"] = $regex."\n";
+			$content[2] = $subscriber_comment;
+			$content[3] = $subscriber_example;
+			$subs_file->structure["general"] = $content;
 		}
 	}
+
+	$subs_file->openForWrite();
+	if (!$subs_file->status())
+		return array(false, $subs_file->getError());
+
 	$subs_file->save();
 
 	return array(true);
@@ -469,14 +474,14 @@ function set_subscribers($subscribers, $general = array())
 	$subs_file->initial_comment = $global_comment;
 
 	$cc[0] = $country_code_comment;
-	
+
 	if (isset($general["country_code"])) {
 		$cc[0] = rtrim($country_code_comment);
 		$cc["country_code"] = $general["country_code"]."\n";
 	}
 	$cc[1] = $regexp_comment;
 	$cc[2] = $subscriber_comment;
-	
+
 	$subs_file->structure["general"] = $cc;
 
 	foreach ($subscribers as $imsi => $data_imsi) {
@@ -484,6 +489,10 @@ function set_subscribers($subscribers, $general = array())
 			unset($data_imsi["imsi"]);
 		$subs_file->structure[$imsi] = $data_imsi;
 	}
+
+	$subs_file->openForWrite();
+	if (!$subs_file->status())
+		return array(false, $subs_file->getError());
 
 	$subs_file->save();
 
@@ -509,6 +518,10 @@ function set_regexp($regexp, $general = array())
 	$cc[3] = $subscriber_example;
 
         $subs_file->structure["general"] = $cc;
+
+	$subs_file->openForWrite();
+	if (!$subs_file->status())
+                return array(false, $subs_file->getError());
 
 	$subs_file->save();
 
@@ -620,7 +633,6 @@ function manage_sims()
 	}
 }
 
-
 function display_add_into_subscribers($imsi, $ki)
 {
 	global $module, $main;
@@ -634,7 +646,6 @@ function display_add_into_subscribers($imsi, $ki)
 	}else  
 		print "";
 }
-
 
 function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi = "on",$insert_subscribers = "on")
 {
@@ -816,14 +827,12 @@ function write_generated_imsi_to_file($subscribers)
 	if ($res[0])
 		$new = $res[1];	
 
-
 	$cc = array();
 	if (isset($new["general"])) {
 		$cc = $new["general"];
 		unset($new["general"]);
 	}
 
-	
 	$new[$subscribers["imsi"]] = array(/*"imsi"=>$subscribers["imsi"],*/"msisdn"=> "","short_number"=>"","active"=>"off","ki"=>$subscribers["ki"],"op"=>"","imsi_type"=>"2G");
 	$res = set_subscribers($new, $cc);
 
@@ -956,7 +965,6 @@ function read_csv()
 	$content = eregi_replace('"','',$content); // in case they choose to mark text fields with "
 	$content = eregi_replace("'",'',$content);  // in case they choose to mark text fields with '
 	$content = explode("\n",$content);
-
 
 	for ($i=0; $i<count($content); $i++) {
 		$row = explode(',',$content[$i]);
