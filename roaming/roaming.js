@@ -135,7 +135,7 @@ function buildRegister(imsi,exp,imei,warning)
 	sr.sip_Contact = sr.sip_Contact + "; +sip.instance=\"<urn:gsma:imei:"+ imei +">\"";
     }
     sr.sip_Expires = exp;
-    sr["sip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+    sr["sip_P-Access-Network-Info"] = accnet_header;
     if (warning)
 	sr["sip_Warning"] = '399 ' + Engine.runParams("nodename") + ' "' + warning + '"';
 
@@ -310,7 +310,7 @@ function onRouteSMS(msg)
 	}
 
 	msg["sms.caller"] = caller;
-	msg.rpdu = Engine.atoh(msg.xsip_body);
+	msg.rpdu = msg.xsip_body;
 	msg.retValue("ybts/"+msg.called);
     }
 
@@ -346,15 +346,15 @@ function onMoSMS(msg)
     m.xsip_type = "application/vnd.3gpp.sms";
     m.xsip_body_encoding = "hex";
     m.xsip_body = msg.rpdu;
-    m["sip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+    m["sip_P-Access-Network-Info"] = accnet_header;
     m.wait = true;
     if (!addAuthParams(m,msg,imsi))
 	return false;
 
     if (m.dispatch(true)) {
 	if ((m.code/100)==2) {
-	    if (m.xsip_body!="")
-                msg.irpdu = Engine.atoh(m.xsip_body);
+	    if (m.xsip_body!="") 
+                msg.irpdu = m.xsip_body;
 	    return true;
 	}
 	return reqResponse(m,imsi,msg);
@@ -383,7 +383,7 @@ function onRoute(msg)
 	    msg.called = "+"+msg.called;
 	
 	tempinfo_route[msg.id] = imsi;
-	msg["osip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+	msg["osip_P-Access-Network-Info"] = accnet_header;
 	msg.retValue("sip/sip:"+msg.called+"@"+reg_sip);
     } 
     else {
@@ -410,7 +410,7 @@ function onExecute(msg)
     if (msg.username!="") {
 	// add auth params if any
     	addAuthParams(msg,msg,msg.username,"osip_Authorization");
-	msg["osip_P-Access-Network-Info"] = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+	msg["osip_P-Access-Network-Info"] = accnet_header;
     }
 
     return false;	
@@ -454,6 +454,8 @@ function readYBTSConf()
 
     if (t3212 == 0)
 	Engine.alarm(alarm_conf, "Incompatible configuration: Timer.T3212=0. When sending requests to SIP/IMS server Timer.T3212 is in 6..60 range.");
+
+    accnet_header = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
 }
 
 /*
