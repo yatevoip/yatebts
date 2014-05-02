@@ -207,16 +207,13 @@ if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/ysipchan.conf
 	async_generic=yes
 	sip_req_trans_count=5
 
-	[registrar]
-	auth_required=yes
-
-	[methods]
-	message=no
-
 	[codecs]
 	default=disable
-	alaw=enable
 	gsm=enable
+
+	[message]
+	enable=yes
+	auth_required=false
 
 	EOF
 fi
