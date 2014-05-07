@@ -258,6 +258,13 @@ class ARFCNManager {
 	*/
 	bool clearHandover(unsigned TN);
 
+        /**
+                Run custom radio device command
+                @param command Command to execute
+		@return true on success.
+	*/
+        bool runCustom(const char* command);
+
 	//@}
 
 

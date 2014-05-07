@@ -998,7 +998,6 @@ int freqcorr(int argc, char** argv, ostream& os)
 }
 
 
-
 int noise(int argc, char** argv, ostream& os)
 {
         if (argc!=1) return BAD_NUM_ARGS;
@@ -1009,6 +1008,23 @@ int noise(int argc, char** argv, ostream& os)
 
         return SUCCESS;
 }
+
+
+int radio(int argc, char** argv, ostream& os)
+{
+        if (argc==1) return BAD_NUM_ARGS;
+
+        std::string cmd;
+        for (argc--, argv++; argc > 0; argc--, argv++) {
+                cmd += *argv;
+                if (argc > 1)
+                        cmd += " ";
+        }
+        os << (gTRX.ARFCN(0)->runCustom(cmd.c_str()) ? "OK" : "Command rejected") << endl;
+
+        return SUCCESS;
+}
+
 
 int sysinfo(int argc, char** argv, ostream& os)
 {
@@ -1118,6 +1134,7 @@ void Parser::addCommands()
         addCommand("txatten", txatten, "[newTxAtten] -- get/set the TX attenuation in dB");
 	addCommand("freqcorr", freqcorr, "[newOffset] -- get/set the new radio frequency offset");
         addCommand("noise", noise, "-- report receive noise level in RSSI dB");
+        addCommand("radio", radio, "[command] -- execute custom radio command");
         addCommand("reload", reload, "-- reload configuration from file");
 	addCommand("rmconfig", rmconfig, "key -- set a configuration value back to its default or remove a custom key/value pair");
 	addCommand("unconfig", unconfig, "key -- disable a configuration key by setting an empty value");

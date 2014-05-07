@@ -583,6 +583,16 @@ signed ::ARFCNManager::getNoiseLevel(void)
         return noiselevel;
 }
 
+bool ::ARFCNManager::runCustom(const char* command)
+{
+        int status = sendCommand("CUSTOM",command);
+        if (status !=0) {
+                LOG(WARNING) << "CUSTOM failed with status " << status;
+                return false;
+        }
+        return true;
+}
+
 signed ::ARFCNManager::getFactoryCalibration(const char * param)
 {
 	signed value;
