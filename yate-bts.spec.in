@@ -171,7 +171,7 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/extmodule.conf 2>
     fi
 fi
 chgrp -R apache %{_sysconfdir}/yate
-chmod g+rw %{_sysconfdir}/yate
+chmod -R g+rw %{_sysconfdir}/yate
 
 
 %package roaming
