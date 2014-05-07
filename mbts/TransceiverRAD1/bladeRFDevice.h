@@ -34,16 +34,27 @@
 // Timestamped data includes a header that overlaps the start of buffer
 // The header takes 16 octets = 4 samples of (real part: 2 octets, imaginary: 2 octets)
 // Timestamp is in half sample components; a full buffer increments it by 1016
-#define PKT_SAMPLES_RAW 512
-#define PKT_SAMPLES_USE (PKT_SAMPLES_RAW - 4)
+#define PKT_SAMPLES_SUPER_RAW 512
+#define PKT_SAMPLES_SUPER_USE (PKT_SAMPLES_SUPER_RAW - 4)
+#define PKT_SAMPLES_HIGH_RAW 256
+#define PKT_SAMPLES_HIGH_USE (PKT_SAMPLES_HIGH_RAW - 4)
 #define PKT_BUFFERS 4
 
-struct bladerf_superspeed_timestamp {
+struct bladerf_timestamp {
     uint32_t rsvd;
     uint32_t time_lo;
     uint32_t time_hi;
     uint32_t flags;
-    int16_t samples[PKT_SAMPLES_USE * 2];
+};
+
+struct bladerf_highspeed_timestamp {
+    struct bladerf_timestamp header;
+    int16_t samples[PKT_SAMPLES_HIGH_USE * 2];
+};
+
+struct bladerf_superspeed_timestamp {
+    struct bladerf_timestamp header;
+    int16_t samples[PKT_SAMPLES_SUPER_USE * 2];
 };
 
 /** A class to handle a bladeRF device */
@@ -70,8 +81,15 @@ private:
   double rxGain;
   int mRxGain1;
 
-  struct bladerf_superspeed_timestamp rxBuffer[PKT_BUFFERS];
-  struct bladerf_superspeed_timestamp txBuffer;
+  bool isSuperSpeed;
+  union {
+    struct bladerf_highspeed_timestamp highSpeed[PKT_BUFFERS];
+    struct bladerf_superspeed_timestamp superSpeed[PKT_BUFFERS];
+  } rxBuffer;
+  union {
+    struct bladerf_highspeed_timestamp highSpeed;
+    struct bladerf_superspeed_timestamp superSpeed;
+  } txBuffer;
   int rxBufIndex;
   int rxBufCount;
   int rxConsumed;
@@ -93,6 +111,14 @@ private:
   int rxShowInfo;
   int txShowInfo;
   bool spammy;
+
+  /** Number of raw samples in current mode */
+  inline int rawSamples() const
+    { return isSuperSpeed ? PKT_SAMPLES_SUPER_RAW : PKT_SAMPLES_HIGH_RAW; }
+
+  /** Number of usable samples in current mode */
+  inline int useSamples() const
+    { return isSuperSpeed ? PKT_SAMPLES_SUPER_USE : PKT_SAMPLES_HIGH_USE; }
 
   /** Set the transmission frequency */
   bool tx_setFreq(double freq, double *actual_freq);

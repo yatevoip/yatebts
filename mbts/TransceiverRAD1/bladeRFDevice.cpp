@@ -72,6 +72,7 @@ bladeRFDevice::bladeRFDevice(int oversampling, bool skipRx)
     LOG(INFO) << "creating bladeRF device...";
 
     sps = oversampling;
+    isSuperSpeed = false;
 }
 
 bool bladeRFDevice::open(const std::string &args, bool)
@@ -129,9 +130,15 @@ bool bladeRFDevice::open(const std::string &args, bool)
     }
     LOG(INFO) << "bladeRF timestamping enabled";
 
-    if (BLADERF_DEVICE_SPEED_SUPER != bladerf_device_speed(bdev)) {
-        LOG(EMERG) << "bladeRF transceiver only supports SuperSpeed mode at the moment";
-        return false;
+    switch (bladerf_device_speed(bdev)) {
+        case BLADERF_DEVICE_SPEED_HIGH:
+            break;
+        case BLADERF_DEVICE_SPEED_SUPER:
+            isSuperSpeed = true;
+            break;
+        default:
+            LOG(EMERG) << "Unsupported USB device speed";
+            return false;
     }
 
     struct bladerf_rational_rate rate, actual;
@@ -212,7 +219,7 @@ bool bladeRFDevice::open(const std::string &args, bool)
 
 bool bladeRFDevice::start()
 {
-  LOG(NOTICE) << "starting bladeRF...";
+  LOG(NOTICE) << "starting bladeRF in " << (isSuperSpeed ? "super" : "high") << " speed mode...";
   if (!bdev) return false;
 
   writeLock.lock();
@@ -233,7 +240,7 @@ bool bladeRFDevice::start()
   data = new short[currDataSize];
   rxBufIndex = 0;
   rxBufCount = 0;
-  rxConsumed = PKT_SAMPLES_USE;
+  rxConsumed = useSamples();
   txBuffered = 0;
   rxTimestamp = initialReadTimestamp();
   txTimestamp = initialWriteTimestamp();
@@ -332,7 +339,7 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
             else {
                 // Discard some data
                 delta = -delta;
-                int rxAvail = PKT_SAMPLES_USE - rxConsumed;
+                int rxAvail = useSamples() - rxConsumed;
                 if (rxAvail > 0) {
                     if (delta > rxAvail)
                         delta = rxAvail;
@@ -345,11 +352,12 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
                     *overrun = true;
             }
         }
-        int rxLen = PKT_SAMPLES_USE - rxConsumed;
+        int rxLen = useSamples() - rxConsumed;
         if (rxLen > 0) {
             if (rxLen > len)
                 rxLen = len;
-            memcpy(buf, &rxBuffer[rxBufIndex].samples[rxConsumed * 2], rxLen * sizeof(uint16_t) * 2);
+            int16_t* samples = isSuperSpeed ? rxBuffer.superSpeed[rxBufIndex].samples : rxBuffer.highSpeed[rxBufIndex].samples;
+            memcpy(buf, samples + (rxConsumed * 2), rxLen * sizeof(uint16_t) * 2);
             rxConsumed += rxLen;
             rxTimestamp += rxLen;
             if (rxResyncCandidate)
@@ -366,10 +374,10 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
             // We are out of buffered data so we need to actually read some more
             rxBufCount = 0;
             rxBufIndex = 0;
-            int bufCount = (len + PKT_SAMPLES_USE - 1) / PKT_SAMPLES_USE;
+            int bufCount = (len + useSamples() - 1) / useSamples();
             if (bufCount > PKT_BUFFERS)
                 bufCount = PKT_BUFFERS;
-            int status = bladerf_sync_rx(bdev, &rxBuffer, PKT_SAMPLES_RAW * bufCount, NULL, DEFAULT_STREAM_TIMEOUT);
+            int status = bladerf_sync_rx(bdev, &rxBuffer, rawSamples() * bufCount, NULL, DEFAULT_STREAM_TIMEOUT);
             if (status < 0) {
                 LOG(ERR) << "Samples RX failed at " << rxTimestamp << ": " << bladerf_strerror(status);
                 break;
@@ -386,8 +394,8 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
             TIMESTAMP t = rxTimestamp;
             TIMESTAMP peak = 0;
             for (int b = 0; b < bufCount; b++) {
-                int16_t* s = rxBuffer[b].samples;
-                for (int n = PKT_SAMPLES_USE; n > 0; n--, t++) {
+                int16_t* s = isSuperSpeed ? rxBuffer.superSpeed[b].samples : rxBuffer.highSpeed[b].samples;
+                for (int n = useSamples(); n > 0; n--, t++) {
                     int i = *s++;
                     int q = *s++;
                     iAvg += i;
@@ -408,8 +416,8 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
                     if (wPeak < -qMin) { wPeak = -qMin; peak = t; }
                 }
             }
-            iAvg /= (bufCount * PKT_SAMPLES_USE);
-            qAvg /= (bufCount * PKT_SAMPLES_USE);
+            iAvg /= (bufCount * useSamples());
+            qAvg /= (bufCount * useSamples());
             if (rxShowInfo) {
                 if (rxShowInfo > 0)
                     rxShowInfo--;
@@ -444,7 +452,8 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
             }
         }
         rxConsumed = 0;
-        TIMESTAMP tStamp = (((uint64_t)usrp_to_host_u32(rxBuffer[rxBufIndex].time_hi)) << 31) | (usrp_to_host_u32(rxBuffer[rxBufIndex].time_lo) >> 1);
+        struct bladerf_timestamp& header = isSuperSpeed ? rxBuffer.superSpeed[rxBufIndex].header : rxBuffer.highSpeed[rxBufIndex].header;
+        TIMESTAMP tStamp = (((uint64_t)usrp_to_host_u32(header.time_hi)) << 31) | (usrp_to_host_u32(header.time_lo) >> 1);
 //LOG(DEBUG) << "len=" << len << " exp=" << timestamp << " got=" << tStamp << " idx=" << rxBufIndex << " cnt=" << rxBufCount;
         if (tStamp != rxTimestamp) {
             long long delta = (long long)(tStamp - rxTimestamp);
@@ -462,7 +471,7 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
         }
         // Rob: disabled temporarily
         /*
-        uint32_t flags = usrp_to_host_u32(rxBuffer[rxBufIndex].flags);
+        uint32_t flags = usrp_to_host_u32(header.flags);
         if ((flags >> 28) & 0x04) {
             if (underrun) *underrun = true;
             LOG(DEBUG) << "UNDERRUN in TRX->bladeRF interface";
@@ -534,17 +543,18 @@ int bladeRFDevice::writeSamples(short *buf, int len, bool *underrun,
         txTimestamp = timestamp;
     }
 
-    int bufSpace = PKT_SAMPLES_USE - txBuffered;
+    int16_t* samples = isSuperSpeed ? txBuffer.superSpeed.samples : txBuffer.superSpeed.samples;
+    int bufSpace = useSamples() - txBuffered;
     if (bufSpace > 0) {
         // There is space left in buffer - fill it
         if (bufSpace > len)
             bufSpace = len;
         if (pulseMode < 0)
-            memcpy(&txBuffer.samples[txBuffered * 2], buf, bufSpace * sizeof(uint16_t) * 2);
+            memcpy(samples + (txBuffered * 2), buf, bufSpace * sizeof(uint16_t) * 2);
         else if (pulseMode < 2)
-            memset(&txBuffer.samples[txBuffered * 2], 0, bufSpace * sizeof(uint16_t) * 2);
+            memset(samples + (txBuffered * 2), 0, bufSpace * sizeof(uint16_t) * 2);
         else {
-            int16_t *p = txBuffer.samples + (txBuffered * 2);
+            int16_t *p = samples + (txBuffered * 2);
             TIMESTAMP t = tStamp;
             for (int n = bufSpace; n > 0; n--, p+=2)
                 switch ((t++) % pulseMode) {
@@ -563,31 +573,32 @@ int bladeRFDevice::writeSamples(short *buf, int len, bool *underrun,
         len -= bufSpace;
     }
 
-    while (txBuffered >= PKT_SAMPLES_USE) {
+    while (txBuffered >= useSamples()) {
         // We have a full buffer - send it
         // Each (I,Q) of a sample is counted individually by bladeRF
-        txBuffer.time_lo = host_to_usrp_u32(txTimestamp << 1);
-        txBuffer.time_hi = host_to_usrp_u32(txTimestamp >> 31);
-        txBuffer.rsvd = 0xdeadbeef;
-        txBuffer.flags = (uint32_t)-1;
-        int status = bladerf_sync_tx(bdev, &txBuffer, PKT_SAMPLES_RAW, NULL, DEFAULT_STREAM_TIMEOUT);
+        struct bladerf_timestamp& header = isSuperSpeed ? txBuffer.superSpeed.header : txBuffer.highSpeed.header;
+        header.time_lo = host_to_usrp_u32(txTimestamp << 1);
+        header.time_hi = host_to_usrp_u32(txTimestamp >> 31);
+        header.rsvd = 0xdeadbeef;
+        header.flags = (uint32_t)-1;
+        int status = bladerf_sync_tx(bdev, &txBuffer, rawSamples(), NULL, DEFAULT_STREAM_TIMEOUT);
         if (status < 0) {
             LOG(ERR) << "Samples TX failed at " << txTimestamp << ": " << bladerf_strerror(status);
         }
         else
-            samplesWritten += PKT_SAMPLES_USE;
-        txTimestamp += PKT_SAMPLES_USE;
+            samplesWritten += useSamples();
+        txTimestamp += useSamples();
         txBuffered = len;
         if (!len)
             break;
-        if (txBuffered > PKT_SAMPLES_USE)
-            txBuffered = PKT_SAMPLES_USE;
+        if (txBuffered > useSamples())
+            txBuffered = useSamples();
         if (pulseMode < 0)
-            memcpy(txBuffer.samples, buf, txBuffered * sizeof(uint16_t) * 2);
+            memcpy(samples, buf, txBuffered * sizeof(uint16_t) * 2);
         else if (pulseMode < 2)
-            memset(txBuffer.samples, 0, txBuffered * sizeof(uint16_t) * 2);
+            memset(samples, 0, txBuffered * sizeof(uint16_t) * 2);
         else {
-            int16_t *p = txBuffer.samples;
+            int16_t *p = samples;
             TIMESTAMP t = txTimestamp;
             for (int n = txBuffered; n > 0; n--, p+=2)
                 switch ((t++) % pulseMode) {
