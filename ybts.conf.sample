@@ -349,7 +349,7 @@ Radio.C0=
 ;Handover.LocalRSSIMin=-80
 
 ; Handover.ThresholdDelta: integer: A neighbor downlink signal must be this much stronger (in dB) than this downlink signal for handover to occur. Allowed values 5:20. 
-Handover.ThresholdDelta=10
+;Handover.ThresholdDelta=10
 
 ; MS.Power.Damping: integer: Damping value for MS power control loop
 ; Interval allowed: 25..75
@@ -618,7 +618,7 @@ Handover.ThresholdDelta=10
 
 ; Counters.Assign: integer: Maximum number of assign messages sent.
 ; Interval allowed 5:15. Defaults to 10.
-Counters.Assign=10
+;Counters.Assign=10
 
 ; Counters.N3101: integer: Counts unused USF responses to detect nonresponsive MS.
 ; Should be > 8. See GSM04.60 sec 13.
