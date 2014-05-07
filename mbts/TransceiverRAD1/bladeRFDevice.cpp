@@ -627,6 +627,9 @@ int bladeRFDevice::writeSamples(short *buf, int len, bool *underrun,
     }
 #endif
     writeLock.unlock();
+    // Chances are we underrun if we are less than one buffer ahead
+    if (underrun && (timestamp <= (olen + rxTimestamp)))
+        *underrun = true;
     if (spammy) {
         LOG(DEBUG) << "<<< TX len=" << olen;
     }
