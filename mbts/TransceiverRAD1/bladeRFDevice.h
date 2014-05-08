@@ -80,6 +80,8 @@ private:
 
   double rxGain;
   int mRxGain1;
+  int mRxHealth;
+  int mTxHealth;
 
   bool isSuperSpeed;
   union {
@@ -119,6 +121,9 @@ private:
   /** Number of usable samples in current mode */
   inline int useSamples() const
     { return isSuperSpeed ? PKT_SAMPLES_SUPER_USE : PKT_SAMPLES_HIGH_USE; }
+
+  /** Adjust health variable, terminate transceiver if excessive errors */
+  static void checkHealth(int& health, bool ok);
 
   /** Set the transmission frequency */
   bool tx_setFreq(double freq, double *actual_freq);

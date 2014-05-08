@@ -27,6 +27,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <signal.h>
 
 #include "Threads.h"
 #include "bladeRFDevice.h"
@@ -35,6 +37,9 @@
 
 
 #define MIN_OVERSAMPLING 4
+
+#define HEALTH_DEF  5
+#define HEALTH_MAX 10
 
  /* Stream defaults */
 #define DEFAULT_STREAM_RX_XFERS        1
@@ -161,13 +166,18 @@ bool bladeRFDevice::open(const std::string &args, bool)
     }
     LOG(INFO) << "Actual rate " << actual.integer << " + " << actual.num << " / " << actual.den;
 
+    mRxHealth = HEALTH_DEF;
+    mTxHealth = HEALTH_DEF;
+
     unsigned int bw = 0;
     if ((status = bladerf_set_bandwidth(bdev, BLADERF_MODULE_RX, BANDWIDTH, &bw) < 0)) {
         LOG(ALERT) << "Error setting RX bandwidth: " << bladerf_strerror(status);
+        checkHealth(mRxHealth, false);
     }
 
     if ((status = bladerf_set_bandwidth(bdev, BLADERF_MODULE_TX, BANDWIDTH, &bw) < 0)) {
         LOG(ALERT) << "Error setting TX bandwidth: " << bladerf_strerror(status);
+        checkHealth(mTxHealth, false);
     }
     else
         LOG(INFO) << "Actual bandwidth " << bw;
@@ -181,8 +191,10 @@ bool bladeRFDevice::open(const std::string &args, bool)
         DEFAULT_STREAM_TIMEOUT
     );
 
-    if (status < 0)
+    if (status < 0) {
         LOG(CRIT) << "Failed to intialize RX sync handle: " << bladerf_strerror(status);
+        checkHealth(mRxHealth, false);
+    }
 
     status = bladerf_sync_config(bdev,
         BLADERF_MODULE_TX,
@@ -193,8 +205,10 @@ bool bladeRFDevice::open(const std::string &args, bool)
         DEFAULT_STREAM_TIMEOUT
     );
 
-    if (status < 0)
+    if (status < 0) {
         LOG(CRIT) << "Failed to intialize TX sync handle: " << bladerf_strerror(status);
+        checkHealth(mTxHealth, false);
+    }
 
     mRxGain1 = BLADERF_RXVGA1_GAIN_MAX;
     mDcCorrect = true;
@@ -276,6 +290,7 @@ double bladeRFDevice::setTxGain(double dB)
     writeLock.unlock();
     if (status < 0) {
         LOG(ERR) << "Error setting TX gain: " << bladerf_strerror(status);
+        checkHealth(mTxHealth, false);
     }
     else
         LOG(INFO) << "TX gain set to " << dB << " dB.";
@@ -296,6 +311,7 @@ double bladeRFDevice::setRxGain(double dB)
     writeLock.unlock();
     if (status < 0) {
         LOG(ERR) << "Error setting RX gain: " << bladerf_strerror(status);
+        checkHealth(mRxHealth, false);
     }
     else
         LOG(INFO) << "RX gain set to " << dB << " dB.";
@@ -380,8 +396,10 @@ int bladeRFDevice::readSamples(short *buf, int len, bool *overrun,
             int status = bladerf_sync_rx(bdev, &rxBuffer, rawSamples() * bufCount, NULL, DEFAULT_STREAM_TIMEOUT);
             if (status < 0) {
                 LOG(ERR) << "Samples RX failed at " << rxTimestamp << ": " << bladerf_strerror(status);
+                checkHealth(mRxHealth, false);
                 break;
             }
+            checkHealth(mRxHealth, true);
             rxBufCount = bufCount;
             // Compute averages and peak values
             int iMin = 32767;
@@ -584,9 +602,12 @@ int bladeRFDevice::writeSamples(short *buf, int len, bool *underrun,
         int status = bladerf_sync_tx(bdev, &txBuffer, rawSamples(), NULL, DEFAULT_STREAM_TIMEOUT);
         if (status < 0) {
             LOG(ERR) << "Samples TX failed at " << txTimestamp << ": " << bladerf_strerror(status);
+            checkHealth(mTxHealth, false);
         }
-        else
+        else {
             samplesWritten += useSamples();
+            checkHealth(mTxHealth, true);
+        }
         txTimestamp += useSamples();
         txBuffered = len;
         if (!len)
@@ -821,6 +842,19 @@ bool bladeRFDevice::runCustom(const std::string &command)
     else
         return false;
     return true;
+}
+
+void bladeRFDevice::checkHealth(int& health, bool ok)
+{
+    if (ok) {
+        if (health < HEALTH_MAX)
+            health++;
+    }
+    else if (--health < 0) {
+        LOG(CRIT) << "Excessive I/O errors, bailing out";
+        health = HEALTH_DEF;
+        kill(getpid(), SIGTERM);
+    }
 }
 
 // Device creation factory
