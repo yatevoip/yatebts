@@ -612,6 +612,8 @@ function detect_pysim_installed()
 
 function manage_sims()
 {
+	global $pysim_csv;
+
 	$pysim_installed = detect_pysim_installed();
 
 	if (!$pysim_installed[0]) {
@@ -649,7 +651,7 @@ function display_add_into_subscribers($imsi, $ki)
 
 function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi = "on",$insert_subscribers = "on")
 {
-	global $yate_conf_dir;
+	global $yate_conf_dir, $sim_type;
 
 	$pysim_installed = detect_pysim_installed();
 
@@ -695,7 +697,7 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 		array('card_type_id'=>'sysmoUSIM-GR1', 'card_type'=>'Sysmocom SysmoUSIM-GR1'),
 		array('card_type'=>'auto','card_type_id'=>'auto')//autodetection is implemented in PySim/cards.py only for classes: FakeMagicSim, SuperSim, MagicSim the other types of card will fail (at this time 2014-04-16)
 	);
-	$type_card["selected"] = "grcardsim"; //type of card that was successfully written 
+	$type_card["selected"] = $sim_type; //type of card that was successfully written 
 
 	if (!$cc) 
 		$fields["country_code"] = array("required" => true, "value"=>$cc, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK");

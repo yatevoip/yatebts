@@ -142,4 +142,6 @@ $yate_ip = "127.0.0.1";
 $proj_title = "Yatebts NIB";
 # the file used by PySim to write the SIM credentials 
 $pysim_csv = $yate_conf_dir . "sim_data.csv";
+# type of card SIM used by PySIM. Types allowed: fakemagicsim, supersim, magicsim, grcardsim, sysmosim-gr1, sysmosim-gr1, sysmoSIM-GR2, sysmoUSIM-GR1 or try auto 
+$sim_type = "sysmoSIM-GR2";
 ?>
