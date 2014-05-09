@@ -38,8 +38,9 @@
 
 #define MIN_OVERSAMPLING 4
 
-#define HEALTH_DEF  5
-#define HEALTH_MAX 10
+#define HEALTH_BAD 10
+#define HEALTH_DEF 20
+#define HEALTH_MAX 30
 
  /* Stream defaults */
 #define DEFAULT_STREAM_RX_XFERS        1
@@ -850,7 +851,7 @@ void bladeRFDevice::checkHealth(int& health, bool ok)
         if (health < HEALTH_MAX)
             health++;
     }
-    else if (--health < 0) {
+    else if ((health-=HEALTH_BAD) < 0) {
         LOG(CRIT) << "Excessive I/O errors, bailing out";
         health = HEALTH_DEF;
         kill(getpid(), SIGTERM);
