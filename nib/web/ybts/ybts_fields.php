@@ -950,7 +950,7 @@ Allowed value 1492:9000",
 			),
 			"MS.IP.Base" =>	array(
 				"display" => "text",
-				"value" => "127.0.0.1",
+				"value" => "192.168.99.1",
 				"comment" => "Base IP address assigned to MS.",
 				"validity" => array("check_valid_ipaddress")
 			),
