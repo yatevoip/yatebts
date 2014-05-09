@@ -51,7 +51,8 @@ LIBS :=
 PROGS:=
 FILES:=
 LIBTHR := @THREAD_LIB@
-CFLAGS := @YATE_INC@
+CCFLAGS:= @YATE_INC@
+CFLAGS :=$(subst -fno-check-new,,$(CCFLAGS))
 LDFLAGS:= @LDFLAGS@
 
 # Makefile.head end

@@ -4,6 +4,7 @@
 INCLUDES := $(ALL_INCLUDES)
 INCFILES := ../../config.h Defines.h Globals.h
 CFLAGS := $(CFLAGS) -DPACKAGE_REVISION='"@PACKAGE_REVISION@"'
+CCFLAGS:= $(CCFLAGS) -DPACKAGE_REVISION='"@PACKAGE_REVISION@"'
 
 LIBS := libGlobals.a
 OBJS := Globals.o

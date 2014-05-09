@@ -1,8 +1,8 @@
 
 # Makefile.tail start
 
-COMPILE = $(CXX) $(DEFS) $(DEBUG) $(INCLUDES) $(CFLAGS)
-CCOMPILE = $(CC) -std=gnu99 -march=native -DHAVE_CONFIG_H $(DEFS) $(DEBUG) $(INCLUDES)
+COMPILE = $(CXX) $(DEFS) $(DEBUG) $(INCLUDES) $(CCFLAGS)
+CCOMPILE = $(CC) -std=gnu99 $(CFLAGS) $(DEFS) $(DEBUG) $(INCLUDES)
 LINK = $(CXX) $(LDFLAGS)
 
 # include optional local make rules
