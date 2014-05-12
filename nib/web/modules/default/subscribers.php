@@ -747,10 +747,10 @@ function write_sim_form_to_pysim()
 		} elseif ($param != "operator_name" && $param != "card_type" && !ctype_digit(getparam($param))) {
 			$error .= "Invalid integer value for parameter '". ucfirst(str_replace("_"," ",$param)). "': ". getparam($param). ".<br/> \n";
 			$error_fields[] = $param;
-		} elseif ($param == "mobile_country_code" && (int)getparam($param) <= 0 || (int)getparam($param) >= 999) {
+		} elseif ($param == "mobile_country_code" && (strlen(getparam($param))>4 || getparam($param) <= 0 || getparam($param) >= 999)) {
 			$error .= "Mobile Country Code value must be between 0 and 999. <br/>\n";
 			$error_fields[] = $param;
-		} elseif ($param == "mobile_network_code" && (int)getparam($param) <= 0 ||  (int)getparam($param) >= 999) {
+		} elseif ($param == "mobile_network_code" && (strlen(getparam($param))>4 || getparam($param) <= 0 || getparam($param) >= 999)) {
 			$error .= "Mobile Network Code value must be between 0 and 999. <br/>\n";
 			$error_fields[] = $param;	
 		} else		
