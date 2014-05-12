@@ -3323,12 +3323,15 @@ void YBTSLog::processLoop()
 	int rd = m_transport.recv();
 	if (rd > 2) {
 	    int level = -1;
+	    bool alrm = false;
 	    switch (m_transport.readBuf().at(0)) {
 		case LOG_EMERG:
 		    level = DebugGoOn;
 		    break;
-		case LOG_ALERT:
 		case LOG_CRIT:
+		    alrm = true;
+		    // fall through
+		case LOG_ALERT:
 		    level = DebugWarn;
 		    break;
 		case LOG_ERR:
@@ -3353,8 +3356,12 @@ void YBTSLog::processLoop()
 		    i++;
 		}
 	    }
-	    if (level >= 0)
-		Debug(this,level,"%s",tmp.c_str());
+	    if (level >= 0) {
+		if (alrm)
+		    Alarm(this,level,"%s",tmp.c_str());
+		else
+		    Debug(this,level,"%s",tmp.c_str());
+	    }
 	    else
 		Output("%s",tmp.c_str());
 	    continue;
