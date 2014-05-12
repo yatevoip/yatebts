@@ -88,8 +88,26 @@ At least one transceiver package must also be installed for interfacing with the
 %{btsdir}/mbts
 %config(noreplace) %{_sysconfdir}/yate/ybts.conf
 
+%post
+if grep -q '^ *Radio.C0 *= *[0-9]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+    if [ -s /usr/lib/systemd/system/yate.service ]; then
+        systemctl condrestart yate.service
+    else
+        if [ -s /etc/init.d/yate ]; then
+            service yate condrestart
+        fi
+    fi
+fi
+
 %postun
 test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
+if [ -s /usr/lib/systemd/system/yate.service ]; then
+    systemctl condrestart yate.service
+else
+    if [ -s /etc/init.d/yate ]; then
+        service yate condrestart
+    fi
+fi
 
 
 %package nib
