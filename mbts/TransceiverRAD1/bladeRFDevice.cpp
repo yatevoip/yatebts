@@ -68,6 +68,8 @@
 
 //#define SHOW_COUNTERS 4333
 
+#define STRING(s) #s
+
 extern ConfigurationTable gConfig;
 
 using namespace std;
@@ -878,7 +880,7 @@ void RadioDevice::staticInit()
 	"",
 	ConfigurationKey::FACTORY,
 	ConfigurationKey::VALRANGE,
-	"-31:31",// educated guess
+	"-" STRING(MAX_RX_DC_OFFSET) ":" STRING(MAX_RX_DC_OFFSET),
 	true,
 	"Correction DC offset for RX DAC component I."
     );
@@ -889,7 +891,7 @@ void RadioDevice::staticInit()
 	"",
 	ConfigurationKey::FACTORY,
 	ConfigurationKey::VALRANGE,
-	"-31:31",// educated guess
+	"-" STRING(MAX_RX_DC_OFFSET) ":" STRING(MAX_RX_DC_OFFSET),
 	true,
 	"Correction DC offset for RX DAC component Q."
     );
@@ -900,7 +902,7 @@ void RadioDevice::staticInit()
 	"",
 	ConfigurationKey::FACTORY,
 	ConfigurationKey::VALRANGE,
-	"-31:31",// educated guess
+	"-" STRING(MAX_TX_DC_OFFSET) ":" STRING(MAX_TX_DC_OFFSET),
 	true,
 	"Correction DC offset for TX DAC component I."
     );
@@ -911,7 +913,7 @@ void RadioDevice::staticInit()
 	"",
 	ConfigurationKey::FACTORY,
 	ConfigurationKey::VALRANGE,
-	"-31:31",// educated guess
+	"-" STRING(MAX_TX_DC_OFFSET) ":" STRING(MAX_TX_DC_OFFSET),
 	true,
 	"Correction DC offset for TX DAC component Q."
     );
