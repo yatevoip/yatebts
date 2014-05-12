@@ -291,6 +291,9 @@ function write_params_conf($fields)
 	$structure = get_fields_structure_from_menu(); 
 
 	$filename = $yate_conf_dir. "ybts.conf";
+	$ybts = new ConfFile($filename,true,true,"\n\n");
+	// old structure
+	$structure = $ybts->structure;
 	$ybts = new ConfFile($filename,false,true,"\n\n");
 	
 	foreach ($fields as $key => $arr) {
@@ -325,6 +328,20 @@ function write_params_conf($fields)
 			}
 		}
 	}
+
+	// add unknown sections at the end of the file and unknown parameters at the end of each section
+	foreach($structure as $subsection_name=>$subsection) {
+		if (!isset($ybts->structure[$subsection_name]))
+			$ybts->structure[$subsection_name] = $subsection;
+		else
+			foreach ($subsection as $field_name=>$field_value) {
+				if (is_numeric($field_name))
+					continue;
+				if (!isset($ybts->structure[$subsection_name][$field_name]))
+					$ybts->structure[$subsection_name][$field_name] = $field_value;
+			}
+	}
+
 	$ybts->save();
 
 	if ($ybts->getError())
