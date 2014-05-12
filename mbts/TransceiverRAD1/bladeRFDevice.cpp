@@ -54,7 +54,7 @@
 
 #define TX_GAIN1 BLADERF_TXVGA1_GAIN_MAX
 #define MAX_RX_DC_OFFSET 63
-#define MAX_TX_DC_OFFSET 31
+#define MAX_TX_DC_OFFSET 63
 #define SHIFT_RX_DC 5
 #define SHIFT_TX_DC 4
 
