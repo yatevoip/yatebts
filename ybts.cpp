@@ -2191,10 +2191,10 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
 	    if (!len)
 		return 0;
 	}
-	// User data length
+	// User data length (depends on data coding scheme)
 	l = *b++;
 	len--;
-	if (!len || l > len)
+	if (!len)
 	    return 0;
 	// User data
 	// Skip 1 byte header if present
@@ -2202,7 +2202,7 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
 	    Debug(&__plugin,DebugNote,"Can't decode SMS text with header");
 	    return 0;
 	}
-	GSML3Codec::decodeGSM7Bit(b,l,*smsText);
+	GSML3Codec::decodeGSM7Bit(b,len,*smsText);
 	if (smsText->length() > l)
 	    *smsText = smsText->substr(0,l);
 	// Remove
