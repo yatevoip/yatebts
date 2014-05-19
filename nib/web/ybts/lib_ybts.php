@@ -186,6 +186,7 @@ function validate_fields_ybts($section, $subsection)
 	$fields = get_default_fields_ybts();
 	$new_fields = array();
 	$error_field = array();
+	$warning_field  = array();
 	
 	if (!isset($fields[$section][$subsection]))
 		return array(true);
@@ -211,6 +212,8 @@ function validate_fields_ybts($section, $subsection)
 
 		if (!$res[0])
 			$error_field[] = array($res[1], $param_name);
+		elseif ($res[0] && isset($res[1]))
+			$warning_field[] = array($res[1], $param_name);
 
 		// set to "" parameters that are not set or are set to "Factory calibrated"
 		// they will be written commented in ybts.conf
@@ -223,9 +226,16 @@ function validate_fields_ybts($section, $subsection)
 			$new_fields[$section][$subsection][$param_name]["value"] = $field_param;
 	}
 
+	$warning = "";
+	$warning_fields = array();
+	foreach ($warning_field as $key => $err) {
+		$warning .=  $err[0]."<br/>";
+		$warning_fields[] =  $err[1];
+	}
+
 	//if no error found return the new fields from form data
-	if (!count($error_field)) 
-		return array(true,"fields"=> $new_fields);
+	if (!count($error_field))
+		return array(true,"fields"=> $new_fields, "warning"=>$warning, "warning_fields"=>$warning_fields);
 
 	$error = "";
 	$error_fields = array();
@@ -235,7 +245,7 @@ function validate_fields_ybts($section, $subsection)
 		$error_fields[] =  $err[1];
 	}
 
-	return array(false,"fields"=>$new_fields,"error"=>$error,"error_fields"=>$error_fields);
+	return array(false,"fields"=>$new_fields,"error"=>$error,"error_fields"=>$error_fields,"warning"=>$warning, "warning_fields"=>$warning_fields);
 }
 
 /* Makes the callback for the function set in "validity" field from array $fields (from ybts_fields.php).  

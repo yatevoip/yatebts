@@ -166,13 +166,13 @@ function validate_neci_vea($field_name, $field_value)
 	if ($field_name == "VEA" && ( $field_value == "off" || $field_value == "no" || $field_value == "0")) {
 		//read the ybts.conf section [gsm_advanced] and check value for "CellSelection.NECI" param . If value set is not 1 then give error
 		if (isset($file->structure["gsm_advanced"]["CellSelection.NECI"]) && $file->structure["gsm_advanced"]["CellSelection.NECI"] =="1")
-			return array(false, "Field $field_name is not valid. It has to be checked because CellSelection.NECI param from GSM tab in GSM Advanced subsection was set to 1.");
+			return array(true, "Field $field_name doesn't have a recommended value. It has to be checked because CellSelection.NECI param from GSM tab in GSM Advanced subsection was set to 1.");
 	} 
 
 	if ($field_name == "CellSelection.NECI" && $field_value != "1") {
 		//read the ybts.conf section [ggsn] and check value for "VEA" param. If not yes, give error
 		if (isset($file->structure["control"]["VEA"]) && $file->structure["control"]["VEA"] == "yes")
-			return array(false, "Field $field_name is not valid. It has to be selected the 'New establisment causes are supported'  because VEA parameter from Control Tab was selected.");
+			return array(true, "Field $field_name doesn't have a recommended value. It has to be selected the 'New establisment causes are supported'  because VEA parameter from Control Tab was selected.");
 	}
 
 	return array(true);
@@ -200,7 +200,7 @@ function check_timer_implicitdetach($field_name, $field_value, $restricted_value
 		return array(false, "Field $field_name is not valid. The value must be in interval [2000,4000] and should be a factor of 10.");
 
 	if ($field_value-$restricted_value < 240)
-		return array(false, "Field $field_name is not valid. It should be at least 240 seconds greater than Timer.RAUpdate.");
+		return array(true, "Field $field_name doesn't have a recommended value. It should be at least 240 seconds greater than Timer.RAUpdate.");
 
 	return array(true);
 }
@@ -230,7 +230,7 @@ function check_timer_raupdate($field_name, $field_value)
 	        return array(false, "Field $field_name is not valid. The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000.");
 
 	if (isset($file->structure["gsm"]["Timer.T3212"]) && $file->structure["gsm"]["Timer.T3212"] == "0")
-		return array(false, "To prevent GPRS Routing Area Updates you must set $field_name also to 0, setting field Timer.T3212 from GSM Tab set to 0 is not enough.");
+		return array(true, "To prevent GPRS Routing Area Updates it is recommended you set $field_name also to 0, setting field Timer.T3212 from GSM Tab set to 0 is not enough.");
 
 	return array(true);
 }
@@ -256,7 +256,7 @@ function check_uplink_persistent($field_name, $field_value, $restricted_value)
 
 	if ($field_value != 0 || $field_value != "0") {
 		if ((int)$field_value < (int)$restricted_value)
-			return array(false, "Field $field_name is not valid. This value must be greater then Uplink.KeepAlive value.");
+			return array(true, "Field $field_name doesn't have a recommended value. This value must be greater then Uplink.KeepAlive value.");
 	}
 	
 	return array(true);
@@ -278,7 +278,7 @@ function check_downlink_persistent($field_name, $field_value, $restricted_value)
 		return array(false, "Field $field_name is not valid. It has to be smaller than 10000.");
 	if ($field_value != 0) {
                 if ($field_value < $restricted_value)
-			return array(false, "Field $field_name is not valid. This value must be greater then Downlink.KeepAlive value.");
+			return array(true, "Field $field_name doesn't have a recommended value. This value must be greater then Downlink.KeepAlive value.");
 	}
 
 	return array(true);
@@ -308,8 +308,8 @@ function check_channelcodingcontrol_rssi($field_name, $field_value)
 	$file = new ConfFile($filename);
 	if (isset($file->structure["gsm_advanced"]["Radio.RSSITarget"])) {
 		$radio_RSSITarget = (int)$file->structure["gsm_advanced"]["Radio.RSSITarget"];
-		if ($radio_RSSITarget+10 != $field_value)
-			return array(false, "Field $field_name is not valid. This value should normally be Radio.RSSITarget + 10 dB, value added from tab GSM, from GSM Advanced that has the value: $radio_RSSITarget.");
+		if ($radio_RSSITarget+10 >= $field_value)
+			return array(true, "Field $field_name doesn't have a recommended value. This value should normally be Radio.RSSITarget + 10 dB, value added from tab GSM, from GSM Advanced that has the value: $radio_RSSITarget.");
 	}
 	
 	return array(true);
@@ -338,8 +338,8 @@ function check_radio_rssitarget($field_name, $field_value)
 	$file = new ConfFile($filename);
 	if (isset($file->structure["gprs_advanced"]["ChannelCodingControl.RSSI"])) {
 		$chancontrol_rss = (int)$file->structure["gprs_advanced"]["ChannelCodingControl.RSSI"];
-		if ($chancontrol_rss -10 != $field_value)
-			return array(false, "Field $field_name is not valid. This value should be the value of ChannelCodingControl.RSSI -10dB, parameter already added from submenu GPRS Advanced with the value: $chancontrol_rss.");
+		if ($chancontrol_rss -10 < $field_value)
+			return array(true, "Field $field_name doesn't have a recommended value. This value should be the value of ChannelCodingControl.RSSI -10dB, parameter already added from submenu GPRS Advanced with the value: $chancontrol_rss.");
 	}
 
 	return array(true);

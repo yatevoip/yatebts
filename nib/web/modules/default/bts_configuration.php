@@ -49,6 +49,7 @@ function bts_configuration_database()
 
 	$structure = get_fields_structure_from_menu();
 	$errors_found = false;
+	$warnings = "";
 	foreach ($structure as $m_section => $data) {
 		foreach($data as $key => $m_subsection) {
 			$res = validate_fields_ybts($m_section, $m_subsection);
@@ -62,6 +63,9 @@ function bts_configuration_database()
 			} else {
 				$fields[] = $res["fields"];  
 			}
+			if (isset($res["warning"])) {
+				$warnings .= $res["warning"];
+			}
 		}
 		if ($errors_found)
 		       	break;
@@ -73,8 +77,11 @@ function bts_configuration_database()
     <td class="menu" colspan="2"><?php ybts_menu();?>
 <tr> 
 	<td class="content_form"><?php 
-	if ($errors_found)
+	if ($errors_found) {
+		if (strlen($warnings))
+			message("Warning! ".$warnings, "no");
 		create_form_ybts_section($section, $subsection, true, $res["error"], $res["error_fields"]);
+	}
 	else {
 		
 		$ybts_fields_modified = get_status_fields($structure);
@@ -104,6 +111,9 @@ function bts_configuration_database()
 			message($res1[1], "no");
 			print "</div>";
 		}
+		if (strlen($warnings))
+			message("Warning! ".$warnings,"no");
+
 		create_form_ybts_section($section, $subsection);
  }
 ?></td>
