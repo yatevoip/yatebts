@@ -169,7 +169,15 @@ function edit_regexp_write_file()
 	$res = set_regexp($regexp, $cc);
 	if (!$res[0])
 		return edit_regexp($res[1]);
-	notice("Finished setting regular expression. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\". Please note that after this you will lose existing registrations.", "subscribers");
+
+	$res = restart_yate();
+
+	if ($res[0] && isset($res[1])) //yate is not running
+		notice("Finished setting regular expression. " .$res[1], "subscribers");
+	elseif (!$res[0]) //errors on socket connection
+		notice("Finished setting regular expression. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "subscribers");
+	else //yate was restarted
+		notice("Finished setting regular expression", "subscribers");
 }
 
 function country_code()
@@ -433,7 +441,15 @@ function edit_subscriber_write_file()
 	$res = set_subscribers($subscribers, $general);
 	if (!$res[0])
 		return edit_subscriber($res[1]);
-	notice("Finished setting subscriber with IMSI $imsi. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".  Please note that after this you will lose existing registrations.", "subscribers");
+
+	$res = restart_yate();
+
+	if ($res[0] && isset($res[1])) //yate is not running
+		notice("Finished setting subscriber with IMSI $imsi. " .$res[1], "subscribers");
+	elseif (!$res[0]) //errors on socket connection
+		notice("Finished setting subscriber with IMSI $imsi. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "subscribers");
+	else //yate was restarted
+		notice("Finished setting subscriber with IMSI $imsi.", "subscribers");
 }
 
 function delete_subscriber()

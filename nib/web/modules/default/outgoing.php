@@ -296,8 +296,15 @@ function edit_outgoing_write_to_file($prefix='',$prefix_protocol='')
 	$res = set_outgoing($params);
 	if (!$res[0])
 		return edit_outgoing($read_account, $res[1]);
+	
+	$res = restart_yate();
 
-	outgoing("For changes to take effect please restart yate or reload just accfile module from telnet with command: \"reload accfile\".");
+	if ($res[0] && isset($res[1])) //yate is not running
+		outgoing("Finished setting outbound connection. " . $res[1]);
+	elseif (!$res[0]) //errors on socket connection
+		outgoing("Finished setting outbound connection. For changes to take effect please restart yate or reload just accfile module from telnet with command: \"reload accfile\".");
+	else //yate was restarted
+		outgoing("Finished setting outbound connection.");
 }
 
 function verify_modification_params($edited_params, $file_params)

@@ -356,7 +356,15 @@ function write_params_conf($fields)
 
 	if ($ybts->getError())
 		return array(false, $ybts->getError());
-	else 
-		return array(true, "Finish writting sections in ybts.conf file without issues. For changes to take effect please restart YateBTS.");
+	else { 
+		$res = restart_yate();
+
+		if ($res[0] && isset($res[1])) //yate is not running
+			return array(true, "Finished writting sections in ybts.conf file without issues. " .$res[1]);
+		elseif (!$res[0]) //errors on socket connection
+			return array(true, "Finished writting sections in ybts.conf file without issues. For changes to take effect please restart YateBTS.");
+		else //yate was restarted
+			return array(true, "Finish writting sections in ybts.conf file without issues.");
+	}
 }
 ?>

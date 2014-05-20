@@ -344,6 +344,29 @@ function get_socket_response($command, $marker_end)
 	return $res;
 }
 
+function restart_yate()
+{
+	global $yate_ip;
+
+	if (!shell_exec('pidof yate'))
+		return array(true);
+
+	if (!$yate_ip)
+		$yate_ip = "127.0.0.1";
+
+	$default_ip = "tcp://".$yate_ip;
+	$default_port = '5038';
+
+	$socket = new SocketConn($default_ip, $default_port);
+	if (strlen($socket->error))
+		return array(false, "There was a problem with the socket connection. Error reported is: ".$socket->error);	
+
+	$res = $socket->command("restart now");
+	if ($res == "Engine restarting - bye!")
+		return array(true);
+	return array(false, $res);
+}
+
 function test_default_config()
 {
 	global $yate_conf_dir;
