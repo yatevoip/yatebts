@@ -36,6 +36,9 @@ AC_PROG_CXX
 AC_PROG_CC
 AC_PROG_AWK
 
+# Delete -g as we handle debug info at build time
+CFLAGS=`echo "$CFLAGS" | sed 's/-g[[0-9]]* *//' 2>/dev/null`
+
 # Helper to check by pkgconfig including local paths
 function pkgconfig_check()
 {
@@ -107,7 +110,7 @@ YATE_SHR=`"$yc" --share 2>/dev/null`
 YATE_CFG=`"$yc" --config 2>/dev/null`
 THREAD_LIB=`"$yc" --param=THREAD_LIB 2>/dev/null`
 INSTALL_D=`"$yc" --param=INSTALL_D 2>/dev/null`
-YATE_INC=`echo "$YATE_DEF -DHAVE_CONFIG_H" | sed 's/-fno-exceptions *//' 2>/dev/null`
+YATE_INC=`echo "$CFLAGS $YATE_DEF -DHAVE_CONFIG_H" | sed 's/-fno-exceptions *//; s/  / /g' 2>/dev/null`
 if [[ "x$YATE_VER" = "x" ]]; then
     YATE_VER="no"
 fi
