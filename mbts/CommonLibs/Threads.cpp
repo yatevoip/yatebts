@@ -25,7 +25,12 @@
 
 
 
-
+#include <config.h>
+#include <stdio.h>
+#include <stdarg.h>
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
 
 #include "Threads.h"
 #include "Timeval.h"
@@ -102,9 +107,34 @@ void Signal::wait(Mutex& wMutex, unsigned timeout) const
 	pthread_cond_timedwait(&mSignal,&wMutex.mMutex,&waitTime);
 }
 
-
-void Thread::start(void *(*task)(void*), void *arg)
+void Thread::start(void *(*task)(void*), void *arg, const char* name, ...)
 {
+#ifdef PR_SET_NAME
+	class NamedTask
+	{
+		void *(*mTask)(void*);
+		void *mArg;
+		char mName[16];
+	public:
+		inline NamedTask(void *(*task)(void*), void *arg, const char* name, va_list ap)
+			: mTask(task), mArg(arg)
+		{
+			vsnprintf(mName, 15, name, ap);
+			mName[16] = '\0';
+		}
+
+		static void* run(void* arg)
+		{
+			NamedTask* t = static_cast<NamedTask*>(arg);
+			void *(*task)(void*) = t->mTask;
+			arg = t->mArg;
+			prctl(PR_SET_NAME, (unsigned long)t->mName, 0, 0, 0);
+			delete t;
+			return task(arg);
+		}
+	};
+#endif
+
 	assert(mThread==((pthread_t)0));
 	bool res;
 	// (pat) Moved initialization to constructor to avoid crash in destructor.
@@ -112,7 +142,17 @@ void Thread::start(void *(*task)(void*), void *arg)
 	//assert(!res);
 	res = pthread_attr_setstacksize(&mAttrib, mStackSize);
 	assert(!res);
-	res = pthread_create(&mThread, &mAttrib, task, arg);
+#ifdef PR_SET_NAME
+	if (name && *name) {
+		va_list ap;
+		va_start(ap, name);
+		NamedTask* t = new NamedTask(task, arg, name, ap);
+		va_end(ap);
+		res = pthread_create(&mThread, &mAttrib, NamedTask::run, t);
+	}
+	else
+#endif
+		res = pthread_create(&mThread, &mAttrib, task, arg);
 	assert(!res);
 }
 

@@ -169,7 +169,7 @@ class Thread {
 
 
 	/** Start the thread on a task. */
-	void start(void *(*task)(void*), void *arg);
+	void start(void *(*task)(void*), void *arg, const char* name = 0, ...);
 
 	/** Join a thread that will stop on its own. */
 	void join() { int s = pthread_join(mThread,NULL); assert(!s); mThread = 0; }

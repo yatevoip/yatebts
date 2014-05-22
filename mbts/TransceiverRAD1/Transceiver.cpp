@@ -472,7 +472,7 @@ void Transceiver::start()
     ThreadStruct *cs = new ThreadStruct;
     cs->trx = this;
     cs->CN = i;
-    mControlServiceLoopThread[i]->start((void * (*)(void*))ControlServiceLoopAdapter,(void*) cs);
+    mControlServiceLoopThread[i]->start((void * (*)(void*))ControlServiceLoopAdapter,(void*) cs, "trx:control:%d", i);
   }
 }
 
@@ -537,17 +537,17 @@ void Transceiver::driveControl(unsigned ARFCN)
         writeClockInterface();
         generateRACHSequence(*gsmPulse,mSamplesPerSymbol);
 
-        mRFIFOServiceLoopThread->start((void * (*)(void*))RFIFOServiceLoopAdapter,(void*) this);
-        mFIFOServiceLoopThread->start((void * (*)(void*))FIFOServiceLoopAdapter,(void*) this);
+        mRFIFOServiceLoopThread->start((void * (*)(void*))RFIFOServiceLoopAdapter,(void*) this, "trx:rxfifo");
+        mFIFOServiceLoopThread->start((void * (*)(void*))FIFOServiceLoopAdapter,(void*) this, "trx:txfifo");
 
 	for (int i = 0; i < mNumARFCNs; i++) {
           ThreadStruct *cs = new ThreadStruct;
           cs->trx = this;
           cs->CN = i;
-          mTransmitPriorityQueueServiceLoopThread[i]->start((void * (*)(void*))TransmitPriorityQueueServiceLoopAdapter,(void*) cs);
+          mTransmitPriorityQueueServiceLoopThread[i]->start((void * (*)(void*))TransmitPriorityQueueServiceLoopAdapter,(void*) cs, "trx:queue:%d", i);
 	  Demodulator *demod = new Demodulator(i,this,mStartTime);
 	  mDemodulators[i] = demod;
-	  if (mMultipleARFCN) mDemodServiceLoopThread[i]->start((void * (*)(void*))DemodServiceLoopAdapter,(void*) demod);
+	  if (mMultipleARFCN) mDemodServiceLoopThread[i]->start((void * (*)(void*))DemodServiceLoopAdapter,(void*) demod, "trx:demod:%d", i);
 	}
 
         //mRFIFOServiceLoopThread->start((void * (*)(void*))RFIFOServiceLoopAdapter,(void*) this);

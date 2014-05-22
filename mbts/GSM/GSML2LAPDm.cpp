@@ -291,7 +291,7 @@ void L2LAPDm::open()
 			// since N201 may not be defined yet.
 			mMaxIPayloadBits = 8*N201(L2Control::IFormat);
 			mRunning = true;
-			mUpstreamThread.start((void *(*)(void*))LAPDmServiceLoopAdapter,this);
+			mUpstreamThread.start((void *(*)(void*))LAPDmServiceLoopAdapter,this,"bts:l2lapdm");
 		}
 		OBJLOG(DEBUG);
 		mL3Out.clear();

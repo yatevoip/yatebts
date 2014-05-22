@@ -34,7 +34,7 @@ class GenConnection
 public:
     inline bool valid() const
 	{ return mSockFd >= 0; }
-    bool start();
+    bool start(const char* name = 0);
     void clear();
 protected:
     inline GenConnection(int fileDesc = -1, int bufSize = 0)

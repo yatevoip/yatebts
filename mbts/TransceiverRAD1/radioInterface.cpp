@@ -235,7 +235,7 @@ void RadioInterface::start()
 {
   LOG(INFO) << "starting radio interface...";
   mAlignRadioServiceLoopThread.start((void * (*)(void*))AlignRadioServiceLoopAdapter,
-                                     (void*)this);
+                                     (void*)this, "trx:alignradio");
   writeTimestamp = mRadio->initialWriteTimestamp();
   readTimestamp = mRadio->initialReadTimestamp();
   mRadio->start(); 

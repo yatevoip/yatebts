@@ -291,7 +291,7 @@ int main(int argc, char *argv[])
 	gParser.addCommands();
 
 	if (gCmdConn.valid()) {
-		gSigConn.start();
+		gSigConn.start("bts:signaling");
 		gLogConn.write("Starting MBTS...");
 	}
 	else
@@ -307,7 +307,7 @@ int main(int argc, char *argv[])
 
 	Thread transceiverThread;
 	if (!haveTRX) {
-		transceiverThread.start((void*(*)(void*)) startTransceiver, NULL);
+		transceiverThread.start((void*(*)(void*)) startTransceiver, NULL, "bts:transceiver");
 		// sleep to let the FPGA code load
 		// TODO: we should be "pinging" the radio instead of sleeping
 		sleep(5);
@@ -439,7 +439,7 @@ int main(int argc, char *argv[])
 	for (int i=0; i<4; i++) {
 		if (SMSCB && (i==2)) continue;
 		C0T0SDCCH[i].downstream(C0radio);
-		C0T0SDCCHControlThread[i].start((void*(*)(void*))Control::DCCHDispatcher,&C0T0SDCCH[i]);
+		C0T0SDCCHControlThread[i].start((void*(*)(void*))Control::DCCHDispatcher,&C0T0SDCCH[i],"bts:sdcch:%d",i);
 		C0T0SDCCH[i].open();
 		gBTS.addSDCCH(&C0T0SDCCH[i]);
 	}
@@ -449,7 +449,7 @@ int main(int argc, char *argv[])
 		CBCH.downstream(C0radio);
 		CBCH.open();
 		gBTS.addCBCH(&CBCH);
-		CBCHControlThread.start((void*(*)(void*))Control::SMSCBSender,NULL);
+		CBCHControlThread.start((void*(*)(void*))Control::SMSCBSender,NULL,"bts:cbch");
 	}
 
 
@@ -531,7 +531,7 @@ int main(int argc, char *argv[])
 	gBTS.start();
 
 	if (gCmdConn.valid()) {
-		gMediaConn.start();
+		gMediaConn.start("bts:media");
 		gLogConn.write("MBTS ready");
 		gSigConn.send(Connection::SigRadioReady);
 		while (gLogConn.valid() && gSigConn.valid() && gMediaConn.valid()) {

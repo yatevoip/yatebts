@@ -547,7 +547,7 @@ void RACHL1Decoder::start()
 {
 	// Start the processing thread.
 	L1Decoder::start();
-	mServiceThread.start((void*(*)(void*))RACHL1DecoderServiceLoopAdapter,this);
+	mServiceThread.start((void*(*)(void*))RACHL1DecoderServiceLoopAdapter,this,"bts:l1:rachdec");
 }
 
 
@@ -1159,7 +1159,7 @@ void L1Encoder::transmit(BitVector *mI, BitVector *mE, const int *qbits)
 void GeneratorL1Encoder::start()
 {
 	L1Encoder::start();
-	mSendThread.start((void*(*)(void*))GeneratorL1EncoderServiceLoopAdapter,(void*)this);
+	mSendThread.start((void*(*)(void*))GeneratorL1EncoderServiceLoopAdapter,(void*)this,"bts:l1:generator");
 }
 
 
@@ -1257,7 +1257,7 @@ void FCCHL1Encoder::generate()
 void NDCCHL1Encoder::start()
 {
 	L1Encoder::start();
-	mSendThread.start((void*(*)(void*))NDCCHL1EncoderServiceLoopAdapter,(void*)this);
+	mSendThread.start((void*(*)(void*))NDCCHL1EncoderServiceLoopAdapter,(void*)this,"bts:l1:ndcch");
 }
 
 
@@ -1686,7 +1686,7 @@ void TCHFACCHL1Encoder::start()
 {
 	L1Encoder::start();
 	OBJLOG(DEBUG) <<"TCHFACCHL1Encoder";
-	mEncoderThread.start((void*(*)(void*))TCHFACCHL1EncoderRoutine,(void*)this);
+	mEncoderThread.start((void*(*)(void*))TCHFACCHL1EncoderRoutine,(void*)this,"bts:l1:tchfacch");
 }
 
 

@@ -64,7 +64,7 @@ bool GenConnection::initialize(int fileDesc)
     return true;
 }
 
-bool GenConnection::start()
+bool GenConnection::start(const char* name)
 {
     struct Local {
 	static void* runFunc(void* ptr) {
@@ -75,7 +75,7 @@ bool GenConnection::start()
 
     if (!valid())
 	return false;
-    mRecvThread.start(Local::runFunc,this);
+    mRecvThread.start(Local::runFunc,this,name);
     return true;
 }
 

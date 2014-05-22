@@ -116,7 +116,7 @@ void PowerManager::start()
 {
 	mRadio = gTRX.ARFCN(0);
 	mRadio->setPower(mAtten);
-	mThread.start((void*(*)(void*))PowerManagerServiceLoopAdapter,this);
+	mThread.start((void*(*)(void*))PowerManagerServiceLoopAdapter,this,"bts:power");
 }
 
 

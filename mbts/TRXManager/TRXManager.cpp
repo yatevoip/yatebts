@@ -58,7 +58,7 @@ TransceiverManager::TransceiverManager(int numARFCNs,
 
 void TransceiverManager::start()
 {
-	mClockThread.start((void*(*)(void*))ClockLoopAdapter,this);
+	mClockThread.start((void*(*)(void*))ClockLoopAdapter,this,"bts:clock");
 	for (unsigned i=0; i<mARFCNs.size(); i++) {
 		mARFCNs[i]->start();
 	}
@@ -155,7 +155,7 @@ unsigned TransceiverManager::C0() const
 
 void ::ARFCNManager::start()
 {
-	mRxThread.start((void*(*)(void*))ReceiveLoopAdapter,this);
+	mRxThread.start((void*(*)(void*))ReceiveLoopAdapter,this,"bts:arfcnmgr");
 }
 
 

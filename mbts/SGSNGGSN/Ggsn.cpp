@@ -187,10 +187,10 @@ bool Ggsn::start()
 {
 	if (gGgsn.mActive) { return false; }
 	if (!miniggsn_init()) { return false; }
-	gGgsn.mGgsnRecvThread.start(miniGgsnReadServiceLoop,&gGgsn);
-	gGgsn.mGgsnSendThread.start(miniGgsnWriteServiceLoop,&gGgsn);
+	gGgsn.mGgsnRecvThread.start(miniGgsnReadServiceLoop,&gGgsn,"bts:ggsn:rd");
+	gGgsn.mGgsnSendThread.start(miniGgsnWriteServiceLoop,&gGgsn,"bts:ggsn:wr");
 	if (gConfig.getStr("GGSN.ShellScript").size() > 1) {
-		gGgsn.mGgsnShellThread.start(miniGgsnShellServiceLoop,&gGgsn);
+		gGgsn.mGgsnShellThread.start(miniGgsnShellServiceLoop,&gGgsn,"bts:ggsn:shell");
 		gGgsn.mShellThreadActive = true;
 	}
 	gGgsn.mActive = true;

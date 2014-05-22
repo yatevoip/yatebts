@@ -115,7 +115,7 @@ void CCCHLogicalChannel::open()
 	LogicalChannel::open();
 	if (!mRunning) {
 		mRunning=true;
-		mServiceThread.start((void*(*)(void*))CCCHLogicalChannelServiceLoopAdapter,this);
+		mServiceThread.start((void*(*)(void*))CCCHLogicalChannelServiceLoopAdapter,this,"bts:ccch");
 	}
 }
 
@@ -330,7 +330,7 @@ void SACCHLogicalChannel::open()
 	LogicalChannel::open();
 	if (!mRunning) {
 		mRunning=true;
-		mServiceThread.start((void*(*)(void*))SACCHLogicalChannelServiceLoopAdapter,this);
+		mServiceThread.start((void*(*)(void*))SACCHLogicalChannelServiceLoopAdapter,this,"bts:sacch");
 	}
 }
 

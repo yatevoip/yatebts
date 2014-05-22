@@ -61,7 +61,7 @@ void GSMConfig::start()
 		GPRS::gprsStart();
 	}
 	// Do not call this until AGCHs are installed.
-	mAccessGrantThread.start(Control::AccessGrantServiceLoop,NULL);
+	mAccessGrantThread.start(Control::AccessGrantServiceLoop,NULL,"bts:access");
 }
 
 
@@ -535,7 +535,7 @@ void GSMConfig::createCombinationI(TransceiverManager& TRX, unsigned CN, unsigne
 	TCHFACCHLogicalChannel* chan = new TCHFACCHLogicalChannel(CN,TN,gTCHF_T[TN]);
 	chan->downstream(radio);
 	Thread* thread = new Thread;
-	thread->start((void*(*)(void*))Control::DCCHDispatcher,chan);
+	thread->start((void*(*)(void*))Control::DCCHDispatcher,chan,"bts:dcch:C%uT%u",CN,TN);
 	chan->open();
 	gBTS.addTCH(chan);
 }
@@ -551,7 +551,7 @@ void GSMConfig::createCombinationVII(TransceiverManager& TRX, unsigned CN, unsig
 		SDCCHLogicalChannel* chan = new SDCCHLogicalChannel(CN,TN,gSDCCH8[i]);
 		chan->downstream(radio);
 		Thread* thread = new Thread;
-		thread->start((void*(*)(void*))Control::DCCHDispatcher,chan);
+		thread->start((void*(*)(void*))Control::DCCHDispatcher,chan,"bts:dcch:C%uT%u:%d",CN,TN,i);
 		chan->open();
 		gBTS.addSDCCH(chan);
 	}
