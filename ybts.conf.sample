@@ -833,17 +833,6 @@ Radio.C0=
 ; Defaults to yes
 ;imei_request=yes
 
-; tmsi_expire: integer: Interval, in seconds, to keep TMSIs
-; This parameter is applied on reload
-; Allowed interval: 7200..2592000
-;tmsi_expire=864000
-
-;datafile: string: Path to data file used to save TMSI table and current index
-; If set to an empty string it will disable persistent TMSI and index storage
-; WARNING: Never disable TMSI index storage - better set a short TMSI expire time
-; Defaults to ybtsdata.conf in configuration directory
-;datafile=ybtsdata.conf
-
 ; t305: integer: Disconnect (hangup) timeout interval in milliseconds
 ; After sending Disconnect the call will wait for Release or Release Complete
 ; Release will be sent on timer expiry
@@ -892,6 +881,7 @@ Radio.C0=
 ; This parameter is applied on reload
 ; Defaults to object
 ;export_xml_as=object
+
 
 [security]
 ; This section configures security related parameters

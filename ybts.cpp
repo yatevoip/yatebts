@@ -165,7 +165,9 @@ class YBTSMsgHandler;
 // ETSI TS 100 940
 // Section 8.5 / Section 10.5.3.6 / Annex G
 enum RejectCause {
+
     CauseServNotSupp = 32,               // Service option not implemented
+    CauseMMTemporaryFailure = 34,        // MM Service temporary out of order
     CauseInvalidIE = 96,                 // Invalid mandatory IE
     CauseUnknownMsg = 97,                // Unknown or not implemented message
     CauseUnexpectedMsg = 98,             // Message not compatible with protocol state
@@ -453,6 +455,8 @@ public:
 	{ *this = other; }
     inline const String& lai() const
 	{ return m_lai; }
+    inline const String& mccMnc() const
+	{ return m_mcc_mnc; }
     inline void set(const char* mcc, const char* mnc, const char* lac) {
 	    reset();
 	    m_mcc_mnc << mcc << mnc;
@@ -565,6 +569,8 @@ public:
 	FMtCall =   0x0200,
 	FMtSms =    0x0400,
 	FMtUssd =   0x0800,
+	FAskIMSI =  0x1000,
+	FAskIMEI =  0x2000,
     };
     ~YBTSConn();
     inline YBTSUE* ue()
@@ -587,8 +593,18 @@ public:
 	{ return (m_authOrigin & flag); }
     inline void setFlag(int mask)
 	{ m_flags |= mask; }
+    inline void resetFlag(int mask)
+	{ m_flags = m_flags & ~mask; }
     inline int flag(int mask) const
 	{ return (m_flags & mask); }
+    inline void setFlagSafe(int mask) {
+	    Lock lck(this);
+	    setFlag(mask);
+	}
+    inline void resetFlagSafe(int mask) {
+	    Lock lck(this);
+	    resetFlag(mask);
+	}
     // Peek at the pending XML element
     inline const XmlElement* xml() const
 	{ return m_xml; }
@@ -1017,51 +1033,59 @@ class YBTSUE : public RefObject, public Mutex, public YBTSConnIdHolder
 public:
     inline const String& imsi() const
 	{ return m_imsi; }
-    inline String& imsiSafe(String& dest) {
-	    Lock lck(this);
-	    dest = m_imsi;
-	    return dest;
-	}
     inline const String& tmsi() const
 	{ return m_tmsi; }
     inline const String& imei() const
 	{ return m_imei; }
-    inline const String& msisdn() const
-	{ return m_msisdn; }
     inline const String& paging() const
 	{ return m_paging; }
-    inline bool registered() const
-	{ return m_registered; }
-    inline uint32_t expires() const
-	{ return m_expires; }
     inline uint32_t pageCnt() const
 	{ return m_pageCnt; }
+    inline bool registered() const
+	{ return m_registered; }
     inline bool removed() const
 	{ return m_removed; }
     inline bool imsiDetached() const
 	{ return m_imsiDetached; }
-    void addCaller(NamedList& list);
+    inline void addParams(NamedList& list) {
+	    list.addParam("imsi",imsi(),false);
+	    list.addParam("tmsi",tmsi(),false);
+	    list.addParam("imei",imei(),false);
+	}
+    inline String& setPrefixedID(String& dest) {
+	    if (tmsi())
+		dest = "TMSI" + tmsi();
+	    else if (imsi())
+		dest = "IMSI" + imsi();
+	    else if (imei())
+		dest = "IMEI" + imei();
+	    return dest;
+	}
+    inline void addCaller(NamedList& list) {
+	    String tmp;
+	    list.addParam("caller",setPrefixedID(tmp));
+	}
     bool startPaging(BtsPagingChanType type);
     void stopPaging();
     void stopPagingNow();
 
 protected:
-    inline YBTSUE(const char* imsi, const char* tmsi)
+    inline YBTSUE(YBTSMM* mm, const char* imsi, const char* tmsi)
 	: Mutex(false,"YBTSUE"),
-	  m_registered(false), m_imsiDetached(false), m_removed(false),
-	  m_expires(0), m_pageCnt(0),
-	  m_imsi(imsi), m_tmsi(tmsi)
-	{ }
+	m_mm(mm), m_registered(true), m_imsiDetached(false), m_removed(false),
+	m_askIMEI(false), m_pageCnt(0), m_imsi(imsi), m_tmsi(tmsi)
+	{}
+    virtual void destroyed();
 
+    YBTSMM* m_mm;
     bool m_registered;
     bool m_imsiDetached;                 // Unregistered due to IMSI detached
     bool m_removed;                      // Removed from MM list
-    uint32_t m_expires;
+    bool m_askIMEI;                      // Ask IMEI
     uint32_t m_pageCnt;
     String m_imsi;
     String m_tmsi;
     String m_imei;
-    String m_msisdn;
     String m_paging;
 };
 
@@ -1069,9 +1093,11 @@ class YBTSLocationUpd : public YBTSGlobalThread, public YBTSConnIdHolder,
     public YBTSConnAuth
 {
 public:
-    YBTSLocationUpd(YBTSUE& ue, uint16_t connid);
+    YBTSLocationUpd(YBTSConn& conn);
     ~YBTSLocationUpd()
 	{ notify(); }
+    inline YBTSUE* ue() const
+	{ return m_ue; }
     inline uint64_t startTime() const
 	{ return m_startTime; }
     virtual void cleanup()
@@ -1080,7 +1106,7 @@ protected:
     virtual void run();
     void notify(bool final = true, bool ok = false);
 
-    String m_imsi;                       // UE imsi, empty if already notified termination
+    RefPointer<YBTSUE> m_ue;
     Message m_msg;                       // The message to dispatch
     uint64_t m_startTime;
 };
@@ -1101,12 +1127,12 @@ protected:
     bool dispatch(bool route);
 
     YBTSTid::Type m_type;
-    String m_imsi;                       // UE imsi, empty if already notified termination
     String m_callRef;                    // SMS transaction identifier
     Message m_msg;                       // The message to dispatch
     bool m_ok;
     uint8_t m_cause;
     String m_data;
+    RefPointer<YBTSUE> m_ue;
 };
 
 class YBTSSmsInfo : public YBTSTid
@@ -1208,19 +1234,32 @@ class YBTSMM : public GenObject, public DebugEnabler, public Mutex
 {
     friend class YBTSDriver;
 public:
-    YBTSMM(unsigned int hashLen);
+    YBTSMM();
     ~YBTSMM();
-    inline void saveUEs()
-	{ m_saveUEs = true; }
     void handlePDU(YBTSMessage& msg, YBTSConn* conn);
     bool handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rsp);
     // MT auth finished notification
     void mtAuthTerminated(YBTSUE* ue, YBTSConn* conn, bool ok);
-    void newTMSI(String& tmsi);
-    void locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t connId,
+    void locUpdTerminated(uint64_t startTime, YBTSUE* ue, uint16_t connId,
 	bool ok, const NamedList& params);
     void completeUe(String& buf, const String& partWord,
-	bool imsi = true, bool tmsi = false, bool imei = false);
+	bool imsi = true, bool tmsi = false);
+    // Get an UE by params, create one if not found
+    bool getUETarget(RefPointer<YBTSUE>& ue, const String& dest,
+	const NamedList& params = NamedList::empty());
+    bool getUESafe(RefPointer<YBTSUE>& ue, const String& tmsi,
+	const String& imsi = String::empty(), const String& imei = String::empty(),
+	bool create = true);
+    inline bool getUESafeIdent(RefPointer<YBTSUE>& ue, const String& ident, bool tmsi,
+	bool create = true) {
+	    if (tmsi)
+		return getUESafe(ue,ident,String::empty(),String::empty(),create);
+	    return getUESafe(ue,String::empty(),ident,String::empty(),create);
+	}
+    bool createEmptyUE(RefPointer<YBTSUE>& ue);
+    // Remove an UE from list
+    void removeUE(YBTSUE* ue, const char* reason);
+    virtual void destruct();
     static inline XmlElement* buildMM()
 	{ return new XmlElement("MM"); }
     static inline XmlElement* buildMM(XmlElement*& ch, const char* type) {
@@ -1233,49 +1272,30 @@ public:
 	    XmlElement* ch = 0;
 	    return buildMM(ch,type);
 	}
+
 protected:
     void handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
-    void handleLocationUpdate(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
+    void handleLocationUpdate(YBTSMessage& msg, const XmlElement* xml, YBTSConn* conn);
     void handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn);
     void handleCMServiceRequest(YBTSMessage& msg, const XmlElement& xml, YBTSConn* conn);
     void sendLocationUpdateReject(YBTSMessage& msg, YBTSConn* conn, uint8_t cause);
     void sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause = 0);
-    void sendIdentityRequest(YBTSConn* conn, const char* type);
-    // Find UE by target identity
-    bool findUESafe(RefPointer<YBTSUE>& ue, const String& dest);
+    void sendIdentityRequest(YBTSConn* conn, int type);
     // Find UE by paging identity
     bool findUEPagingSafe(RefPointer<YBTSUE>& ue, const String& paging);
-    // Find UE by TMSI
-    void findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi);
-    // Find UE by IMEI
-    void findUEByIMEISafe(RefPointer<YBTSUE>& ue, const String& imei);
-    // Find UE by MSISDN
-    void findUEByMSISDNSafe(RefPointer<YBTSUE>& ue, const String& msisdn);
-    // Find UE by IMSI. Create it if not found
-    void getUEByIMSISafe(RefPointer<YBTSUE>& ue, const String& imsi, bool create = true);
-    inline unsigned int hashList(const String& str)
-	{ return str.hash() % m_ueHashLen; }
     // Get IMSI/TMSI from request
     uint8_t getMobileIdentTIMSI(YBTSMessage& m, const XmlElement& request,
 	const XmlElement& identXml, const String*& ident, bool& isTMSI);
     // Set UE for a connection
     uint8_t setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
 	bool* dropConn = 0);
-    void updateExpire(YBTSUE* ue);
-    void checkTimers(const Time& time = Time());
-    void loadUElist();
-    void saveUElist();
-    Message* buildUnregister(const String& imsi, YBTSUE* ue = 0);
-    void ueRemoved(YBTSUE& ue, const char* reason);
+    Message* buildUnregister(YBTSUE* ue, const String& ident = String::empty(),
+	bool tmsi = true);
 
     String m_name;
     Mutex m_ueMutex;
-    uint32_t m_tmsiIndex;                // Index used to generate TMSI
-    ObjList* m_ueIMSI;                   // List of UEs grouped by IMSI
-    ObjList* m_ueTMSI;                   // List of UEs grouped by TMSI
-    unsigned int m_ueHashLen;            // Length of UE lists
-    bool m_saveUEs;                      // UE list needs saving
+    ObjList m_ues;                       // List of UEs
 };
 
 class YBTSCallDesc : public String, public YBTSConnIdHolder
@@ -1673,7 +1693,7 @@ protected:
 	    if (!ue)
 		return false;
             Lock lck(m_mtSmsMutex);
-	    list = findMtSmsList(ue,true);
+	    list = findMtSmsList(ue,create);
 	    return list != 0;
 	}
     YBTSMtSmsList* findMtSmsList(uint16_t connId);
@@ -1805,7 +1825,6 @@ static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
-static String s_ueFile;                  // File to save UE information
 static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_pagingTout = YBTS_PAGING_TIMEOUT_DEF;// Paging timeout to be used on MT services
 static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
@@ -1826,8 +1845,6 @@ static unsigned int s_t313 = 5000;       // Send Connect, expect Connect Ack, cl
 // ETSI TS 124.008 Section 11.2
 static unsigned int s_t3260 = 720000;    // Sent AUTHENTICATION REQUEST, wait for response
 
-static uint32_t s_tmsiExpire = 864000;   // TMSI expiration, default 10 days
-static bool s_tmsiSave = false;          // Save TMSIs to file
 static bool s_authMtCall = false;        // Authenticate MT call
 static bool s_authMtSms = false;         // Authenticate MT SMS
 static bool s_authMtUssd = false;        // Authenticate MT USSD
@@ -1840,7 +1857,6 @@ static const String s_all = "all";
 static const String s_statusUeImsi = "imsi";
 static const String s_statusUeTmsi = "tmsi";
 static const String s_statusUeImei = "imei";
-static const String s_statusUeMsisdn = "msisdn";
 
 ObjList YBTSGlobalThread::s_threads;
 Mutex YBTSGlobalThread::s_threadsMutex(false,"YBTSGlobal");
@@ -2634,10 +2650,7 @@ YBTSConnAuthMt::YBTSConnAuthMt(uint16_t connid, YBTSUE* ue, int origin)
 	return;
     m_msg.addParam("module",__plugin.name());
     Lock lck(m_ue);
-    m_msg.addParam("imsi",m_ue->imsi());
-    m_msg.addParam("msisdn",m_ue->msisdn(),false);
-    m_msg.addParam("imei",m_ue->imei(),false);
-    m_msg.addParam("tmsi",m_ue->tmsi(),false);
+    m_ue->addParams(m_msg);
     switch (origin) {
 	case YBTSConn::FMtCall:
 	    m_msg.addParam("type","call");
@@ -3261,17 +3274,19 @@ bool YBTSConn::setUE(YBTSUE* ue)
 	return true;
     if (!m_ue) {
 	m_ue = ue;
+	Lock lck(ue);
 	Debug(m_owner,DebugAll,
-	    "Connection %u set UE (%p) imsi=%s tmsi=%s [%p]",
-	    connId(),ue,ue->imsi().c_str(),ue->tmsi().c_str(),this);
+	    "Connection %u set UE (%p) TMSI=%s IMSI=%s [%p]",
+	    connId(),ue,ue->tmsi().safe(),ue->imsi().safe(),this);
 	return true;
     }
     if (m_ue == ue)
 	return true;
+    Lock2 lck(ue,m_ue);
     Debug(m_owner,DebugMild,
 	"Can't replace UE on connection %u: existing=(%p,%s,%s) new=(%p,%s,%s) [%p]",
-	connId(),(YBTSUE*)m_ue,m_ue->imsi().c_str(),m_ue->tmsi().c_str(),
-	ue,ue->imsi().c_str(),ue->tmsi().c_str(),this);
+	connId(),(YBTSUE*)m_ue,m_ue->tmsi().c_str(),m_ue->imsi().c_str(),
+	ue,ue->tmsi().c_str(),ue->imsi().c_str(),this);
     return false;
 }
 
@@ -4393,16 +4408,6 @@ YBTSDataSource* YBTSMedia::find(unsigned int connId)
 //
 // YBTSUE
 //
-void YBTSUE::addCaller(NamedList& list)
-{
-    if (msisdn())
-	list.addParam("caller","+" + msisdn());
-    else if (imsi())
-	list.addParam("caller","IMSI" + imsi());
-    else if (imei())
-	list.addParam("caller","IMEI" + imei());
-}
-
 // Start paging, return true if already paging
 bool YBTSUE::startPaging(BtsPagingChanType type)
 {
@@ -4465,30 +4470,37 @@ void YBTSUE::stopPagingNow()
     }
 }
 
+void YBTSUE::destroyed()
+{
+    lock();
+    YBTSMM* m = m_mm;
+    m_mm = 0;
+    unlock();
+    if (m)
+	m->removeUE(this,"destroyed");
+    Debug(&__plugin,DebugAll,"UE destroyed [%p]",this);
+    RefObject::destroyed();
+}
+
 
 //
 // YBTSLocationUpd
 //
-YBTSLocationUpd::YBTSLocationUpd(YBTSUE& ue, uint16_t connid)
+YBTSLocationUpd::YBTSLocationUpd(YBTSConn& conn)
     : YBTSGlobalThread("YBTSLocUpd"),
-    YBTSConnIdHolder(connid),
-    YBTSConnAuth(connid,YBTSConn::FLocUpd),
+    YBTSConnIdHolder(conn.connId()),
+    YBTSConnAuth(conn.connId(),YBTSConn::FLocUpd),
+    m_ue(conn.ue()),
     m_msg("user.register"),
     m_startTime(Time::now())
 {
-    m_imsi = ue.imsi();
-    m_msg.addParam("driver",__plugin.name());
-    m_msg.addParam("username",ue.imsi());
-    m_msg.addParam("msisdn",ue.msisdn(),false);
-    m_msg.addParam("imei",ue.imei(),false);
-    m_msg.addParam("tmsi",ue.tmsi(),false);
 }
 
 #define YBTS_LOCUPD_CHECK_STOP { \
     bool valid = isValidStartTime(m_startTime); \
     if (!valid || Thread::check(false) || Engine::exiting()) { \
 	if (!valid) \
-	    m_imsi.clear(); \
+	    m_ue = 0; \
 	if (rej) \
 	    authReject(); \
 	notify(false,false); \
@@ -4499,10 +4511,16 @@ YBTSLocationUpd::YBTSLocationUpd(YBTSUE& ue, uint16_t connid)
 void YBTSLocationUpd::run()
 {
     set(this,true);
-    if (!m_imsi)
+    if (!m_ue)
 	return;
-    Debug(&__plugin,DebugAll,"Started location updating thread for IMSI=%s [%p]",
-	m_imsi.c_str(),this);
+    Lock lckUe(m_ue);
+    Debug(&__plugin,DebugAll,
+	"Started location updating thread for (%p) TMSI=%s IMSI=%s [%p]",
+	ue(),m_ue->tmsi().safe(),m_ue->imsi().safe(),this);
+    m_msg.addParam("driver",__plugin.name());
+    m_msg.addParam("username",m_ue->imsi(),false);
+    m_ue->addParams(m_msg);
+    lckUe.drop();
     bool ok = Engine::dispatch(m_msg);
     bool rej = !ok && (m_msg[s_error] == s_noAuth);
     YBTS_LOCUPD_CHECK_STOP;
@@ -4534,38 +4552,46 @@ void YBTSLocationUpd::run()
 	YBTS_LOCUPD_CHECK_STOP;
 	break;
     }
+    lckUe.acquire(m_ue);
     if (reason)
 	Debug(&__plugin,DebugNote,
-	    "Failed to complete location updating authentication IMSI=%s: %s [%p]",
-	    m_imsi.c_str(),reason.c_str(),this);
+	    "Failed to complete location updating authentication TMSI=%s IMSI=%s: %s [%p]",
+	    m_ue->tmsi().safe(),m_ue->imsi().safe(),reason.c_str(),this);
     if (rej) {
 	Debug(&__plugin,DebugNote,
-	    "Location updating IMSI=%s: rejecting authentication [%p]",
-	    m_imsi.c_str(),this);
+	    "Location updating TMSI=%s IMSI=%s: rejecting authentication [%p]",
+	    m_ue->tmsi().safe(),m_ue->imsi().safe(),this);
+	lckUe.drop();
 	authReject();
     }
+    else
+	lckUe.drop();
     notify(false,ok);
 }
 
 void YBTSLocationUpd::notify(bool final, bool ok)
 {
-    if (!m_imsi)
+    RefPointer<YBTSUE> ue = m_ue;
+    m_ue = 0;
+    if (!ue)
 	return;
-    String imsi = m_imsi;
-    m_imsi.clear();
+    Lock lckUE(ue);
     if (!final)
-	Debug(&__plugin,DebugAll,"Location updating thread for IMSI=%s terminated [%p]",
-	    imsi.c_str(),this);
+	Debug(&__plugin,DebugAll,
+	    "Location updating thread for (%p) TMSI=%s IMSI=%s terminated [%p]",
+	    (YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe(),this);
     else {
 	ok = false;
 	m_msg.setParam(s_error,String(CauseProtoError));
 	if (!Engine::exiting())
 	    Alarm(&__plugin,"system",DebugWarn,
-		"Location updating thread for IMSI=%s abnormally terminated [%p]",
-		imsi.c_str(),this);
+		"Location updating thread for (%p) TMSI=%s IMSI=%s abnormally terminated [%p]",
+		(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe(),this);
     }
+    lckUE.drop();
     if (__plugin.mm())
-	__plugin.mm()->locUpdTerminated(m_startTime,imsi,connId(),ok,m_msg);
+	__plugin.mm()->locUpdTerminated(m_startTime,ue,connId(),ok,m_msg);
+    ue = 0;
 }
 
 
@@ -4581,8 +4607,11 @@ YBTSSubmit::YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue,
     m_callRef(callRef),
     m_msg("call.route"),
     m_ok(false),
-    m_cause(111)
+    m_cause(111),
+    m_ue(ue)
 {
+    if (!m_ue)
+	return;
     m_msg.addParam("module",__plugin.name());
     switch (t) {
 	case YBTSTid::Sms:
@@ -4594,23 +4623,24 @@ YBTSSubmit::YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue,
 	    m_origin = YBTSConn::FMoUssd;
 	    break;
 	default:
-	    m_imsi.clear();
+	    m_ue = 0;
+	    return;
     }
-    if (ue) {
-	Lock lck(ue);
-	m_imsi = ue->imsi();
-	ue->addCaller(m_msg);
-    }
-    m_msg.addParam("username",m_imsi,false);
+    Lock lck(m_ue);
+    ue->addCaller(m_msg);
+    ue->addParams(m_msg);
 }
 
 void YBTSSubmit::run()
 {
     set(this,true);
+    if (!m_ue)
+	return;
     Debug(&__plugin,DebugAll,
-	"Started MO submit thread type=%s IMSI=%s callRef=%s [%p]",
-	YBTSTid::typeName(m_type),m_imsi.c_str(),m_callRef.c_str(),this);
-    while (m_imsi) {
+	"Started MO submit thread type=%s TMSI=%s IMSI=%s callRef=%s [%p]",
+	YBTSTid::typeName(m_type),m_ue->tmsi().safe(),m_ue->imsi().safe(),
+	m_callRef.c_str(),this);
+    while (m_ue) {
 	if (!dispatch(true))
 	    break;
 	switch (m_type) {
@@ -4641,7 +4671,7 @@ void YBTSSubmit::run()
 	    conn->setAuthenticated(m_origin);
     }
     if (Thread::check(false) || Engine::exiting()) {
-	m_imsi.clear();
+	m_ue = 0;
 	return;
     }
     // TODO: Try to build a cause from other param?
@@ -4655,22 +4685,25 @@ void YBTSSubmit::run()
 
 void YBTSSubmit::notify(bool final)
 {
-    if (!m_imsi)
+    RefPointer<YBTSUE> ue = m_ue;
+    m_ue = 0;
+    if (!ue)
 	return;
-    String imsi = m_imsi;
-    m_imsi.clear();
     // Check if we restarted meanwhile
     if (!isValidStartTime(m_msg.msgTime()))
 	return;
+    Lock lck(ue);
     if (!final)
 	Debug(&__plugin,DebugAll,
-	    "MO submit thread type=%s IMSI=%s callRef=%s terminated ok=%s data='%s' cause=%u [%p]",
-	    YBTSTid::typeName(m_type),imsi.c_str(),m_callRef.c_str(),
-	    String::boolText(m_ok),TelEngine::c_safe(m_data),m_cause,this);
+	    "MO submit thread type=%s TMSI=%s IMSI=%s callRef=%s terminated ok=%s data='%s' cause=%u [%p]",
+	    YBTSTid::typeName(m_type),ue->tmsi().safe(),ue->imsi().safe(),
+	    m_callRef.c_str(),String::boolText(m_ok),TelEngine::c_safe(m_data),
+	    m_cause,this);
     else if (!Engine::exiting())
 	Alarm(&__plugin,"system",DebugWarn,
-	    "MO submit thread type=%s IMSI=%s callRef=%s abnormally terminated [%p]",
-	    YBTSTid::typeName(m_type),imsi.c_str(),m_callRef.c_str(),this);
+	    "MO submit thread type=%s TMSI=%s IMSI=%s callRef=%s abnormally terminated [%p]",
+	    YBTSTid::typeName(m_type),ue->tmsi().safe(),ue->imsi().safe(),
+	    m_callRef.c_str(),this);
     if (!__plugin.signalling())
 	return;
     switch (m_type) {
@@ -4687,6 +4720,7 @@ void YBTSSubmit::notify(bool final)
 	    break;
 	default: ;
     }
+    ue = 0;
 }
 
 static inline bool routeOk(Message& msg)
@@ -4739,14 +4773,20 @@ bool YBTSSubmit::dispatch(bool route)
     }
     if (!(reason || rej))
 	return ok;
+    if (!m_ue)
+	return false;
+    Lock lck(m_ue);
     if (reason)
 	Debug(&__plugin,DebugNote,
-	    "Failed to complete authentication for MO submit type=%s IMSI=%s callRef=%s: %s [%p]",
-	    YBTSTid::typeName(m_type),m_imsi.c_str(),m_callRef.c_str(),reason.c_str(),this);
+	    "Failed to complete authentication for MO submit type=%s TMSI=%s IMSI=%s callRef=%s: %s [%p]",
+	    YBTSTid::typeName(m_type),m_ue->tmsi().safe(),m_ue->imsi().safe(),
+	    m_callRef.c_str(),reason.c_str(),this);
     if (rej) {
 	Debug(&__plugin,DebugNote,
-	    "Rejecting authentication for MO submit type=%s IMSI=%s callRef=%s [%p]",
-	    YBTSTid::typeName(m_type),m_imsi.c_str(),m_callRef.c_str(),this);
+	    "Rejecting authentication for MO submit type=%s TMSI=%s IMSI=%s callRef=%s [%p]",
+	    YBTSTid::typeName(m_type),m_ue->tmsi().safe(),m_ue->imsi().safe(),
+	    m_callRef.c_str(),this);
+	lck.drop();
 	authReject();
     }
     return false;
@@ -4808,26 +4848,17 @@ void YBTSMtSmsList::destroyed()
 //
 // YBTSMM
 //
-YBTSMM::YBTSMM(unsigned int hashLen)
+YBTSMM::YBTSMM()
     : Mutex(false,"YBTSMM"),
-    m_ueMutex(false,"YBTSMMUEList"),
-    m_tmsiIndex(0),
-    m_ueIMSI(0),
-    m_ueTMSI(0),
-    m_ueHashLen(hashLen ? hashLen : 17),
-    m_saveUEs(false)
+    m_ueMutex(false,"YBTSMMUEList")
 {
     m_name = "ybts-mm";
     debugName(m_name);
     debugChain(&__plugin);
-    m_ueIMSI = new ObjList[m_ueHashLen];
-    m_ueTMSI = new ObjList[m_ueHashLen];
 }
 
 YBTSMM::~YBTSMM()
 {
-    delete[] m_ueIMSI;
-    delete[] m_ueTMSI;
 }
 
 // MT auth finished notification
@@ -4844,64 +4875,72 @@ void YBTSMM::mtAuthTerminated(YBTSUE* ue, YBTSConn* conn, bool ok)
     __plugin.checkMtService(ue,conn,true);
 }
 
-void YBTSMM::newTMSI(String& tmsi)
-{
-    do {
-	uint32_t t = ++m_tmsiIndex;
-	// TODO: use NNSF compatible TMSI allocation
-	//  bits 31-30: 11=P-TMSI else TMSI
-	//  bits 29-24: local allocation
-	//  bits 23-... (0-10 bits, 0-8 for LTE compatibility): Node Identity
-	//  bits ...-0 (14-24 bits, 16-24 for LTE compatibility): local allocation
-	if ((t & 0xc000000) == 0xc000000)
-	    m_tmsiIndex = (t &= 0x3fffffff);
-	uint8_t buf[4];
-	buf[0] = (uint8_t)(t >> 24);
-	buf[1] = (uint8_t)(t >> 16);
-	buf[2] = (uint8_t)(t >> 8);
-	buf[3] = (uint8_t)t;
-	tmsi.hexify(buf,4);
-    } while (m_ueTMSI[hashList(tmsi)].find(tmsi));
-    saveUEs();
-}
-
-void YBTSMM::locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t connId,
+void YBTSMM::locUpdTerminated(uint64_t startTime, YBTSUE* ue, uint16_t connId,
     bool ok, const NamedList& params)
 {
-    bool valid = isValidStartTime(startTime);
-    RefPointer<YBTSConn> conn;
-    if (valid && __plugin.signalling())
-        __plugin.signalling()->findConn(conn,connId,false);
-    if (conn && ok)
-	conn->setAuthenticated(YBTSConn::FLocUpd);
-    if (!imsi)
+    if (!(ue && isValidStartTime(startTime)))
 	return;
-    RefPointer<YBTSUE> ue;
-    getUEByIMSISafe(ue,imsi,false);
-    if (!ue) {
-	if (ok)
-	    Engine::enqueue(buildUnregister(imsi));
+    RefPointer<YBTSConn> conn;
+    if (__plugin.signalling())
+        __plugin.signalling()->findConn(conn,connId,false);
+    if (!conn)
+	return;
+    if (ue != conn->ue()) {
+	__plugin.signalling()->dropConn(connId,true);
 	return;
     }
+    if (ok)
+	conn->setAuthenticated(YBTSConn::FLocUpd);
     Lock lckUE(ue);
-    // IMSI already detached: revert succesful registration
-    if (ue->imsiDetached()) {
-	if (ok)
-	    Engine::enqueue(buildUnregister(imsi,ue));
-	return;
+    // Update data
+    if (ok) {
+	const String& tmsi = params[YSTRING("tmsi")];
+	if (tmsi) {
+	    const String& imsi = params[YSTRING("imsi")];
+	    if (tmsi != ue->tmsi() || imsi != ue->imsi()) {
+		Debug(this,DebugAll,
+		    "UE (%p) registered TMSI '%s' -> '%s', IMSI '%s' -> '%s' conn=%u [%p]",
+		    ue,ue->tmsi().safe(),tmsi.c_str(),
+		    ue->imsi().safe(),imsi.safe(),connId,this);
+		ue->m_tmsi = tmsi;
+		ue->m_imsi = imsi;
+	    }
+	}
+	else {
+	    Debug(this,DebugNote,
+		"UE (%p) missing TMSI in register response conn=%u [%p]",
+		ue,connId,this);
+	    ok = false;
+	}
+	ue->m_registered = ok;
+    }
+    else {
+	ue->m_registered = false;
+	bool askIMSI = params.getBoolValue(YSTRING("askimsi"));
+	ue->m_askIMEI = params.getBoolValue(YSTRING("askimei"));
+	if (ue->m_askIMEI)
+	    ue->m_imei.clear();
+	if (askIMSI) {
+	    ue->m_imsi.clear();
+	    ue->m_tmsi.clear();
+	    lckUE.drop();
+	    sendIdentityRequest(conn,YBTSConn::FAskIMSI);
+	    return;
+	}
+	if (ue->m_askIMEI) {
+	    lckUE.drop();
+	    sendIdentityRequest(conn,YBTSConn::FAskIMEI);
+	    return;
+	}
     }
     int level = DebugAll;
     if (ue->m_registered != ok)
 	level = (!ok ? DebugNote : DebugInfo);
-    Debug(this,level,"IMSI=%s register %s [%p]",
-	ue->imsi().c_str(),ok ? "succeeded" : "failed",this);
-    ue->m_registered = ok;
-    ue->m_msisdn = params[YSTRING("msisdn")];
-    if (ue->m_msisdn[0] == '+')
-	ue->m_msisdn = ue->m_msisdn.substr(1);
+    Debug(this,level,"UE (%p) TMSI=%s IMSI=%s register %s [%p]",
+	ue,ue->tmsi().safe(),ue->imsi().safe(),ok ? "succeeded" : "failed",this);
     XmlElement* ch = 0;
     const char* what = ok ? "LocationUpdatingAccept" : "LocationUpdatingReject";
-    XmlElement* mm = valid ? buildMM(ch,what) : 0;
+    XmlElement* mm = buildMM(ch,what);
     if (ch) {
 	if (ok) {
 	    ch->addChildSafe(__plugin.signalling()->lai().build());
@@ -4915,163 +4954,155 @@ void YBTSMM::locUpdTerminated(uint64_t startTime, const String& imsi, uint16_t c
 	}
     }
     lckUE.drop();
-    updateExpire(ue);
-    saveUEs();
-    if (conn) {
-	conn->sendL3(mm);
-	if (!ok)
-	    __plugin.signalling()->dropConn(connId,true);
-	return;
-    }
-    if (valid)
-	Debug(this,DebugNote,"Can't send '%s' for IMSI=%s: connection %u vanished [%p]",
-	    what,imsi.c_str(),connId,this);
-    else
-	Debug(this,DebugNote,"Can't send '%s' for IMSI=%s: restarted meanwhile [%p]",
-	    what,imsi.c_str(),this);
-    TelEngine::destruct(mm);
+    conn->sendL3(mm);
+    if (!ok)
+	__plugin.signalling()->dropConn(connId,true);
 }
 
-void YBTSMM::completeUe(String& buf, const String& partWord,
-    bool imsi, bool tmsi, bool imei)
+void YBTSMM::completeUe(String& buf, const String& partWord, bool imsi, bool tmsi)
 {
     Lock lck(m_ueMutex);
-    for (unsigned int i = 0; i < m_ueHashLen; i++) {
-	for (ObjList* o = m_ueIMSI[i].skipNull(); o; o = o->skipNext()) {
-	    YBTSUE* ue = static_cast<YBTSUE*>(o->get());
-	    Lock lckUe(ue);
-	    if (imsi)
-		Module::itemComplete(buf,ue->imsi(),partWord);
-	    else if (tmsi)
-		Module::itemComplete(buf,ue->tmsi(),partWord);
-	    else if (imei)
-		Module::itemComplete(buf,ue->imei(),partWord);
-	    else
-		Module::itemComplete(buf,ue->msisdn(),partWord);
-	}
-    }
-}
-
-void YBTSMM::loadUElist()
-{
-    s_globalMutex.lock();
-    String f = s_ueFile;
-    s_globalMutex.unlock();
-    if (!f)
-	return;
-    Configuration ues(f);
-    if (!ues.load(false))
-	return;
-    m_tmsiIndex = ues.getIntValue("tmsi","index");
-    NamedList* tmsis = ues.getSection("ues");
-    if (!tmsis)
-	return;
-    int cnt = 0;
-    for (ObjList* l = tmsis->paramList()->skipNull(); l; l = l->skipNext()) {
-	const NamedString* s = static_cast<const NamedString*>(l->get());
-	if (s->name().length() != 8) {
-	    Debug(this,DebugMild,"Invalid TMSI '%s' in file '%s'",s->name().c_str(),f.c_str());
+    for (ObjList* o = m_ues.skipNull(); o; o = o->skipNext()) {
+	YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	if (!u->alive())
 	    continue;
-	}
-	ObjList* p = s->split(',');
-	if (p && (p->count() >= 5) && p->at(0)->toString()) {
-	    YBTSUE* ue = new YBTSUE(p->at(0)->toString(),s->name());
-	    ue->m_imei = p->at(1)->toString();
-	    ue->m_msisdn = p->at(2)->toString();
-	    ue->m_expires = p->at(3)->toString().toInt64();
-	    ue->m_registered = p->at(4)->toString().toBoolean();
-	    m_ueIMSI[hashList(ue->imsi())].append(ue);
-	    m_ueTMSI[hashList(ue->tmsi())].append(ue)->setDelete(false);
-	    cnt++;
-	}
+	Lock lckUe(u);
+	if (imsi)
+	    Module::itemComplete(buf,u->imsi(),partWord);
+	else if (tmsi)
+	    Module::itemComplete(buf,u->tmsi(),partWord);
 	else
-	    Debug(this,DebugMild,"Invalid record for TMSI '%s' in file '%s'",s->name().c_str(),f.c_str());
-	TelEngine::destruct(p);
+	    Module::itemComplete(buf,u->imei(),partWord);
     }
-    Debug(this,DebugNote,"Loaded %d TMSI records, index=%u",cnt,m_tmsiIndex);
 }
 
-void YBTSMM::saveUElist()
+bool YBTSMM::getUETarget(RefPointer<YBTSUE>& ue, const String& dest,
+    const NamedList& params)
 {
-    s_globalMutex.lock();
-    String f = s_ueFile;
-    s_globalMutex.unlock();
-    if (!f)
-	return;
-    Configuration ues;
-    ues = f;
-    ues.setValue(YSTRING("tmsi"),"index",(int)m_tmsiIndex);
-    int cnt = 0;
-    if (s_tmsiSave) {
-	NamedList* tmsis = ues.createSection(YSTRING("ues"));
-	ObjList* list = tmsis->paramList();
-	for (unsigned int i = 0; i < m_ueHashLen; i++) {
-	    for (ObjList* l = m_ueTMSI[i].skipNull(); l; l = l->skipNext()) {
-		YBTSUE* ue = static_cast<YBTSUE*>(l->get());
-		String s;
-		s << ue->imsi() << "," << ue->imei() << "," << ue->msisdn() << "," << ue->expires() << "," << ue->registered();
-		list = list->append(new NamedString(ue->tmsi(),s));
-		cnt++;
-	    }
+    ue = 0;
+    String tmp(dest);
+    if (tmp.startSkip("TMSI",false))
+	return getUESafe(ue,tmp,params[YSTRING("imsi")]);
+    if (tmp.startSkip("IMSI",false))
+	return getUESafe(ue,params[YSTRING("tmsi")],tmp);
+    if (tmp.startSkip("IMEI",false))
+	return getUESafe(ue,params[YSTRING("tmsi")],params[YSTRING("imsi")],tmp);
+    return false;
+}
+
+// Get an UE by params, create one if not found
+bool YBTSMM::getUESafe(RefPointer<YBTSUE>& ue, const String& tmsi, const String& imsi,
+    const String& imei, bool create)
+{
+    if (!(tmsi || imsi || imei))
+	return false;
+    Lock lck(m_ueMutex);
+    for (ObjList* o = m_ues.skipNull(); o; o = o->skipNext()) {
+	YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	if (!u->alive())
+	    continue;
+	Lock lckUE(u);
+	if (tmsi && tmsi != u->tmsi())
+	    continue;
+	if (imsi && imsi != u->imsi())
+	    continue;
+	if (imei && imei != u->imei())
+	    continue;
+	ue = u;
+	if (!ue)
+	    continue;
+	if (!ue->tmsi())
+	    ue->m_tmsi = tmsi;
+	if (!ue->imsi())
+	    ue->m_imsi = imsi;
+	if (!ue->imei())
+	    ue->m_imei = imei;
+	return true;
+    }
+    if (!create)
+	return false;
+    YBTSUE* u = new YBTSUE(this,imsi,tmsi);
+    ue = u;
+    if (ue) {
+	if (imei)
+	    u->m_imei = imei;
+	else
+	    u->m_askIMEI = s_askIMEI;
+	m_ues.append(u)->setDelete(false);
+	Debug(this,DebugAll,"Added UE (%p) TMSI=%s IMSI=%s [%p]",
+	    u,tmsi.safe(),imsi.safe(),this);
+    }
+    TelEngine::destruct(u);
+    return ue != 0;
+}
+
+bool YBTSMM::createEmptyUE(RefPointer<YBTSUE>& ue)
+{
+    YBTSUE* u = new YBTSUE(this,"","");
+    ue = u;
+    if (ue) {
+	Lock lck(m_ueMutex);
+	u->m_askIMEI = s_askIMEI;
+	m_ues.append(u)->setDelete(false);
+	Debug(this,DebugAll,"Added empty UE (%p) [%p]",u,this);
+    }
+    TelEngine::destruct(u);
+    return ue != 0;
+}
+
+void YBTSMM::destruct()
+{
+    m_ueMutex.lock();
+    ObjList* o = m_ues.skipNull();
+    if (o) {
+	Debug(this,DebugInfo,"Destroyed with %u UEs in list [%p]",o->count(),this);
+	for (; o; o = o->skipNull()) {
+	    YBTSUE* u = static_cast<YBTSUE*>(o->remove(false));
+	    if (!u->alive())
+		continue;
+	    Lock lckUE(u);
+	    u->m_mm = 0;
 	}
     }
-    ues.save();
-    Debug(this,DebugNote,"Saved %d TMSI records, index=%u",cnt,m_tmsiIndex);
+    m_ueMutex.unlock();
+    GenObject::destruct();
 }
 
-Message* YBTSMM::buildUnregister(const String& imsi, YBTSUE* ue)
+void YBTSMM::removeUE(YBTSUE* ue, const char* reason)
 {
-    if (!imsi)
+    if (!ue)
+	return;
+    Lock lck(m_ueMutex);
+    if (!(m_ues.remove(ue,false)))
+	return;
+    lck.drop();
+    if (!ue->alive()) {
+	Debug(this,DebugAll,"Removed UE (%p): %s [%p]",
+	    ue,reason,this);
+	return;
+    }
+    lck.acquire(ue);
+    ue->m_removed = true;
+    ue->m_mm = 0;
+    Debug(this,DebugAll,"Removed UE (%p) TMSI=%s IMSI=%s: %s [%p]",
+	ue,ue->tmsi().safe(),ue->imsi().safe(),reason,this);
+}
+
+Message* YBTSMM::buildUnregister(YBTSUE* ue, const String& ident, bool tmsi)
+{
+    if (!((ue && (ue->imsi() || ue->tmsi())) || ident))
 	return 0;
     Message* m = new Message("user.unregister");
     m->addParam("driver",__plugin.name());
-    m->addParam("username",imsi);
     if (ue) {
-	m->addParam("msisdn",ue->msisdn(),false);
-	m->addParam("imei",ue->imei(),false);
-	m->addParam("tmsi",ue->tmsi(),false);
+	m->addParam("username",ue->imsi(),false);
+	ue->addParams(*m);
     }
+    else if (tmsi)
+	m->addParam("tmsi",ident);
+    else
+	m->addParam("imsi",ident);
     return m;
-}
-
-void YBTSMM::updateExpire(YBTSUE* ue)
-{
-    uint32_t exp = s_tmsiExpire;
-    if (!ue || !exp)
-	return;
-    exp += Time::secNow();
-    Lock lck(ue);
-    if (exp <= ue->expires())
-	return;
-    ue->m_expires = exp;
-    DDebug(this,DebugAll,"Updated TMSI=%s IMSI=%s expiration time",ue->tmsi().c_str(),ue->imsi().c_str());
-    lck.drop();
-    saveUEs();
-}
-
-void YBTSMM::checkTimers(const Time& time)
-{
-    uint32_t exp = time.sec();
-    Lock mylock(m_ueMutex);
-    for (unsigned int i = 0; i < m_ueHashLen; i++) {
-	for (ObjList* l = m_ueTMSI[i].skipNull(); l; ) {
-	    YBTSUE* ue = static_cast<YBTSUE*>(l->get());
-	    if (ue->expires() && ue->expires() < exp) {
-		m_ueIMSI[hashList(ue->imsi())].remove(ue,false);
-		l->remove(false);
-		l = l->skipNull();
-		saveUEs();
-		ueRemoved(*ue,"expired");
-		TelEngine::destruct(ue);
-	    }
-	    else
-		l = l->skipNext();
-	}
-    }
-    if (m_saveUEs) {
-	m_saveUEs = false;
-	saveUElist();
-    }
 }
 
 void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
@@ -5085,7 +5116,7 @@ void YBTSMM::handlePDU(YBTSMessage& m, YBTSConn* conn)
     if (!t)
 	Debug(this,DebugWarn,"Missing 'type' in %s [%p]",m.name(),this);
     else if (*t == YSTRING("LocationUpdatingRequest"))
-	handleLocationUpdate(m,*ch,conn);
+	handleLocationUpdate(m,ch,conn);
     else if (*t == YSTRING("TMSIReallocationComplete"))
 	handleUpdateComplete(m,*ch,conn);
     else if (*t == YSTRING("IMSIDetachIndication"))
@@ -5174,6 +5205,11 @@ void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSC
 	__plugin.signalling()->dropConn(m.connId(),true);
 	return;
     }
+    RefPointer<YBTSUE> ue = conn->ue();
+    if (!ue) {
+	__plugin.signalling()->dropConn(m.connId(),true);
+	return;
+    }
     XmlElement* xid = xml.findFirstChild(&s_mobileIdent);
     if (!xid)
 	return;
@@ -5182,46 +5218,55 @@ void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSC
 	return;
     const String& tag = xid->getTag();
     const String& ident = xid->getText();
-    RefPointer<YBTSUE> ue = conn->ue();
-    if (tag == YSTRING("IMSI")) {
-	if (ue) {
-	    if (ue->imsi() != ident) {
-		Debug(this,DebugWarn,"Got IMSI change %s -> %s on conn=%u [%p]",
-		    ue->imsi().c_str(),ident.c_str(),m.connId(),this);
-		__plugin.signalling()->dropConn(conn,true);
-	    }
+    int type = 0;
+    Lock lckUe(ue);
+    if (tag == s_imsi) {
+	if (!conn->flag(YBTSConn::FAskIMSI)) {
+	    Debug(this,DebugNote,"Unexpected IdentityResponse with IMSI conn=%u [%p]",
+		m.connId(),this);
+	    return;
 	}
-	else {
-	    getUEByIMSISafe(ue,ident);
-	    conn->lock();
-	    bool ok = conn->setUE(ue);
-	    conn->unlock();
-	    if (!ok) {
-		Debug(this,DebugGoOn,"Failed to set UE in conn=%u [%p]",m.connId(),this);
-		__plugin.signalling()->dropConn(conn,true);
-		return;
-	    }
+	if (!ue->imsi()) {
+	    ue->m_imsi = ident;
+	    Debug(this,DebugAll,"UE (%p) IMSI set to %s on conn=%u [%p]",
+		conn->ue(),ue->imsi().safe(),m.connId(),this);
 	}
-    }
-    else {
-	if (!ue) {
-	    Debug(this,DebugWarn,"Got identity %s=%s but have no UE attached on conn=%u [%p]",
-		tag.c_str(),ident.c_str(),m.connId(),this);
+	else if (ue->imsi() != ident) {
+	    Debug(this,DebugWarn,"Got IMSI change %s -> %s on conn=%u [%p]",
+		ue->imsi().c_str(),ident.c_str(),m.connId(),this);
+	    lckUe.drop();
 	    __plugin.signalling()->dropConn(conn,true);
 	    return;
 	}
+	type = YBTSConn::FAskIMSI;
     }
-    if (tag == YSTRING("IMEI"))
+    else if (tag == YSTRING("IMEI")) {
+	if (!conn->flag(YBTSConn::FAskIMEI)) {
+	    Debug(this,DebugNote,"Unexpected IdentityResponse with IMEI conn=%u [%p]",
+		m.connId(),this);
+	    return;
+	}
+	type= YBTSConn::FAskIMEI;
 	ue->m_imei = ident;
-    XmlElement* x = conn->takeXml();
-    if (x) {
-	YBTSMessage m2(SigL3Message,m.info(),m.connId(),x);
-	handlePDU(m2,conn);
+	ue->m_askIMEI = false;
     }
+    else {
+	Debug(this,DebugNote,"IdentityResponse with '%s' conn=%u: not requested [%p]",
+	    tag.c_str(),m.connId(),this);
+	return;
+    }
+    lckUe.drop();
+    conn->resetFlagSafe(type);
+    if (conn->flag(YBTSConn::FLocUpd)) {
+	handleLocationUpdate(m,0,conn);
+	return;
+    }
+    Debug(this,DebugInfo,"Got IdentityResponse on conn=%u: don't know what to do [%p]",
+	m.connId(),this);
 }
 
 // Handle location updating requests
-void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
+void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement* xml, YBTSConn* conn)
 {
     if (!conn) {
 	Debug(this,DebugGoOn,"Rejecting LocationUpdatingRequest conn=%u: no connection [%p]",
@@ -5233,7 +5278,8 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
     if (!ue) {
 	XmlElement* laiXml = 0;
 	XmlElement* identity = 0;
-	findXmlChildren(xml,laiXml,s_locAreaIdent,identity,s_mobileIdent);
+	if (xml)
+	    findXmlChildren(*xml,laiXml,s_locAreaIdent,identity,s_mobileIdent);
 	if (!(laiXml && identity)) {
 	    Debug(this,DebugNote,
 		"Rejecting LocationUpdatingRequest conn=%u: missing LAI or mobile identity [%p]",
@@ -5243,67 +5289,65 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement& xml, YBTSCon
 	}
 	bool haveTMSI = false;
 	const String* ident = 0;
-	uint8_t cause = getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
+	uint8_t cause = getMobileIdentTIMSI(m,*xml,*identity,ident,haveTMSI);
 	if (cause) {
 	    sendLocationUpdateReject(m,conn,cause);
 	    return;
 	}
 	YBTSLAI lai(*laiXml);
-	bool haveLAI = (lai == __plugin.signalling()->lai());
+	bool sameNetwork = (lai.mccMnc() == __plugin.signalling()->lai().mccMnc());
 	Debug(this,DebugAll,"Handling LocationUpdatingRequest conn=%u: ident=%s/%s LAI=%s [%p]",
 	    conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
 	    ident->c_str(),lai.lai().c_str(),this);
 	// TODO: handle concurrent requests, check if we have a pending location updating
 	// This should never happen, but we should handle it
-	if (haveTMSI) {
-	    // Got TMSI
-	    // Same LAI: check if we know the IMSI, request it if unknown
-	    // Different LAI: request IMSI
-	    if (haveLAI)
-		findUEByTMSISafe(ue,*ident);
+	bool reqIMSI = false;
+	if (!haveTMSI || sameNetwork)
+	    getUESafeIdent(ue,*ident,haveTMSI);
+	else {
+	    // Got TMSI in different LAI: request IMSI
+	    reqIMSI = true;
+	    createEmptyUE(ue);
 	}
-	else
-	    // Got IMSI: Create/retrieve TMSI
-	    getUEByIMSISafe(ue,*ident);
 	if (!ue) {
-	    if (!conn->setXml(m.takeXml())) {
-		Debug(this,DebugNote,"Rejecting LocationUpdatingRequest: cannot postpone request [%p]",this);
-		sendLocationUpdateReject(m,conn,CauseServNotSupp);
-		return;
-	    }
-	    sendIdentityRequest(conn,"IMSI");
+	    Debug(this,DebugNote,
+		"Rejecting LocationUpdatingRequest on conn=%u: cannot create UE [%p]",
+		conn->connId(),this);
+	    sendLocationUpdateReject(m,conn,CauseMMTemporaryFailure);
 	    return;
 	}
 	conn->lock();
 	conn->setFlag(YBTSConn::FLocUpd);
-	cause = setConnUE(*conn,ue,xml);
+	cause = setConnUE(*conn,ue,*xml);
 	conn->unlock();
 	if (cause) {
 	    sendLocationUpdateReject(m,conn,cause);
 	    return;
 	}
-    }
-    Lock lckUE(ue);
-    if (s_askIMEI && ue->imei().null()) {
-	if (conn->setXml(m.takeXml())) {
-	    lckUE.drop();
-	    sendIdentityRequest(conn,"IMEI");
+	if (reqIMSI) {
+	    sendIdentityRequest(conn,YBTSConn::FAskIMSI);
 	    return;
 	}
     }
-    ue->m_imsiDetached = false;
-    YBTSLocationUpd* th = new YBTSLocationUpd(*ue,conn->connId());
-    lckUE.drop();
-    if (!th->startup()) {
-	delete th;
-	ue->lock();
-	Debug(this,DebugNote,"Location updating for IMSI=%s: failed to start thread [%p]",
-	    ue->imsi().c_str(),this);
-	ue->unlock();
-	sendLocationUpdateReject(m,conn,CauseProtoError);
+    Lock lckUE(ue);
+    if (ue->m_askIMEI) {
+	ue->m_imei.clear();
+	lckUE.drop();
+	sendIdentityRequest(conn,YBTSConn::FAskIMEI);
+	return;
     }
-    updateExpire(ue);
-    saveUEs();
+    ue->m_imsiDetached = false;
+    YBTSLocationUpd* th = new YBTSLocationUpd(*conn);
+    lckUE.drop();
+    if (th->startup())
+	return;
+    delete th;
+    ue->lock();
+    Debug(this,DebugNote,
+	"Location updating for TMSI=%s IMSI=%s: failed to start thread [%p]",
+	ue->tmsi().safe(),ue->imsi().safe(),this);
+    ue->unlock();
+    sendLocationUpdateReject(m,conn,CauseProtoError);
 }
 
 // Handle location update (TMSI reallocation) complete
@@ -5336,29 +5380,26 @@ void YBTSMM::handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* c
     const String* ident = getIdentTIMSI(*xid,haveTMSI,found);
     if (TelEngine::null(ident))
 	return;
-
     RefPointer<YBTSUE> ue;
-    if (haveTMSI)
-	findUEByTMSISafe(ue,*ident);
-    else
-	getUEByIMSISafe(ue,*ident,false);
-    if (!ue)
-	return;
-    ue->stopPagingNow();
-    Lock lckUE(ue);
-    if (!ue->imsiDetached()) {
-	Debug(this,DebugInfo,"Detached IMSI=%s [%p]",ue->imsi().c_str(),this);
-	ue->m_imsiDetached = true;
+    getUESafeIdent(ue,*ident,haveTMSI,false);
+    Message* msg = 0;
+    if (ue) {
+	ue->stopPagingNow();
+	Lock lckUE(ue);
+	if (!ue->imsiDetached()) {
+	    Debug(this,DebugInfo,"Detached UE (%p) TMSI=%s IMSI=%s [%p]",
+		(YBTSUE*)ue,ue->tmsi().c_str(),ue->imsi().c_str(),this);
+	    ue->m_imsiDetached = true;
+	}
+	if (!ue->registered())
+	    return;
+	ue->m_registered = false;
+	msg = buildUnregister(ue);
+	lckUE.drop();
     }
-    if (!ue->registered())
-	return;
-    ue->m_registered = false;
-    Message* msg = buildUnregister(ue->imsi(),ue);
-    lckUE.drop();
-    updateExpire(ue);
-    saveUEs();
-    if (msg)
-	Engine::enqueue(msg);
+    else
+	msg = buildUnregister(0,*ident,haveTMSI);
+    Engine::enqueue(msg);
 }
 
 void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
@@ -5403,27 +5444,19 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	Debug(this,DebugAll,"Handling CMServiceRequest conn=%u: ident=%s/%s type=%s [%p]",
 	    conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
 	    ident->c_str(),type.c_str(),this);
-	if (haveTMSI)
-	    // Got TMSI
-	    findUEByTMSISafe(ue,*ident);
-	else
-	    // Got IMSI: Create/retrieve TMSI
-	    getUEByIMSISafe(ue,*ident);
-	if (!ue) {
-	    if (!conn->setXml(m.takeXml())) {
-		Debug(this,DebugNote,"Rejecting CMServiceRequest: cannot postpone request [%p]",this);
-		sendCMServiceRsp(m,conn,CauseServNotSupp);
-	    }
-	    sendIdentityRequest(conn,"IMSI");
-	    return;
-	}
+	getUESafeIdent(ue,*ident,haveTMSI);
 	bool dropConn = false;
-	conn->lock();
-	cause = setConnUE(*conn,ue,xml,&dropConn);
-	conn->unlock();
+	if (ue) {
+	    Lock lck(conn);
+	    cause = setConnUE(*conn,ue,xml,&dropConn);
+	}
+	else {
+	    Debug(this,DebugNote,"Rejecting CMServiceRequest: cannot create UE [%p]",this);
+	    cause = CauseServNotSupp;
+	}
 	if (cause) {
 	    sendCMServiceRsp(m,conn,cause);
-	    if (dropConn)
+	    if (dropConn || !ue)
 		__plugin.signalling()->dropConn(conn,true);
 	    return;
 	}
@@ -5461,30 +5494,29 @@ void YBTSMM::sendCMServiceRsp(YBTSMessage& msg, YBTSConn* conn, uint8_t cause)
 }
 
 // Send an Identity Request message
-void YBTSMM::sendIdentityRequest(YBTSConn* conn, const char* type)
+void YBTSMM::sendIdentityRequest(YBTSConn* conn, int type)
 {
-    if (TelEngine::null(type) || !conn)
+    if (!conn)
+	return;
+    const char* what = 0;
+    switch (type) {
+	case YBTSConn::FAskIMSI:
+	    what = "IMSI";
+	    break;
+	case YBTSConn::FAskIMEI:
+	    what = "IMEI";
+	    break;
+	default:
+	    return;
+    }
+    if (conn->flag(type))
 	return;
     XmlElement* ch = 0;
     XmlElement* mm = buildMM(ch,"IdentityRequest");
     if (ch)
-	ch->addChildSafe(new XmlElement("IdentityType",type));
-    conn->sendL3(mm);
-}
-
-bool YBTSMM::findUESafe(RefPointer<YBTSUE>& ue, const String& dest)
-{
-    ue = 0;
-    String tmp(dest);
-    if (tmp.startSkip("+",false))
-	findUEByMSISDNSafe(ue,tmp);
-    else if (tmp.startSkip("IMSI",false))
-	getUEByIMSISafe(ue,tmp,false);
-    else if (tmp.startSkip("IMEI",false))
-	findUEByIMEISafe(ue,tmp);
-    else if (tmp.startSkip("TMSI",false))
-	findUEByTMSISafe(ue,tmp);
-    return ue != 0;
+	ch->addChildSafe(new XmlElement("IdentityType",what));
+    if (conn->sendL3(mm))
+	conn->setFlagSafe(type);
 }
 
 // Find UE by paging identity
@@ -5493,102 +5525,17 @@ bool YBTSMM::findUEPagingSafe(RefPointer<YBTSUE>& ue, const String& paging)
     if (!paging)
 	return false;
     Lock lck(m_ueMutex);
-    for (unsigned int n = 0; n < m_ueHashLen; n++) {
-	ObjList& list = m_ueTMSI[n];
-	for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
-	    YBTSUE* u = static_cast<YBTSUE*>(o->get());
-	    Lock lckUE(u);
-	    if (paging == u->paging()) {
-		ue = u;
-		return (ue != 0);
-	    }
+    for (ObjList* o = m_ues.skipNull(); o; o = o->skipNext()) {
+	YBTSUE* u = static_cast<YBTSUE*>(o->get());
+	if (!u->alive())
+	    continue;
+	Lock lckUE(u);
+	if (paging == u->paging()) {
+	    ue = u;
+	    return (ue != 0);
 	}
     }
     return false;
-}
-
-// Find UE by TMSI
-void YBTSMM::findUEByTMSISafe(RefPointer<YBTSUE>& ue, const String& tmsi)
-{
-    if (!tmsi)
-	return;
-    Lock lck(m_ueMutex);
-    YBTSUE* tmpUE = 0;
-    ObjList& list = m_ueTMSI[hashList(tmsi)];
-    for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
-	YBTSUE* u = static_cast<YBTSUE*>(o->get());
-	if (tmsi == u->tmsi()) {
-	    tmpUE = u;
-	    break;
-	}
-    }
-    XDebug(this,DebugAll,"findUEByTMSISafe(%s) found (%p) [%p]",
-	tmsi.c_str(),tmpUE,this);
-    ue = tmpUE;
-}
-
-// Find UE by IMEI
-void YBTSMM::findUEByIMEISafe(RefPointer<YBTSUE>& ue, const String& imei)
-{
-    if (!imei)
-	return;
-    Lock lck(m_ueMutex);
-    for (unsigned int n = 0; n < m_ueHashLen; n++) {
-	ObjList& list = m_ueTMSI[n];
-	for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
-	    YBTSUE* u = static_cast<YBTSUE*>(o->get());
-	    if (imei == u->imei()) {
-		ue = u;
-		return;
-	    }
-	}
-    }
-}
-
-// Find UE by MSISDN
-void YBTSMM::findUEByMSISDNSafe(RefPointer<YBTSUE>& ue, const String& msisdn)
-{
-    if (!msisdn)
-	return;
-    Lock lck(m_ueMutex);
-    for (unsigned int n = 0; n < m_ueHashLen; n++) {
-	ObjList& list = m_ueTMSI[n];
-	for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
-	    YBTSUE* u = static_cast<YBTSUE*>(o->get());
-	    if (msisdn == u->msisdn()) {
-		ue = u;
-		return;
-	    }
-	}
-    }
-}
-
-// Find UE by IMSI. Create it if not found
-void YBTSMM::getUEByIMSISafe(RefPointer<YBTSUE>& ue, const String& imsi, bool create)
-{
-    if (!imsi)
-	return;
-    Lock lck(m_ueMutex);
-    YBTSUE* tmpUE = 0;
-    ObjList& list = m_ueIMSI[hashList(imsi)];
-    for (ObjList* o = list.skipNull(); o ; o = o->skipNext()) {
-	YBTSUE* u = static_cast<YBTSUE*>(o->get());
-	if (imsi == u->imsi()) {
-	    tmpUE = u;
-	    break;
-	}
-    }
-    if (create && !tmpUE) {
-	String tmsi;
-	newTMSI(tmsi);
-	tmpUE = new YBTSUE(imsi,tmsi);
-	list.append(tmpUE);
-	m_ueTMSI[hashList(tmsi)].append(tmpUE)->setDelete(false);
-	Debug(this,DebugInfo,"Added UE IMSI=%s TMSI=%s [%p]",
-	    tmpUE->imsi().c_str(),tmpUE->tmsi().c_str(),this);
-	saveUEs();
-    }
-    ue = tmpUE;
 }
 
 // Get IMSI/TMSI from request
@@ -5622,14 +5569,6 @@ uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
     if (dropConn)
 	*dropConn = true;
     return CauseProtoError;
-}
-
-void YBTSMM::ueRemoved(YBTSUE& ue, const char* reason)
-{
-    Lock lck(ue);
-    ue.m_removed = true;
-    Debug(this,DebugInfo,"Removed UE IMSI=%s TMSI=%s: %s [%p]",
-	ue.imsi().c_str(),ue.tmsi().c_str(),reason,this);
 }
 
 
@@ -5795,11 +5734,13 @@ YBTSChan::YBTSChan(YBTSConn* conn)
     m_authThread(0),
     m_authIndex(0)
 {
-    if (!m_conn)
+    if (!ue())
 	return;
     __plugin.signalling()->setConnUsage(connId(),true);
-    m_address = m_conn->ue()->imsi();
-    Debug(this,DebugCall,"Incoming imsi=%s conn=%u [%p]",
+    Lock lck(ue());
+    ue()->setPrefixedID(m_address);
+    lck.drop();
+    Debug(this,DebugCall,"Incoming address=%s conn=%u [%p]",
 	m_address.c_str(),connId(),this);
 }
 
@@ -5829,8 +5770,10 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
 	__plugin.signalling()->setConnUsage(connId(),true);
     if (!m_ue)
 	return;
-    m_address = ue->imsi();
-    Debug(this,DebugCall,"Outgoing imsi=%s [%p]",m_address.c_str(),this);
+    Lock lck(m_ue);
+    m_ue->setPrefixedID(m_address);
+    lck.drop();
+    Debug(this,DebugCall,"Outgoing address=%s [%p]",m_address.c_str(),this);
 }
 
 // Init incoming chan. Return false to destruct the channel
@@ -5848,6 +5791,7 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
 	m_route->userData(this);
     ue()->lock();
     ue()->addCaller(*m_route);
+    ue()->addParams(*m_route);
     ue()->unlock();
     m_route->addParam("called",call->m_called,false);
     m_route->addParam("callednumtype",call->m_calledType,false);
@@ -6615,6 +6559,8 @@ YBTSDriver::YBTSDriver()
 YBTSDriver::~YBTSDriver()
 {
     Output("Unloading module YBTS");
+    m_mtSms.clear();
+    m_mtSs.clear();
     TelEngine::destruct(m_logTrans);
     TelEngine::destruct(m_logBts);
     TelEngine::destruct(m_command);
@@ -6963,7 +6909,7 @@ void YBTSDriver::connReleased(uint16_t connId, YBTSConn* conn)
 	chan->connReleased();
 	chan = 0;
     }
-    else if (locUpdTerminated && findChan(conn->ue(),chan)) {
+    else if (locUpdTerminated && conn && findChan(conn->ue(),chan)) {
 	if (chan->isOutgoing() && chan->m_pending && !chan->m_conn)
 	    chan->initMT();
 	chan = 0;
@@ -6971,8 +6917,9 @@ void YBTSDriver::connReleased(uint16_t connId, YBTSConn* conn)
     removeTerminatedCall(connId);
     // Reset connection for pending MT SMS or set check flag
     RefPointer<YBTSMtSmsList> list;
-    if (!findMtSmsList(list,connId) && locUpdTerminated)
+    if (!findMtSmsList(list,connId) && locUpdTerminated) {
 	findMtSmsList(list,conn->ue());
+    }
     if (list) {
 	list->lock();
 	list->m_conn = 0;
@@ -7103,10 +7050,9 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
 	return false;
     }
     RefPointer<YBTSUE> ue;
-    if (!m_mm->findUESafe(ue,dest)) {
-	// We may consider paging UEs that are not in the TMSI table
-	Debug(this,DebugNote,"MT USSD to '%s': offline",dest.c_str());
-	msg.setParam(s_error,"offline");
+    if (!m_mm->getUETarget(ue,dest,msg)) {
+	Debug(this,DebugNote,"MT USSD to '%s': failure",dest.c_str());
+	msg.setParam(s_error,"failure");
 	return false;
     }
     String facility;
@@ -7165,10 +7111,10 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
 	m_mtSsMutex.lock();
 	m_mtSs.append(ss);
 	m_mtSsNotEmpty = true;
-	String tmp;
-	Debug(this,DebugInfo,"Enqueued MT USSD session '%s' to IMSI='%s'",
-	    ss->c_str(),ue->imsiSafe(tmp).c_str());
 	m_mtSsMutex.unlock();
+	Lock lck(ue);
+	Debug(this,DebugInfo,"Enqueued MT USSD session '%s' to TMSI=%s IMSI=%s",
+	    ss->c_str(),ue->tmsi().safe(),ue->imsi().safe());
     }
     else {
 	const char* fail = startMtSs(conn,ss);
@@ -7237,23 +7183,28 @@ bool YBTSDriver::getUssdFacility(NamedList& list, String& buf, String& reason,
 // Start an MT USSD
 const char* YBTSDriver::startMtSs(YBTSConn* conn, YBTSTid*& ss)
 {
-    if (!(conn && ss))
+    if (!(conn && conn->ue() && ss))
 	return "failure";
-    String imsi;
-    if (conn->ue())
-	conn->ue()->imsiSafe(imsi);
     ss->setConnId(conn->connId());
     Lock lck(conn);
-    if (conn->m_ss) {
-	lck.drop();
-	Debug(this,DebugNote,"MT USSD '%s' IMSI='%s' failed: SS busy",
-	    ss->c_str(),imsi.c_str());
-	return "busy";
-    }
-    if (s_authMtUssd && !conn->authenticated()) {
-	Debug(this,DebugNote,"MT USSD '%s' IMSI='%s' failed: connection not authenticated",
-	    ss->c_str(),imsi.c_str());
+    RefPointer<YBTSUE> ue = conn->ue();
+    if (!ue)
 	return "failure";
+    const char* reason = 0;
+    const char* error = 0;
+    if (conn->m_ss) {
+	reason = "busy";
+	error = "SS busy";
+    }
+    else if (s_authMtUssd && !conn->authenticated()) {
+	reason = "failure";
+	error = "connection not authenticated";
+    }
+    if (reason) {
+	lck.acquire(ue);
+	Debug(this,DebugNote,"MT USSD '%s' to (%p) TMSI=%s IMSI=%s failed: %s",
+	    ss->c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe(),error);
+	return reason;
     }
     conn->m_ss = ss;
     uint64_t tout = ss->m_timeout;
@@ -7265,14 +7216,16 @@ const char* YBTSDriver::startMtSs(YBTSConn* conn, YBTSTid*& ss)
     lck.drop();
     m_signalling->setConnToutCheck(tout);
     if (m_signalling->sendSSRegister(conn,callRef,sapi,facility)) {
-	Debug(this,DebugInfo,"MT USSD '%s' IMSI='%s' started",
-	    ssId.c_str(),imsi.c_str());
+	lck.acquire(ue);
+	Debug(this,DebugInfo,"MT USSD '%s' to (%p) TMSI=%s IMSI=%s started",
+	    ssId.c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
 	return 0;
     }
     // Take it back
     ss = conn->takeSSTid(ssId);
-    Debug(this,DebugNote,"MT USSD '%s' IMSI='%s' failed to start",
-	ssId.c_str(),imsi.c_str());
+    lck.acquire(ue);
+    Debug(this,DebugNote,"MT USSD '%s' to (%p) TMSI=%s IMSI=%s failed to start",
+	ssId.c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
     return "failure";
 }
 
@@ -7594,12 +7547,14 @@ bool YBTSDriver::checkMtSms(YBTSMtSmsList& list, unsigned int* toutAuth)
 		}
 	    }
 	    list.m_conn = 0;
-	    String imsi;
-	    list.ue()->imsiSafe(imsi);
+	    list.ue()->lock();
+	    String tmsi = list.ue()->tmsi();
+	    String imsi = list.ue()->imsi();
+	    list.ue()->unlock();
 	    for (ObjList* o = list.m_sms.skipNull(); o; o = o->skipNext()) {
 		YBTSMtSms* sms = static_cast<YBTSMtSms*>(o->get());
-		Debug(this,DebugNote,"Dropping MT SMS '%s' to IMSI=%s: %s",
-		    sms->id().c_str(),imsi.c_str(),
+		Debug(this,DebugNote,"Dropping MT SMS '%s' to (%p) TMSI=%s IMSI=%s: %s",
+		    sms->id().c_str(),list.ue(),tmsi.safe(),imsi.safe(),
 		    (toutAuth ? error : "connection not authenticated"));
 		sms->terminate(false,error);
 	    }
@@ -7618,10 +7573,11 @@ bool YBTSDriver::checkMtSms(YBTSMtSmsList& list, unsigned int* toutAuth)
     if (list.m_tid >= 7)
 	list.m_tid = 0;
     if (signalling()->sendSmsCPData(list.m_conn,sms->callRef(),false,sapi,sms->rpdu())) {
-	String imsi;
-	list.ue()->imsiSafe(imsi);
-	Debug(this,DebugAll,"MT SMS '%s' to IMSI=%s sent on conn %u",
-	    sms->id().c_str(),imsi.c_str(),list.m_conn->connId());
+	list.ue()->lock();
+	Debug(this,DebugAll,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s sent on conn %u",
+	    sms->id().c_str(),list.ue(),list.ue()->tmsi().safe(),
+	    list.ue()->imsi().safe(),list.m_conn->connId());
+	list.ue()->unlock();
 	sms->m_sent = true;
 	return true;
     }
@@ -7704,8 +7660,11 @@ bool YBTSDriver::handleMtSmsRsp(YBTSUE* ue, bool ok, const String& callRef,
     }
     if (sms->callRef() != callRef)
 	return false;
-    Debug(this,DebugAll,"MT SMS '%s' to IMSI=%s responded",
-	sms->id().c_str(),ue->imsi().c_str());
+    if (debugAt(DebugAll)) {
+	Lock lckUE(ue);
+	Debug(this,DebugAll,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s responded",
+	    sms->id().c_str(),ue,ue->tmsi().safe(),ue->imsi().safe());
+    }
     sms->terminate(ok,reason,rpdu);
     first->remove();
     lck.drop();
@@ -8173,17 +8132,16 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     if ((m_state != RadioUp) || !m_mm) {
 	Debug(this,DebugWarn,"MT SMS: Radio is not up!");
 	msg.setParam(s_error,"interworking");
-	return false;
+	return true;
     }
     RefPointer<YBTSUE> ue;
-    if (!m_mm->findUESafe(ue,dest)) {
-	// We may consider paging UEs that are not in the TMSI table
-	msg.setParam(s_error,"offline");
-	return false;
+    if (!m_mm->getUETarget(ue,dest,msg)) {
+	msg.setParam(s_error,"failure");
+	return true;
     }
     if (!m_signalling) {
 	msg.setParam(s_error,"interworking");
-	return false;
+	return true;
     }
     NamedString* rpdu = msg.getParam(YSTRING("rpdu"));
     if (!rpdu)
@@ -8300,10 +8258,11 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	break;
     }
     if (TelEngine::null(rpdu)) {
-	Debug(this,DebugNote,"MT SMS to IMSI=%s TMSI=%s: no RPDU",
-	    ue->imsi().c_str(),ue->tmsi().c_str());
+	Lock lck(ue);
+	Debug(this,DebugNote,"MT SMS to TMSI=%s IMSI=%s: no RPDU",
+	    ue->tmsi().safe(),ue->imsi().safe());
 	msg.setParam(s_error,"failure");
-	return false;
+	return true;
     }
     YBTSMtSms* sms = 0;
     RefPointer<YBTSMtSmsList> list;
@@ -8322,14 +8281,16 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    list = 0;
 	}
     }
+    Lock lckUE(ue);
     if (!list) {
-    	Debug(this,DebugMild,"MT SMS to IMSI=%s TMSI=%s: ref() failed",
-	    ue->imsi().c_str(),ue->tmsi().c_str());
+	Debug(this,DebugMild,"MT SMS to TMSI=%s IMSI=%s: ref() failed",
+	    ue->tmsi().safe(),ue->imsi().safe());
 	msg.setParam(s_error,"failure");
-	return false;
+	return true;
     }
-    Debug(this,DebugInfo,"MT SMS '%s' to IMSI=%s",
-	sms->id().c_str(),ue->imsi().c_str());
+    Debug(this,DebugInfo,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s",
+	sms->id().c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
+    lckUE.drop();
     unsigned int intervals = msg.getIntValue(YSTRING("timeout"),s_mtSmsTimeout,
 	YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     unsigned int maxPdd = getMaxPddPaging(msg,YBTS_MT_SMS_TIMEOUT_MIN,intervals);
@@ -8372,17 +8333,21 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     msg.setParam(rpdu->name(),sms->response());
     if (!ok)
 	msg.setParam(s_error,sms->reason().safe("failure"));
-    if (ok)
-	Debug(this,DebugInfo,"MT SMS '%s' to IMSI=%s finished",
-	    sms->id().c_str(),ue->imsi().c_str());
-    else
-	Debug(this,DebugInfo,"MT SMS '%s' to IMSI=%s failed reason='%s' RPDU=%s",
-	    sms->id().c_str(),ue->imsi().c_str(),
-	    sms->reason().safe(),sms->response().safe());
+    if (debugAt(DebugInfo)) {
+	Lock lckUE2(ue);
+	if (ok)
+	    Debug(this,DebugInfo,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s finished",
+		sms->id().c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
+	else
+	    Debug(this,DebugInfo,
+		"MT SMS '%s' to (%p) TMSI=%s IMSI=%s failed reason='%s' RPDU=%s",
+		sms->id().c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe(),
+		sms->reason().safe(),sms->response().safe());
+    }
     removeMtSms(list,sms);
     TelEngine::destruct(sms);
     list = 0;
-    return ok;
+    return true;
 }
 
 bool YBTSDriver::handleEngineStop(Message& msg)
@@ -8537,16 +8502,16 @@ bool YBTSDriver::msgStatusUE(Message& msg, String& line)
 	if (m_mm) {
 	    bool details = msg.getBoolValue(YSTRING("details"),true);
 	    Lock lck(m_mm->m_ueMutex);
-	    for (unsigned int i = 0; i < m_mm->m_ueHashLen; i++) {
-		for (ObjList* o = m_mm->m_ueIMSI[i].skipNull(); o; o = o->skipNext()) {
-		    n++;
-		    if (!details)
-			continue;
-		    YBTSUE* ue = static_cast<YBTSUE*>(o->get());
-		    Lock lckUe(ue);
-		    tmp.append(ue->imsi(),",") << "=";
-		    tmp << ue->tmsi() << "|" << ue->registered();
-		}
+	    for (ObjList* o = m_mm->m_ues.skipNull(); o; o = o->skipNext()) {
+		YBTSUE* ue = static_cast<YBTSUE*>(o->get());
+		if (!ue->alive())
+		   continue;
+		n++;
+		if (!details)
+		   continue;
+		Lock lckUe(ue);
+		tmp.append(ue->imsi(),",") << "=";
+		tmp << ue->tmsi() << "|" << ue->registered();
 	    }
 	}
 	s.append("format=",",") << "TMSI|Registered";
@@ -8556,23 +8521,18 @@ bool YBTSDriver::msgStatusUE(Message& msg, String& line)
     else if (m_mm) {
 	RefPointer<YBTSUE> ue;
 	if (line.startSkip(s_statusUeImsi))
-	    m_mm->findUESafe(ue,"IMSI" + line);
+	    m_mm->getUETarget(ue,"IMSI" + line);
 	else if (line.startSkip(s_statusUeTmsi))
-	    m_mm->findUESafe(ue,"TMSI" + line);
+	    m_mm->getUETarget(ue,"TMSI" + line);
 	else if (line.startSkip(s_statusUeImei))
-	    m_mm->findUESafe(ue,"IMEI" + line);
-	else if (line.startSkip(s_statusUeMsisdn))
-	    m_mm->findUESafe(ue,"+" + line);
+	    m_mm->getUETarget(ue,"IMEI" + line);
 	if (ue) {
 	    Lock lck(ue);
 	    s.append("imsi=",";") << ue->imsi();
 	    s << ",tmsi=" << ue->tmsi();
 	    s << ",imei=" << ue->imei();
-	    s << ",msisdn=" << ue->msisdn();
 	    s << ",registered=" << ue->registered();
 	    s << ",paging=" << ue->paging() << "/" << ue->pageCnt();
-	    s << ",expires=";
-	    addTout(s,(uint64_t)ue->expires() * 1000000,false);
 	}
     }
     s << "\r\n";
@@ -8670,8 +8630,6 @@ void YBTSDriver::initialize()
     s_t305 = ybts.getIntValue(YSTRING("t305"),30000,20000,60000);
     s_t308 = ybts.getIntValue(YSTRING("t308"),5000,4000,20000);
     s_t313 = ybts.getIntValue(YSTRING("t313"),5000,4000,20000);
-    s_tmsiExpire = ybts.getIntValue(YSTRING("tmsi_expire"),864000,7200,2592000);
-    s_tmsiSave = ybts.getBoolValue(YSTRING("tmsi_save"));
     s_mtSmsTimeout = ybts.getIntValue(YSTRING("sms.timeout"),
 	YBTS_MT_SMS_TIMEOUT_DEF,YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     s_ussdTimeout = ybts.getIntValue(YSTRING("ussd.session_timeout"),
@@ -8701,8 +8659,6 @@ void YBTSDriver::initialize()
 	s_lai.reset();
     }
     s_askIMEI = ybts.getBoolValue("imei_request",true);
-    s_ueFile = ybts.getValue("datafile",Engine::configFile("ybtsdata"));
-    Engine::runParams().replaceParams(s_ueFile);
     s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
     s_peerArg = ybts.getValue("peer_arg");
     s_peerDir = ybts.getValue("peer_dir","${modulepath}/" BTS_DIR);
@@ -8713,8 +8669,6 @@ void YBTSDriver::initialize()
     String s;
     s << "\r\nLAI=" << s_lai.lai();
     s << "\r\nimei_request=" << String::boolText(s_askIMEI);
-    s << "\r\ntmsi_expire=" << s_tmsiExpire << "s";
-    s << "\r\ndatafile=" << s_ueFile;
     s << "\r\nmax_restart=" << s_restartMax;
     s << "\r\nt305=" << s_t305;
     s << "\r\nt308=" << s_t308;
@@ -8747,8 +8701,7 @@ void YBTSDriver::initialize()
         m_command = new YBTSCommand;
 	m_media = new YBTSMedia;
 	m_signalling = new YBTSSignalling;
-	m_mm = new YBTSMM(ybts.getIntValue("ue_hash_size",31,5));
-	m_mm->loadUElist();
+	m_mm = new YBTSMM;
     }
     m_signalling->init(cfg);
     startIdle();
@@ -8767,12 +8720,15 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
     }
     Lock lckCallStart(s_callStartMutex);
     RefPointer<YBTSUE> ue;
-    if (!m_mm->findUESafe(ue,dest)) {
-	// We may consider paging UEs that are not in the TMSI table
-	msg.setParam(s_error,"offline");
+    if (!m_mm->getUETarget(ue,dest,msg)) {
+	msg.setParam(s_error,"failure");
 	return false;
     }
-    Debug(this,DebugCall,"MT call to IMSI=%s TMSI=%s",ue->imsi().c_str(),ue->tmsi().c_str());
+    if (debugAt(DebugCall)) {
+	Lock lck(ue);
+	Debug(this,DebugCall,"MT call to (%p) TMSI=%s IMSI=%s",
+	    (YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
+    }
     RefPointer<YBTSChan> chan;
     if (findChan(ue,chan)) {
 	if (!chan->canAcceptMT()) {
@@ -8843,8 +8799,6 @@ bool YBTSDriver::received(Message& msg, int id)
 	    }
 	    if (m_haveCalls)
 		checkTerminatedCalls(msg.msgTime());
-	    if (m_mm)
-		m_mm->checkTimers(msg.msgTime());
 	    if (m_mtSsNotEmpty)
 		checkMtSsTout(msg.msgTime());
 	    if (isPeerCheckState()) {
@@ -8960,7 +8914,6 @@ bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const Str
 	itemComplete(msg.retValue(),s_statusUeImsi,partWord);
 	itemComplete(msg.retValue(),s_statusUeTmsi,partWord);
 	itemComplete(msg.retValue(),s_statusUeImei,partWord);
-	itemComplete(msg.retValue(),s_statusUeMsisdn,partWord);
 	return true;
     }
     if (partLine.startsWith(m_statusUeCmd)) {
@@ -8972,8 +8925,6 @@ bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const Str
 	else if (tmp == s_statusUeTmsi)
 	    m_mm->completeUe(msg.retValue(),partWord,false,true);
 	else if (tmp == s_statusUeImei)
-	    m_mm->completeUe(msg.retValue(),partWord,false,false,true);
-	else if (tmp == s_statusUeMsisdn)
 	    m_mm->completeUe(msg.retValue(),partWord,false);
 	return true;
     }
