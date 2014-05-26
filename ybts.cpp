@@ -8132,16 +8132,16 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     if ((m_state != RadioUp) || !m_mm) {
 	Debug(this,DebugWarn,"MT SMS: Radio is not up!");
 	msg.setParam(s_error,"interworking");
-	return true;
+	return false;
     }
     RefPointer<YBTSUE> ue;
     if (!m_mm->getUETarget(ue,dest,msg)) {
 	msg.setParam(s_error,"failure");
-	return true;
+	return false;
     }
     if (!m_signalling) {
 	msg.setParam(s_error,"interworking");
-	return true;
+	return false;
     }
     NamedString* rpdu = msg.getParam(YSTRING("rpdu"));
     if (!rpdu)
@@ -8262,7 +8262,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	Debug(this,DebugNote,"MT SMS to TMSI=%s IMSI=%s: no RPDU",
 	    ue->tmsi().safe(),ue->imsi().safe());
 	msg.setParam(s_error,"failure");
-	return true;
+	return false;
     }
     YBTSMtSms* sms = 0;
     RefPointer<YBTSMtSmsList> list;
@@ -8286,7 +8286,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	Debug(this,DebugMild,"MT SMS to TMSI=%s IMSI=%s: ref() failed",
 	    ue->tmsi().safe(),ue->imsi().safe());
 	msg.setParam(s_error,"failure");
-	return true;
+	return false;
     }
     Debug(this,DebugInfo,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s",
 	sms->id().c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
@@ -8347,7 +8347,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     removeMtSms(list,sms);
     TelEngine::destruct(sms);
     list = 0;
-    return true;
+    return ok;
 }
 
 bool YBTSDriver::handleEngineStop(Message& msg)
