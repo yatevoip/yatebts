@@ -55,7 +55,7 @@
 Summary:	GSM BTS based on Yet Another Telephony Engine
 Name:     	@PACKAGE_TARNAME@
 Version: 	@PACKAGE_VERSION@
-Release:	@PACKAGE_RELEASE@%{dist}
+Release:	%{revision}@PACKAGE_RELEASE@%{dist}
 License:	GPL
 Packager:	Paul Chitescu <paulc@null.ro>
 Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_RELEASE@.tar.gz
