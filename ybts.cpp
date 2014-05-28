@@ -129,6 +129,7 @@ static const String s_mapOperCode = "operationCode";
 static const String s_mapUssdText = "ussd-Text";
 // Global
 static const String s_error = "error";
+static const String s_reason = "reason";
 static const String s_noAuth = "noauth";
 
 class YBTSConnIdHolder;                  // A connection id holder
@@ -2260,6 +2261,13 @@ static void moveList(ObjList& dest, ObjList& src)
     for (ObjList* o = src.skipNull(); o; o = o->skipNull())
 	a = a->append(o->remove(false));
     src.clear();
+}
+
+static inline void setListParams(NamedList& list, const String& p1, const String& p2,
+    const char* value)
+{
+    list.setParam(p1,value);
+    list.setParam(p2,value);
 }
 
 static void clearListParams(NamedList& list, const String& p1,
@@ -4656,7 +4664,7 @@ void YBTSSubmit::run()
 	if (!m_msg)
 	    break;
 	m_msg.setParam("callto",m_msg.retValue());
-	clearListParams(m_msg,s_error,YSTRING("reason"));
+	clearListParams(m_msg,s_error,s_reason);
 	m_msg.retValue().clear();
 	authClearParams(m_msg);
 	m_ok = dispatch(false);
@@ -4947,8 +4955,7 @@ void YBTSMM::locUpdTerminated(uint64_t startTime, YBTSUE* ue, uint16_t connId,
 	    ch->addChildSafe(buildXmlWithChild(s_mobileIdent,s_tmsi,ue->tmsi()));
 	}
 	else {
-	    const char* cause = params.getValue(s_error,
-		params.getValue(YSTRING("reason")));
+	    const char* cause = params.getValue(s_error,params.getValue(s_reason));
 	    ch->addChildSafe(new XmlElement("RejectCause",
 		cause ? cause : String(CauseProtoError).c_str()));
 	}
@@ -6184,7 +6191,7 @@ void YBTSChan::hangup(const char* reason, bool final)
     Debug(this,DebugCall,"Hangup reason='%s' [%p]",res.c_str(),this);
     Message* m = message("chan.hangup");
     if (res)
-	m->setParam("reason",res);
+	m->setParam(s_reason,res);
     Engine::enqueue(m);
     if (final)
 	return;
@@ -6483,8 +6490,8 @@ void YBTSChanThread::run()
     if (ok)
 	m_chan->callAccept(*m_route);
     else {
-	const char* error = m_route->getValue(YSTRING("error"),"noconn");
-	m_chan->callRejected(error,m_route->getValue(YSTRING("reason")),m_route);
+	const char* error = m_route->getValue(s_error,"noconn");
+	m_chan->callRejected(error,m_route->getValue(s_reason),m_route);
     }
 }
 
@@ -8131,16 +8138,16 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 {
     if ((m_state != RadioUp) || !m_mm) {
 	Debug(this,DebugWarn,"MT SMS: Radio is not up!");
-	msg.setParam(s_error,"interworking");
+	setListParams(msg,s_error,s_reason,"interworking");
 	return false;
     }
     RefPointer<YBTSUE> ue;
     if (!m_mm->getUETarget(ue,dest,msg)) {
-	msg.setParam(s_error,"failure");
+	setListParams(msg,s_error,s_reason,"failure");
 	return false;
     }
     if (!m_signalling) {
-	msg.setParam(s_error,"interworking");
+	setListParams(msg,s_error,s_reason,"interworking");
 	return false;
     }
     NamedString* rpdu = msg.getParam(YSTRING("rpdu"));
@@ -8261,7 +8268,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	Lock lck(ue);
 	Debug(this,DebugNote,"MT SMS to TMSI=%s IMSI=%s: no RPDU",
 	    ue->tmsi().safe(),ue->imsi().safe());
-	msg.setParam(s_error,"failure");
+	setListParams(msg,s_error,s_reason,"failure");
 	return false;
     }
     YBTSMtSms* sms = 0;
@@ -8285,7 +8292,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     if (!list) {
 	Debug(this,DebugMild,"MT SMS to TMSI=%s IMSI=%s: ref() failed",
 	    ue->tmsi().safe(),ue->imsi().safe());
-	msg.setParam(s_error,"failure");
+	setListParams(msg,s_error,s_reason,"failure");
 	return false;
     }
     Debug(this,DebugInfo,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s",
@@ -8331,8 +8338,10 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
     }
     bool ok = sms->ok();
     msg.setParam(rpdu->name(),sms->response());
-    if (!ok)
-	msg.setParam(s_error,sms->reason().safe("failure"));
+    if (ok)
+	clearListParams(msg,s_error,s_reason);
+    else
+	setListParams(msg,s_error,s_reason,sms->reason().safe("failure"));
     if (debugAt(DebugInfo)) {
 	Lock lckUE2(ue);
 	if (ok)
@@ -8748,7 +8757,7 @@ bool YBTSDriver::msgExecute(Message& msg, String& dest)
     chan->deref();
     if (ok) {
 	CallEndpoint* ch = YOBJECT(CallEndpoint,msg.userData());
-	if (ch && chan->connect(ch,msg.getValue(YSTRING("reason")))) {
+	if (ch && chan->connect(ch,msg.getValue(s_reason))) {
 	    chan->callConnect(msg);
 	    msg.setParam("peerid",chan->id());
 	    msg.setParam("targetid",chan->id());
