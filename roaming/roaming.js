@@ -56,15 +56,19 @@ function onAuth(msg)
 /**
  * Handle "user.register" message
  * @param msg Object message to be handled
+ * @param unresponsive_server String This is only set in case of a retrial. IP:port of the last used server 
  */
-function onRegister(msg)
+function onRegister(msg, unresponsive_server)
 {
+    if (msg.driver!="ybts")
+	return false;
+
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
 
-    Engine.debug(Engine.DebugInfo, "Preparing to send REGISTER imsi='"+imsi+"', tmsi='"+tmsi+"'");
+    Engine.debug(Engine.DebugInfo, "Preparing to send REGISTER imsi='"+imsi+"', tmsi='"+tmsi+"', unresponsive server='"+unresponsive_server+"'");
 
-    var sr = buildRegister(imsi,tmsi,expires,msg.imei);
+    var sr = buildRegister(imsi,tmsi,expires,msg.imei,null,msg,unresponsive_server);
     if (sr==false)
 	return false;
     if (!addAuthParams(sr,msg,imsi,tmsi))
@@ -116,13 +120,14 @@ function onRegister(msg)
 	    // ask phone to redo registration with imsi and imei
 	    msg.askimsi = true;
 	    msg.askimei = true;
+	    msg.assoc_server = sr.used_server;
 	    return false;
 	}
 
 	if (imsi!="")
-	    return reqResponse("register",sr,imsi,msg);
+	    return reqResponse("register",sr,imsi,msg,unresponsive_server);
 	else
-	    return reqResponse("register",sr,tmsi,msg);
+	    return reqResponse("register",sr,tmsi,msg,unresponsive_server);
     } 
     else {
 	Engine.debug(Engine.DebugWarn, "Could not do xsip.generate for method REGISTER in onRegister.");
@@ -138,13 +143,17 @@ function onRegister(msg)
  * @param exp Integer Expire time for SIP registration. Min 0, Max 3600 
  * @param imei String representing IMEI of device where request comes from
  * @param warning String - Optional. If set adds Warning header
+ * @param msg Object User.register message that generated this request
+ * @param unresponsive_server String - Optional. Only set in case of a retrial. This would be the IP:port of the last REGISTER request
  */
-function buildRegister(imsi,tmsi,exp,imei,warning)
+function buildRegister(imsi,tmsi,exp,imei,warning,msg,unresponsive_server)
 {
     var sip_server;
 
-    if (tmsi!="" && imsi=="")
+    if (tmsi!="" && imsi=="") {
 	imsi = getIMSI(tmsi);
+	msg.imsi = imsi;
+    }
 
     var sr = new Message("xsip.generate");
     sr.method = "REGISTER";
@@ -152,21 +161,23 @@ function buildRegister(imsi,tmsi,exp,imei,warning)
 	sr.user = "IMSI" + imsi;
     else if (tmsi)
 	sr.user = "TMSI" + tmsi;
-/*    if (tmsi)
-	sr.user = "TMSI" + tmsi;
-    else if (imsi)
-	sr.user = "IMSI" + imsi;*/
     else {
 	Engine.debug(Engine.DebugWarn, "Exit buildRegister() because it was called without imsi or tmsi.");
 	return false;
     }
 
-    if (tmsi=="" && imsi!="") {
-	if (tempinfo[imsi]["server"]!=undefined)
-	    sip_server = tempinfo[imsi]["server"];
-    }
-    if (sip_server==undefined)
-	sip_server = getSIPRegistrar(tmsi);
+    if (msg.assoc_server!="" && (msg.assoc_server!=unresponsive_server || !unresponsive_server))
+	sip_server = msg.assoc_server;
+    else if (!unresponsive_server) {
+	if (tmsi=="" && imsi!="") {
+	    if (tempinfo[imsi]["server"]!=undefined)
+		sip_server = tempinfo[imsi]["server"];
+    	}
+	if (sip_server==undefined)
+	    sip_server = getSIPRegistrar(tmsi);
+    } else
+	sip_server = getNewRegistrar(unresponsive_server);
+
     if (!sip_server)
 	return false;
 
@@ -188,6 +199,26 @@ function buildRegister(imsi,tmsi,exp,imei,warning)
     sr.used_server = sip_server;
 
     return sr;
+}
+
+/*
+ * Get new server to send request to in case trial to @server timed out
+ * @param server String. Previous server that timed out
+ * @return String/Bool ip:port of the new server, false if could not find different server to send request to
+ */ 
+function getNewRegistrar(server)
+{
+    var no_try = 0;
+    var max_tries = 100;
+    var new_server = getSIPRegistrar();
+
+    while (new_server==server) {
+	if (no_try>=max_tries)
+	    return false;
+	new_server = getSIPRegistrar();
+	no_try++;
+    }
+    return new_server;
 }
 
 /**
@@ -254,6 +285,11 @@ function addRoutingParams(msg,imsi)
 function onDisconnected(msg)
 {
     var chanid = msg.id;
+
+    if (msg.id.match(/ybts/) && msg.reason=="noconn") {
+	msg.reason = "net-out-of-order";
+    }
+
     if (tempinfo_route[chanid]=="")
 	return false;
 
@@ -332,7 +368,7 @@ function authSuccess(sr,msg)
  * @param sr Object. Message representing the SIP response where to check for WWW-Authenticate header
  * @param msi String representing imsi or tmsi
  * @param msg Object. Message object to which authentication parameters are added
- * @param server String ip:port where request was sent to
+ * @param server String If set then this was a retrial. Otherwise this is the initial request and a retrial is allowed. Only used for REGISTER requests
  */
 function reqResponse(request_type,sr,msi,msg,server)
 {
@@ -350,8 +386,10 @@ function reqResponse(request_type,sr,msi,msg,server)
 	    if (res) {
 		var nonce = res[1];
 		tempinfo[msi] = { "nonce":nonce,"realm":realm};
-		if (sr.used_server!="")
+		if (sr.used_server!="") {
 		    tempinfo[msi]["server"] = sr.used_server;
+		    msg.assoc_server = sr.used_server;
+		}
 
 		var rand = Engine.atoh(nonce);
 		if (rand.length > 32) {
@@ -370,6 +408,14 @@ function reqResponse(request_type,sr,msi,msg,server)
 		return true;
 	    break;
 	case 408:
+	    if (request_type=="register") {
+		// make new request to another server
+		if (!server)
+		    return onRegister(msg,sr.used_server);
+	    } else if (request_type=="mosms")
+		// Network out of order
+		msg.error = 38;
+
 	    msg.reason = "timeout";
 	    break;
 	default:
@@ -395,6 +441,9 @@ function reqResponse(request_type,sr,msi,msg,server)
  */
 function onUnregister(msg)
 {
+    if (msg.driver!="ybts")
+	return false;
+
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
     if (tmsi!="" && imsi=="")
@@ -405,8 +454,9 @@ function onUnregister(msg)
 	return false;
 
     sr.enqueue();
-    delete subscribers[imsi];
-    saveUE(imsi);
+    // Don't delete subscribers when unregistering. We'll mark them as expired
+    //delete subscribers[imsi];
+    //saveUE(imsi);
     return true;
 }
 
@@ -621,6 +671,7 @@ function onHangup(msg)
 	Engine.debug("Cleaning "+msg.id+" from current MO calls");
 	delete current_calls[msg.id];
     }
+    return false;
 }
 
 /*
@@ -787,6 +838,12 @@ function saveUEinConf(imsi,subscriber)
 function updateSubscribers(msg)
 {
     var imsi = msg.imsi;
+    if (imsi=="") {
+	// this should not happen. If it does => BUG
+	Engine.debug(Engine.debugWarn, "ERROR: got updateSubscribers with msg without imsi. tmsi='"+msg.tmsi+"'");
+	return;
+    }
+
     var imei = msg.imei;
     if (imei=="" && subscribers[imsi]!=undefined)
 	imei = subscribers[imsi]["imei"];
