@@ -1994,7 +1994,7 @@ enum RPMsgType
     RPAckFromMs = 2,
     RPAckFromNetwork = 3,
     RPErrorFromMs = 4,
-    RPErrorFromNetwork = 3,
+    RPErrorFromNetwork = 5,
     RPSMMAFromMs = 6,
 };
 
