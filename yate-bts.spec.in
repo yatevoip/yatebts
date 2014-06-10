@@ -225,6 +225,7 @@ if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/ysipchan.conf
 	body_encoding=hex
 	async_generic=yes
 	sip_req_trans_count=5
+	useragent=YateBTS/@PACKAGE_VERSION@
 
 	[codecs]
 	default=disable
