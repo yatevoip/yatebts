@@ -952,11 +952,11 @@ function checkConfiguration()
     if (expires=="")
 	expires = 3600;
 
-    if (imsi_cleanuip=="")
+    if (imsi_cleanup=="")
 	imsi_cleanup = 3600 * 24;
 
     if (nodes_sip==undefined || typeof(nodes_sip)!="object") {
-    	if ((reg_sip=="" || reg_sip==null))
+    	if (!reg_sip)
 	    Engine.alarm(alarm_conf,"Please configure reg_sip or nodes_sip parameter in roamingconf.js located in the configurations directory.");
     } else {
 	ov_nodes = [];
@@ -969,7 +969,7 @@ function checkConfiguration()
 	if (ov_nodes.length==0)
 	    Engine.alarm(alarm_conf,"Please add SIP nodes in nodes_sip parameter in roamingconf.js located in the configurations directory.");
 	else {
-	    if (nnsf_bits=="" || nnsf_bits==null)
+	    if (!nnsf_bits)
 		Engine.alarm(alarm_conf,"Please configure nnsf_bits in roamingconf.js located in the configurations directory.");
 	    else {
 		nnsf_mask = 0x03ff >> (10-nnsf_bits);
@@ -977,9 +977,9 @@ function checkConfiguration()
 	    }
         }
     }
-    if (my_sip=="" || my_sip==undefined || my_sip==null)
+    if (!my_sip)
 	Engine.alarm(alarm_conf,"Please configure my_sip parameter in roamingconf.js located in the configurations directory.");
-    if (gstn_location=="" || gstn_location==undefined || gstn_location==null)
+    if (!gstn_location)
 	Engine.alarm(alarm_conf,"Please configure gstn_location parameter in roamingconf.js located in the configurations directory.");
 
     readYBTSConf();
