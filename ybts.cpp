@@ -620,6 +620,18 @@ public:
 	    TelEngine::destruct(xml);
 	    return false;
 	}
+    inline void getPhyInfo(String& info) {
+	    Lock lck(this);
+	    info = m_phyInfo;
+	}
+    inline void addPhyInfo(NamedList& msg) {
+	    Lock lck(this);
+	    msg.addParam("phy_info",m_phyInfo,false);
+	}
+    inline void setPhyInfo(const String& info) {
+	    Lock lck(this);
+	    m_phyInfo = info;
+	}
     inline bool hasSS()
 	{ return m_ss != 0; }
     inline YBTSTid* takeSS() {
@@ -692,6 +704,7 @@ protected:
     RefPointer<YBTSUE> m_ue;
     ObjList m_sms;                       // Pending sms
     YBTSTid* m_ss;                       // Pending non call related SS transaction
+    String m_phyInfo;                    // Latest physical channel information
     uint8_t m_traffic;                   // Traffic channel available (mode)
     uint8_t m_waitForTraffic;            // Waiting for traffic to start
     uint8_t m_sapiUp;                    // SAPI status: lower 4 bits SAPI + upper 4 bits if SAPI up on SDCCH
@@ -1419,6 +1432,7 @@ public:
     // BTS stopping notification
     inline void stop()
 	{ hangup("interworking"); }
+    Message* message(const char* name, bool minimal = false, bool data = false);
 
 protected:
     inline YBTSCallDesc* activeCall()
@@ -1891,6 +1905,7 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(MediaError),
     MAKE_SIG(MediaStarted),
     MAKE_SIG(EstablishSAPI),
+    MAKE_SIG(PhysicalInfo),
     MAKE_SIG(Handshake),
     MAKE_SIG(RadioReady),
     MAKE_SIG(StartPaging),
@@ -2873,6 +2888,9 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 #endif
 	    decodeMsg(recv->codec(),data,len,m->m_xml,reason);
 	    break;
+	case SigPhysicalInfo:
+	    m->m_xml = new XmlElement("PhysicalInfo",String((const char*)data,len));
+	    break;
 	case SigEstablishSAPI:
 	case SigHandshake:
 	case SigRadioReady:
@@ -2948,6 +2966,7 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	case SigStopMedia:
 	case SigAllocMedia:
 	case SigEstablishSAPI:
+	case SigPhysicalInfo:
 	    return true;
 	default:
 	    reason = "No encoder";
@@ -4162,6 +4181,14 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		}
 	    }
 	    return Ok;
+	case SigPhysicalInfo:
+	    if (msg.connId() && msg.xml()) {
+		RefPointer<YBTSConn> conn;
+		findConn(conn,msg.connId(),true);
+		if (conn)
+		    conn->setPhyInfo(msg.xml()->getText());
+	    }
+	    return Ok;
 	case SigHandshake:
 	    return handleHandshake(msg);
 	case SigRadioReady:
@@ -4502,6 +4529,7 @@ YBTSLocationUpd::YBTSLocationUpd(YBTSConn& conn)
     m_msg("user.register"),
     m_startTime(Time::now())
 {
+    conn.addPhyInfo(m_msg);
 }
 
 #define YBTS_LOCUPD_CHECK_STOP { \
@@ -5403,6 +5431,7 @@ void YBTSMM::handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* c
 	ue->m_registered = false;
 	msg = buildUnregister(ue);
 	lckUE.drop();
+	conn->addPhyInfo(*msg);
     }
     else
 	msg = buildUnregister(0,*ident,haveTMSI);
@@ -5810,6 +5839,7 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
 	m_route->addParam("privacy",String::boolText(true));
     else if (xml.findFirstChild(&s_ccSsCLIP))
 	m_route->addParam("privacy",String::boolText(false));
+    conn()->addPhyInfo(*m_route);
     Message* s = message("chan.startup");
     s->addParam("caller",m_route->getValue(YSTRING("caller")),false);
     s->addParam("called",call->m_called,false);
@@ -5840,6 +5870,15 @@ bool YBTSChan::initOutgoing(Message& msg)
     lck.drop();
     initChan();
     return initMT();
+}
+
+// Build message, populate physical channel info
+Message* YBTSChan::message(const char* name, bool minimal, bool data)
+{
+    Message* msg = Channel::message(name,minimal,data);
+    if (msg && conn())
+	conn()->addPhyInfo(*msg);
+    return msg;
 }
 
 // Handle CC messages
@@ -6197,6 +6236,8 @@ void YBTSChan::hangup(const char* reason, bool final)
 	return;
     paramMutex().lock();
     NamedList tmp(parameters());
+    if (conn())
+	conn()->addPhyInfo(tmp);
     paramMutex().unlock();
     disconnect(res,tmp);
 }
@@ -7460,6 +7501,7 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	    th->msg().addParam("text.encoding",smsTextEnc);
 	}
 	th->msg().addParam("rpdu",*rpdu);
+	conn->addPhyInfo(th->msg());
 	if (th->startup())
 	    return;
 	causeRp = 41; // Temporary failure

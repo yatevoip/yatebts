@@ -194,6 +194,8 @@ function buildRegister(imsi,tmsi,exp,imei,warning,msg,unresponsive_server)
     }
     sr.sip_Expires = exp;
     sr["sip_P-Access-Network-Info"] = accnet_header;
+    if (msg.phy_info)
+	sr["sip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
     if (warning)
 	sr["sip_Warning"] = '399 ' + Engine.runParams("nodename") + ' "' + warning + '"';
     sr.used_server = sip_server;
@@ -284,11 +286,14 @@ function addRoutingParams(msg,imsi)
  */
 function onDisconnected(msg)
 {
-    var chanid = msg.id;
-
-    if (msg.id.match(/ybts/) && msg.reason=="noconn") {
-	msg.reason = "net-out-of-order";
+    if (msg.phy_info) {
+	msg["osip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
+	msg["osip-prefix"] = "osip_";
     }
+
+    var chanid = msg.id;
+    if (chanid.match(/ybts/) && msg.reason=="noconn")
+	msg.reason = "net-out-of-order";
 
     if (tempinfo_route[chanid]=="")
 	return false;
@@ -571,6 +576,8 @@ function onMoSMS(msg)
     m.xsip_body_encoding = "hex";
     m.xsip_body = msg.rpdu;
     m["sip_P-Access-Network-Info"] = accnet_header;
+    if (msg.phy_info)
+	m["sip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
     m.wait = true;
     if (!addAuthParams(m,msg,imsi,tmsi))
 	return false;
@@ -631,6 +638,8 @@ function onRoute(msg)
 	msg.caller = subscribers[imsi]["msisdn"];
 
 	msg["osip_P-Access-Network-Info"] = accnet_header;
+	if (msg.phy_info)
+	    msg["osip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
 	msg.retValue("sip/sip:"+msg.called+"@"+sip_server);
     }
     else {
@@ -671,6 +680,17 @@ function onHangup(msg)
 	Engine.debug("Cleaning "+msg.id+" from current MO calls");
 	delete current_calls[msg.id];
     }
+    return false;
+}
+
+/*
+ * Add physical channel information
+ * @param msg Object Message to be handled
+ */
+function addPhyInfo(msg)
+{
+    if (msg.phy_info)
+	msg["osip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
     return false;
 }
 
@@ -1023,6 +1043,10 @@ Message.install(onMoSMS,"msg.execute",80,"callto","smsc_yatebts");
 Message.install(onDisconnected,"chan.disconnected",40);
 Message.install(onHangup,"chan.hangup",80);
 Message.install(onExecute,"call.execute",80);
+Message.install(addPhyInfo,"call.progress",50,"module","ybts");
+Message.install(addPhyInfo,"call.ringing",50,"module","ybts");
+Message.install(addPhyInfo,"call.answered",50,"module","ybts");
+Message.install(addPhyInfo,"chan.dtmf",50,"module","ybts");
 
 Engine.setInterval(onInterval,60000);
 

@@ -35,6 +35,9 @@
 #undef WARNING
 #include <Reporting.h>
 #include <Globals.h>
+#include <Timeval.h>
+
+#include <stdio.h>
 
 using namespace std;
 using namespace GSM;
@@ -42,6 +45,20 @@ using namespace SGSN;
 using namespace Control;
 using namespace Connection;
 
+#define PHY_INTERVAL 200
+
+// Send physical channel information
+static void sendPhyInfo(LogicalChannel* chan, unsigned int id)
+{
+	char buf[128];
+	int len = snprintf(buf, sizeof(buf), "TA=%d TE=%0.3f UpRSSI=%0.0f TxPwr=%d DnRSSIdBm=%d time=%9.3lf",
+		chan->actualMSTiming(), chan->timingError(),
+		chan->RSSI(), chan->actualMSPower(),
+		chan->measurementResults().RXLEV_FULL_SERVING_CELL_dBm(),
+		chan->timestamp());
+	if (len > 0)
+		gSigConn.send(Connection::SigPhysicalInfo,0,id,buf,len);
+}
 
 // Attempt to dispatch locally a single RR message, return true if handled
 static bool connDispatchRR(LogicalChannel* chan, unsigned int id, L3Frame* frame)
@@ -76,6 +93,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 {
 	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(chan);
 	LOG(INFO) << "starting dispatch loop for connection " << id << (tch ? " with traffic" : "");
+	Timeval tPhy(PHY_INTERVAL);
 	unsigned int maxQ = gConfig.getNum("GSM.MaxSpeechLatency");
 	unsigned int tOut = tch ? 5 : 20; // TODO
 	while (gSigConn.valid() && (gConnMap.find(id) == chan)) {
@@ -108,6 +126,10 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 				break;
 			case DATA:
 			case UNIT_DATA:
+				if (tPhy.passed()) {
+					tPhy.future(PHY_INTERVAL);
+					sendPhyInfo(chan,id);
+				}
 				if (!connDispatchRR(chan,id,frame))
 					gSigConn.send(sapi,id,frame);
 				delete frame;
@@ -148,6 +170,7 @@ static void connDispatchChannel(LogicalChannel* chan, L3Frame* frame)
 		return;
 	}
 	if (id >= 0) {
+		sendPhyInfo(chan,id);
 		if (connDispatchRR(chan,id,frame) || gSigConn.send(0,id,frame))
 			connDispatchLoop(chan,id);
 		gConnMap.unmap(chan);
@@ -169,6 +192,7 @@ static void connDispatchReassigned(LogicalChannel* chan, L3Frame* frame)
 	}
 	LOG(INFO) << "channel " << *chan << " reallocated to connection " << id;
 	if (id >= 0) {
+		sendPhyInfo(chan,id);
 		if (connDispatchRR(chan,id,frame) || gSigConn.send(0,id,frame))
 			connDispatchLoop(chan,id);
 		gConnMap.unmap(chan);
