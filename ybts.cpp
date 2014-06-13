@@ -8745,6 +8745,7 @@ void YBTSDriver::initialize()
 	installRelay(Progress);
 	installRelay(MsgExecute);
 	installRelay(Halt);
+	installRelay(Help,120);
 	installRelay(Stop,"engine.stop");
 	installRelay(Start,"engine.start");
 	YBTSMsgHandler::install();
@@ -8894,6 +8895,27 @@ bool YBTSDriver::received(Message& msg, int id)
 		}
 	    }
 	    break;
+	case Help:
+	    {
+		static const char s_ybtsHelp[] = "  ybts {start|stop|restart|status}\r\n";
+		static const char s_mbtsHelp[] = "  " BTS_CMD " {commands...}\r\n";
+		const String& line = msg[YSTRING("line")];
+		if (line) {
+		    if (line == name()) {
+			msg.retValue() << s_ybtsHelp;
+			msg.retValue() << "Controls BTS operational state\r\n";
+		    }
+		    else if (line == YSTRING(BTS_CMD)) {
+			msg.retValue() << s_mbtsHelp;
+			msg.retValue() << "Provides access to MBTS internal commands\r\n";
+		    }
+		    else
+			return false;
+		    return true;
+		}
+		msg.retValue() << s_ybtsHelp << s_mbtsHelp;
+	    }
+	    return false;
     }
     return Driver::received(msg,id);
 }
@@ -8944,7 +8966,7 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
 
 bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const String& partWord)
 {
-    if (partLine.null()) {
+    if (partLine.null() || (partLine == YSTRING("help"))) {
 	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
 	itemComplete(msg.retValue(),name(),partWord);
     }
@@ -8958,9 +8980,11 @@ bool YBTSDriver::commandComplete(Message& msg, const String& partLine, const Str
 	itemComplete(msg.retValue(),YSTRING("ue"),partWord);
 	itemComplete(msg.retValue(),YSTRING("conn"),partWord);
     }
-    else if (partLine == YSTRING("debug"))
+    else if (partLine == YSTRING("debug")) {
+	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
 	itemComplete(msg.retValue(),YSTRING("transceiver"),partWord);
-    else if ((partLine == YSTRING("debug")) || (partLine == YSTRING("status")))
+    }
+    else if (partLine == YSTRING("status"))
 	itemComplete(msg.retValue(),YSTRING(BTS_CMD),partWord);
     if (partLine == m_statusUeCmd) {
 	itemComplete(msg.retValue(),s_all,partWord);
