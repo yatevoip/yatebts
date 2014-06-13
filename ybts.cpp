@@ -1771,6 +1771,7 @@ protected:
     virtual bool commandExecute(String& retVal, const String& line);
     virtual bool commandComplete(Message& msg, const String& partLine, const String& partWord);
     virtual bool setDebug(Message& msg, const String& target);
+    virtual void genUpdate(Message& msg);
 
     int m_state;
     Mutex m_stateMutex;
@@ -8467,6 +8468,7 @@ void YBTSDriver::changeState(int newStat)
 	s_startTime = 0;
 	s_idleTime = Time::now();
     }
+    changed();
 }
 
 void YBTSDriver::setRestart(int resFlag, bool on, unsigned int intervalMs)
@@ -9026,6 +9028,13 @@ bool YBTSDriver::setDebug(Message& msg, const String& target)
     if (target == YSTRING(BTS_CMD))
 	return m_logBts && m_logBts->setDebug(msg,target);
     return Driver::setDebug(msg,target);
+}
+
+void YBTSDriver::genUpdate(Message& msg)
+{
+    Driver::genUpdate(msg);
+    msg.setParam("state",stateName());
+    msg.setParam("operational",String::boolText(RadioUp == m_state));
 }
 
 
