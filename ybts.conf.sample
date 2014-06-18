@@ -342,13 +342,28 @@ Radio.C0=
 ; Defaults to 5
 ;Control.GPRSMaxIgnore=5
 
-; Handover.FailureHoldoff: integer: The number of seconds to wait before attempting another handover with a given neighbor BTS. Allowed values 2:7.
-;Handover.FailureHoldoff=5
+; Handover.InitialHoldoff: integer: Handover determination holdoff time in milliseconds
+;  after channel establishment. Allows the MS RSSI value to stabilize.
+; Allowed values 2000..7000
+; Defaults to 5000
+;Handover.InitialHoldoff=5000
 
-; Handover.LocalRSSIMin: integer: Do not handover if downlink RSSI is above this level (in dBm), regardless of power difference. Allowed values -100:-60. 
+; Handover.RepeatHoldoff: integer: Handover determination holdoff time in milliseconds
+;  after a previous attempt.
+; Allowed values 750..7000
+; Defaults to 3000
+;Handover.RepeatHoldoff=3000
+
+; Handover.LocalRSSIMin: integer: Do not handover if downlink RSSI is above this
+;  level (in dBm), regardless of power difference.
+; Allowed values -100..-50
+; Defaults to -80
 ;Handover.LocalRSSIMin=-80
 
-; Handover.ThresholdDelta: integer: A neighbor downlink signal must be this much stronger (in dB) than this downlink signal for handover to occur. Allowed values 5:20. 
+; Handover.ThresholdDelta: integer: A neighbor downlink signal must be this much
+;  stronger (in dB) than this downlink signal for handover to occur.
+; Allowed values 5..20
+; Defaults to 10
 ;Handover.ThresholdDelta=10
 
 ; MS.Power.Damping: integer: Damping value for MS power control loop

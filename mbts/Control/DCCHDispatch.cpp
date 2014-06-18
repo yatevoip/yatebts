@@ -93,6 +93,8 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 {
 	TCHFACCHLogicalChannel* tch = dynamic_cast<TCHFACCHLogicalChannel*>(chan);
 	LOG(INFO) << "starting dispatch loop for connection " << id << (tch ? " with traffic" : "");
+	if (chan->SACCH())
+		chan->SACCH()->measurementHoldOff();
 	Timeval tPhy(PHY_INTERVAL);
 	unsigned int maxQ = gConfig.getNum("GSM.MaxSpeechLatency");
 	unsigned int tOut = tch ? 5 : 20; // TODO
@@ -132,6 +134,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 				}
 				if (!connDispatchRR(chan,id,frame))
 					gSigConn.send(sapi,id,frame);
+			case HANDOVER_ACCESS:
 				delete frame;
 				continue;
 			case RELEASE:
@@ -220,6 +223,7 @@ static bool connDispatchEstablish(LogicalChannel* chan)
 					connDispatchReassigned(chan,frame);
 					break;
 				case L3RRMessage::PagingResponse:
+				case L3RRMessage::HandoverComplete:
 					connDispatchChannel(chan,frame);
 					break;
 				default:
@@ -265,11 +269,11 @@ void Control::DCCHDispatcher(LogicalChannel *DCCH)
 					//delete message;
 					//break;
 				}
-				// Removing handover support, for now.
-				//case HANDOVER_ACCESS: {
-				//	ProcessHandoverAccess(dynamic_cast<GSM::TCHFACCHLogicalChannel*>(DCCH));
-				//	break;
-				//}
+				case HANDOVER_ACCESS: {
+					if (ProcessHandoverAccess(DCCH))
+						connDispatchEstablish(DCCH);
+					break;
+				}
 				// We should never come here.
 				default: assert(0);
 			}

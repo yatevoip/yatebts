@@ -44,11 +44,13 @@ public:
 	GSM::LogicalChannel* mChan;
 	GSM::TCHFACCHLogicalChannel* mMedia;
 	GSM::SACCHLogicalChannel* mSACCH;
+	int mHoRef;
+	int mTA;
     };
     ConnectionMap();
-    int map(GSM::LogicalChannel* chan, GSM::SACCHLogicalChannel* sacch);
+    int map(GSM::LogicalChannel* chan, GSM::SACCHLogicalChannel* sacch, int ref = -1);
     void mapMedia(unsigned int id, GSM::TCHFACCHLogicalChannel* media);
-    bool unmap(unsigned int id);
+    GSM::LogicalChannel* unmap(unsigned int id);
     bool unmap(const GSM::LogicalChannel* chan);
     int remap(GSM::LogicalChannel* chan, GSM::TCHFACCHLogicalChannel* media, GSM::SACCHLogicalChannel* sacch);
     int find(const GSM::LogicalChannel* chan);
@@ -56,6 +58,9 @@ public:
     GSM::LogicalChannel* find(unsigned int id);
     GSM::TCHFACCHLogicalChannel* findMedia(unsigned int id);
     GSM::TCHFACCHLogicalChannel* findMedia(const GSM::LogicalChannel* chan);
+    int findRef(int ref);
+    inline void putTA(unsigned int id, int TA) { mMap[id].mTA = TA; }
+    inline int takeTA(unsigned int id) { mMap[id].mHoRef = -1; return mMap[id].mTA; }
 private:
     unsigned int mIndex;
     Conn mMap[BTS_CONN_MAP_SIZE];

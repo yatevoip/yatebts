@@ -8,72 +8,39 @@
 #ifndef NEIGHBORTABLE_H
 #define NEIGHBORTABLE_H
 
-#include <Sockets.h>
-#include <vector>
 #include <Threads.h>
-#include <set>
+#include <string>
+#include <vector>
 
-using namespace std;
-
-
-struct sqlite3;
 
 namespace Peering {
 
 class NeighborTable {
 
-	private:
+	struct Neighbor {
+		Neighbor(int c0, int bsic, const char* id) : C0(c0), BSIC(bsic), CELL_ID(id) { }
+		unsigned C0;
+		unsigned BSIC;
+		std::string CELL_ID;
+	};
 
-	struct sqlite3* mDB;		///< database connection
+private:
+	std::vector<Neighbor> mNeighbors;
 	std::vector<unsigned> mARFCNList;	///< current ARFCN list
 	int mBCCSet;				///< set of current BCCs
 	mutable Mutex mLock;
 
-	set<string> mConfigured;   ///< which ipaddresses in the table are configured
+public:
+	NeighborTable() : mBCCSet(0) {}
 
-	public:
+	/** Populate the list from a descriptor string */
+	bool setNeighbors(const char* list);
 
-	/** Age parameter value for undefined records. */
-	static const unsigned UNKNOWN = 0xFFFFFFFF;
-
-	// (pat) In order to prevent crashes caused by static initialization races, I added
-	// an empty constructor and moved initialization to the function NeighborTableInit.
-	NeighborTable() : mDB(0), mBCCSet(0) {}
-	/** Constructor opens the database and creates/populates the new table as needed. */
-	void NeighborTableInit(const char* dbPath);
-
-	/** Fill the neighbor table from GSM.Neighbors config. */
-	void fill();
-
-	/** Create a new neighbor record if it does not already exist. */
-	void addNeighbor(const struct sockaddr_in* address);
-
-	/**
-	  Add new information to a neighbor record to the table.
-	  @return true if the neighbor ARFCN list changed
-	*/
-	bool addInfo(const struct sockaddr_in* address, unsigned updated, unsigned C0, unsigned BSIC);
-
-	/** Gets age of parameters in seconds or UNDEFINED if unknown. */
-	unsigned paramAge(const char* address);
-
-	/** Returns a C-string that must be free'd by the caller. */
-	char* getAddress(unsigned BCCH_FREQ_NCELL, unsigned BSIC);
+	/** Returns the cell ID for a measurement. */
+	std::string getCellID(unsigned BCCH_FREQ_NCELL, unsigned BSIC);
 
 	/** Return the ARFCN given its position in the BCCH channel list (GSM 04.08 10.5.2.20). */
 	int getARFCN(unsigned BCCH_FREQ_NCELL);
-
-	/** Start the holdoff timer on this neighbor. */
-	void holdOff(const char* address, unsigned seconds);
-
-	/** Start the holdoff timer on this neighbor. */
-	void holdOff(const struct sockaddr_in* peer, unsigned seconds);
-
-	/** Return true if we are holding off requests to this neighbor. */
-	bool holdingOff(const char* address);
-
-	/** Send out new requests for old entries. */
-	void refresh();
 
 	/**
 		Get the neighbor cell ARFCNs as a vector.
@@ -84,21 +51,9 @@ class NeighborTable {
 
 	/** Get the neighbor cell BCC set as a bitmask. */
 	int BCCSet() const { return mBCCSet; }
-
-	private:
-
-	/** Get the neighbor cell BCC set as a bitmask. */
-	int getBCCSet() const;
-
-	/** Get the neighbor cell ARFCNs as a vector. */
-	std::vector<unsigned> getARFCNs() const;
 };
 
-
-
 } //namespace
-
-
 
 extern Peering::NeighborTable gNeighborTable;
 

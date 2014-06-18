@@ -50,10 +50,10 @@ namespace Control {
 void HandoverDetermination(const GSM::L3MeasurementResults &measurements, GSM::SACCHLogicalChannel* SACCH);
 
 /** Save handover parameters from L1 in the proper transaction record. */
-bool SaveHandoverAccess(unsigned handoverReference, float RSSI, float timingError, const GSM::Time& timestamp);
+bool SaveHandoverAccess(unsigned handoverReference, GSM::L1FEC* l1, float RSSI, float timingError, const GSM::Time& timestamp);
 
-/** Process the handover access; returns when the transaction is cleared. */
-void ProcessHandoverAccess(GSM::TCHFACCHLogicalChannel *TCH);
+/** Process the handover access; returns true to continue. */
+bool ProcessHandoverAccess(GSM::LogicalChannel *chan);
 
 /**@ Access Grant mechanisms */
 //@{

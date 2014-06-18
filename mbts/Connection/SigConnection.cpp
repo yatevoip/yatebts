@@ -30,6 +30,7 @@
 #include <GSML3RRMessages.h>
 #include <GSMTransfer.h>
 #include <GSMConfig.h>
+#include <NeighborTable.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
@@ -74,6 +75,45 @@ static void processPaging(const char* ident, uint8_t type)
     }
     else
 	LOG(ERR) << "received unknown Paging identity " << ident;
+}
+
+static void processHandover(SigConnection* conn, unsigned char info)
+{
+    if (!gBTS.hold()) {
+	GSM::LogicalChannel* chan = gBTS.getTCH();
+	if (chan) {
+	    int id = gConnMap.map(chan,chan->SACCH(),info);
+	    if (id >= 0) {
+		gConnMap.mapMedia(id,dynamic_cast<TCHFACCHLogicalChannel*>(chan));
+		LOG(INFO) << "for reference " << (unsigned int)info << " mapped id " << id << " channel " << *chan;
+		const L3ChannelDescription desc = chan->channelDescription();
+		L3HandoverCommand cmd(
+		    L3CellDescription(gTRX.C0(),gBTS.NCC(),gBTS.BCC()),
+		    L3ChannelDescription2(desc.typeAndOffset(),desc.TN(),desc.TSC(),desc.ARFCN()),
+		    L3HandoverReference(info),
+		    L3PowerCommandAndAccessType(),
+		    L3SynchronizationIndication(true,true)
+		);
+		chan->handoverPending(true);
+		L3Frame frm(cmd,DATA);
+		unsigned int len = frm.length();
+		unsigned char buf[len];
+		frm.pack(buf);
+		conn->send(SigHandoverAck,info,id,buf,len);
+		return;
+	    }
+	    else {
+		LOG(ERR) << "for reference " << (unsigned int)info << " failed to map channel " << *chan;
+		chan->send(HARDRELEASE);
+	    }
+	}
+	else
+	    LOG(NOTICE) << "for reference " << (unsigned int)info << " failed to allocate channel";
+    }
+    else
+	LOG(NOTICE) << "for reference " << (unsigned int)info << " the BTS was holding off";
+    // We failed, report it back
+    conn->send(SigHandoverReject,info);
 }
 
 
@@ -144,6 +184,9 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info)
 	case SigHeartbeat:
 	    // TODO
 	    break;
+	case SigHandoverRequest:
+	    processHandover(this,info);
+	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim;
     }
@@ -164,6 +207,10 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, const unsigne
 	    else
 		LOG(ERR) << "received short Stop Paging of length " << len;
 	    break;
+	case SigNeighborsList:
+	    if (!gNeighborTable.setNeighbors((const char*)data))
+		LOG(ERR) << "received invalid Neighbors List of length " << len;
+	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with data";
     }
@@ -173,8 +220,14 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 {
     switch (prim) {
 	case SigConnRelease:
-	    if (!gConnMap.unmap(id))
-		LOG(ERR) << "received SigConnRelease for unmapped id " << id;
+	    {
+		LogicalChannel* ch = gConnMap.unmap(id);
+		if (!ch) {
+		    LOG(ERR) << "received SigConnRelease for unmapped id " << id;
+		}
+		else if (info)
+		    ch->send(HARDRELEASE);
+	    }
 	    break;
 	case SigStartMedia:
 	    {
@@ -305,6 +358,8 @@ void SigConnection::process(const unsigned char* data, size_t len)
     }
     LOG(DEBUG) << "received message primitive " << (unsigned int)data[0] << " length " << len;
     mHbRecv.future(HB_TIMEOUT);
+    // TODO: If this is really slow move everything to a separate thread
+    Timeval timer;
     if (data[0] & 0x80) {
 	len -= 2;
 	if (len)
@@ -324,6 +379,9 @@ void SigConnection::process(const unsigned char* data, size_t len)
 	else
 	    process((BtsPrimitive)data[0],data[1],id);
     }
+    long ms = timer.elapsed();
+    if (ms > 500)
+	LOG(ERR) << "primitive " << (unsigned int)data[0] << " length " << len << " took " << ms << " ms";
 }
 
 void SigConnection::started()

@@ -268,6 +268,9 @@ public:
 	/** ARFCN */ /* TODO: Use this, or when obtaining the physical info use ARFCN from a diff location? */
 	unsigned ARFCN() const { assert(mL1); return mL1->ARFCN(); }
 
+	/** Layer 1 */
+	L1FEC* layer1() const { return mL1; }
+
 	/**@name Channel stats from the physical layer */
 	//@{
 	/** Carrier index. */
@@ -417,6 +420,7 @@ class SACCHLogicalChannel : public LogicalChannel {
 	 for recording along with GPS and other data in MobilityManagement.cpp */
 	L3MeasurementResults mMeasurementResults;
 	const LogicalChannel *mHost;
+	Timeval mMeasurementHoldOff;	///< MS measurement holdoff
 
 	public:
 
@@ -429,6 +433,7 @@ class SACCHLogicalChannel : public LogicalChannel {
 	ChannelType type() const { return SACCHType; }
 
 	void open();
+	void measurementHoldOff();
 
 	friend void *SACCHLogicalChannelServiceLoopAdapter(SACCHLogicalChannel*);
 

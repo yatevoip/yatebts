@@ -327,6 +327,7 @@ SACCHLogicalChannel::SACCHLogicalChannel(
 
 void SACCHLogicalChannel::open()
 {
+	measurementHoldOff();
 	LogicalChannel::open();
 	if (!mRunning) {
 		mRunning=true;
@@ -334,6 +335,11 @@ void SACCHLogicalChannel::open()
 	}
 }
 
+
+void SACCHLogicalChannel::measurementHoldOff()
+{
+	mMeasurementHoldOff.future(gConfig.getNum("GSM.Handover.InitialHoldoff"));
+}
 
 
 L3Message* processSACCHMessage(L3Frame *l3frame)
@@ -409,9 +415,12 @@ void SACCHLogicalChannel::serviceLoop()
 					// Note that the typeAndOffset of a SACCH match the host channel.
 					gPhysStatus.setPhysical(this, mMeasurementResults);
 					// Check for handover requirement.
-					//Control::HandoverDetermination(mMeasurementResults,this);
+					if (mMeasurementHoldOff.passed()) {
+						mMeasurementHoldOff.future(gConfig.getNum("GSM.Handover.RepeatHoldoff"));
+						Control::HandoverDetermination(mMeasurementResults,this);
+					}
 				} else {
-					OBJLOG(NOTICE) << "SACCH SAP0 sent unaticipated message " << rrMessage;
+					OBJLOG(NOTICE) << "SACCH SAP0 sent unanticipated message " << rrMessage;
 				}
 				delete rrMessage;
 			}

@@ -24,9 +24,9 @@ ALL_INCLUDES := $(GSM_INCLUDES) -I@srcdir@/../Control -I@srcdir@/../CLI -I@srcdi
     -I@srcdir@/../Peering -I@srcdir@/../SGSNGGSN -I@srcdir@/../TRXManager
 
 SQL_LIBS := -L../sqlite3 -lsqlite3
-GSM_LIBS := -L../GSM -lGSM -L../Connection -lConnection -L../CommonLibs -lCommonLibs \
-    -L../Globals -lGlobals $(SQL_LIBS)
-ALL_LIBS := -L../CLI -lCLI -L../Control -lControl -L../GPRS -lGPRS -L../Peering -lPeering \
+GSM_LIBS := -L../GSM -lGSM -L../Connection -lConnection -L../Peering -lPeering \
+    -L../CommonLibs -lCommonLibs -L../Globals -lGlobals $(SQL_LIBS)
+ALL_LIBS := -L../CLI -lCLI -L../Control -lControl -L../GPRS -lGPRS \
     -L../SGSNGGSN -lSGSNGGSN -L../TRXManager -lTRXManager $(GSM_LIBS)
 A53_LIBS := -L../A53 -lA53
 

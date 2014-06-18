@@ -41,6 +41,8 @@ public:
     bool send(BtsPrimitive prim, unsigned char info = 0);
     bool send(BtsPrimitive prim, unsigned char info, unsigned int id);
     bool send(BtsPrimitive prim, unsigned char info, unsigned int id, const void* data, size_t len);
+    inline bool send(BtsPrimitive prim, unsigned char info, unsigned int id, const std::string str)
+	{ return send(prim, info, id, str.data(), str.size()); }
     bool send(unsigned char sapi, unsigned int id, const GSM::L3Frame* frame);
 protected:
     virtual bool send(const void* buffer, size_t len);

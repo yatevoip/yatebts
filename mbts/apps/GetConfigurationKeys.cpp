@@ -1166,13 +1166,25 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Handover.FailureHoldoff","5",
-		"seconds",
+	tmp = new ConfigurationKey("GSM.Handover.InitialHoldoff","5000",
+		"milliseconds",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::VALRANGE,
-		"2:7",// educated guess
+		"2000:7000",// educated guess
 		false,
-		"The number of seconds to wait before attempting another handover with a given neighbor BTS."
+		"Handover determination holdoff time after channel establishment.  "
+			"Allows the MS RSSI value to stabilize."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("GSM.Handover.RepeatHoldoff","3000",
+		"milliseconds",
+		ConfigurationKey::CUSTOMERTUNE,
+		ConfigurationKey::VALRANGE,
+		"750:7000",// educated guess
+		false,
+		"Handover determination holdoff time after a previous attempt."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
@@ -1183,7 +1195,7 @@ ConfigurationKeyMap getConfigurationKeys()
 		"dBm",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::VALRANGE,
-		"-100:-60",// educated guess
+		"-100:-50",// educated guess
 		false,
 		"Do not handover if downlink RSSI is above this level (in dBm), regardless of power difference."
 	);
@@ -1665,17 +1677,6 @@ ConfigurationKeyMap getConfigurationKeys()
 			"Should be a factor of 6.  "
 			"Set to 0 to disable periodic registration.  "
 			"Should be smaller than SIP registration period."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("Peering.NeighborTable.Path","",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH_OPT,
-		"",
-		true,
-		"File path for neighbor information database."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

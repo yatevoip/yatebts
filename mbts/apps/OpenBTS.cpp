@@ -277,9 +277,6 @@ int main(int argc, char *argv[])
 
 	gReports.incr("OpenBTS.Starts");
 
-	gNeighborTable.NeighborTableInit(
-		gConfig.getStr("Peering.NeighborTable.Path").c_str());
-
 	try {
 
 	srandom(time(NULL));

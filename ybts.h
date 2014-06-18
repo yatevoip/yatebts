@@ -46,10 +46,15 @@ enum BtsPrimitive {
     SigMediaStarted     =   7,           // Notify that the traffic channel has started
     SigEstablishSAPI    =   8,           // Request / notification about SAPI establishment
     SigPhysicalInfo     =   9,           // Physical channel information
+    SigHandoverRequired =  10,           // Outbound handover required
+    SigHandoverAck      =  11,           // Inbound handover acknowledge
     SigHandshake        = 128,           // Handshake
     SigRadioReady       = 129,           // Radio side is functioning
     SigStartPaging      = 130,           // Start paging an UE
     SigStopPaging       = 131,           // Stop paging an UE
+    SigNeighborsList    = 132,           // Update the list of neighbor cells
+    SigHandoverRequest  = 133,           // Requests resources for inbound handover
+    SigHandoverReject   = 134,           // Handover resources allocation failed
     SigHeartbeat        = 255            // Heartbeat
 };
 

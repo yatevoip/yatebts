@@ -271,17 +271,21 @@ Value is number of consecutive messages to ignore.
 Interval allowed: 3..8.
 Defaults to 5"
 			),
-			"Handover.FailureHoldoff" => array( 
-				array("selected"=>5, 2,3,4,5,6,7),
+			"Handover.InitialHoldoff" => array(
+				array("selected"=>5000, 2000,3000,4000,5000,6000,7000),
 				"display" => "select",
-				"comment" => "The number of seconds to wait before attempting another handover with a given neighbor BTS.
-Allowed values 2:7."
+				"comment" => "Handover determination holdoff time after channel establishment, allows the MS RSSI value to stabilize. 2000 to 7000 ms, default 5000."
 			),
-			"Handover.LocalRSSIMin" => array( 
-				array("selected"=>-80, -100,-99,-98,-97,-96,-95,-94,-93,-92,-91,-90,-89,-88,-87,-86,-85,-84,-83,-82,-81,-80,-79,-78,-77,-76,-75,-74,-73,-72,-71,-70,-69,-68,-67,-66,-65,-64,-63,-62,-61,-60),
+			"Handover.RepeatHoldoff" => array(
+				array("selected"=>3000, 750,1000,2000,3000,4000,5000,6000,7000),
+				"display" => "select",
+				"comment" => "Handover determination holdoff time after a previous attempt. 750 to 7000 ms, default 3000."
+			),
+			"Handover.LocalRSSIMin" => array(
+				array("selected"=>-80, -100,-99,-98,-97,-96,-95,-94,-93,-92,-91,-90,-89,-88,-87,-86,-85,-84,-83,-82,-81,-80,-79,-78,-77,-76,-75,-74,-73,-72,-71,-70,-69,-68,-67,-66,-65,-64,-63,-62,-61,-60,-59,-58,-57,-56,-55,-54,-53,-52,-51,-50),
 				"display" => "select",
 				"comment" => "Do not handover if downlink RSSI is above this level (in dBm), regardless of power difference.
-Allowed values -100:-60."
+Allowed values -100:-50."
 			),	
 			"Handover.ThresholdDelta" => array(
 			       array("selected" => 10, 5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20),	

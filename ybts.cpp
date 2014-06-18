@@ -580,6 +580,10 @@ public:
 	{ return m_owner; }
     inline bool removed() const
 	{ return m_removed; }
+    inline bool hardRelease() const
+	{ return m_hardRelease; }
+    inline void hardRelease(bool hard)
+	{ m_hardRelease = hard; }
     inline bool waitForTraffic() const
 	{ return m_waitForTraffic != 0; }
     inline bool authenticated() const
@@ -632,6 +636,8 @@ public:
 	    Lock lck(this);
 	    m_phyInfo = info;
 	}
+    inline int hoReference() const
+	{ return m_reference; }
     inline bool hasSS()
 	{ return m_ss != 0; }
     inline YBTSTid* takeSS() {
@@ -682,6 +688,10 @@ public:
 	    m_auth = 0;
 	    m_authTout = 0;
 	}
+    // Partially deserialize and save GSM state
+    void saveGsmState(String& state);
+    // Restore saved GSM state and rebuild channel
+    void loadGsmState(RefPointer<YBTSChan>& chan, bool outgoing);
     // Start media traffic. Return true is already started, false if requesting
     bool startTraffic(uint8_t mode = 1);
     // Handle media traffic start response
@@ -693,6 +703,16 @@ public:
     void sapiEstablish(uint8_t sapi);
     // Send an L3 connection related message
     bool sendL3(XmlElement* xml, uint8_t info = 0);
+    // Check if the connection can be handed over
+    inline bool canHandover() const
+	{ return !(m_removed || m_xml || m_ss || m_auth || m_waitForTraffic); }
+    // Set the handover reference for this connection
+    inline void setHandover(uint8_t reference)
+	{ m_reference = reference; }
+    // Handle Handover Required
+    void gotHoRequired(const String& info);
+    // Serialize into a String
+    bool serialize(String& str);
 protected:
     YBTSConn(YBTSSignalling* owner, uint16_t connId);
     // Set connection UE. Return false if requested to change an existing, different UE
@@ -700,14 +720,17 @@ protected:
 
     YBTSSignalling* m_owner;
     bool m_removed;                      // Removed from owner
+    bool m_hardRelease;                  // Should hard release (after handover)
     XmlElement* m_xml;
     RefPointer<YBTSUE> m_ue;
     ObjList m_sms;                       // Pending sms
     YBTSTid* m_ss;                       // Pending non call related SS transaction
     String m_phyInfo;                    // Latest physical channel information
+    String m_savedState;                 // GSM state prepared for Handover
     uint8_t m_traffic;                   // Traffic channel available (mode)
     uint8_t m_waitForTraffic;            // Waiting for traffic to start
     uint8_t m_sapiUp;                    // SAPI status: lower 4 bits SAPI + upper 4 bits if SAPI up on SDCCH
+    int m_reference;                     // Handover reference
     // The following data is used by YBTSSignalling and protected by conns list mutex
     uint64_t m_timeout;                  // Connection timeout
     unsigned int m_usage;                // Usage counter
@@ -1044,6 +1067,7 @@ class YBTSUE : public RefObject, public Mutex, public YBTSConnIdHolder
 {
     friend class YBTSMM;
     friend class YBTSDriver;
+    friend class YBTSConn;
 public:
     inline const String& imsi() const
 	{ return m_imsi; }
@@ -1082,6 +1106,9 @@ public:
     bool startPaging(BtsPagingChanType type);
     void stopPaging();
     void stopPagingNow();
+    inline bool canHandover() const
+	{ return !(imsiDetached() || pageCnt()); }
+    bool serialize(String& str);
 
 protected:
     inline YBTSUE(YBTSMM* mm, const char* imsi, const char* tmsi)
@@ -1089,6 +1116,7 @@ protected:
 	m_mm(mm), m_registered(true), m_imsiDetached(false), m_removed(false),
 	m_askIMEI(false), m_pageCnt(0), m_imsi(imsi), m_tmsi(tmsi)
 	{}
+    YBTSUE(YBTSMM* mm, String& state);
     virtual void destroyed();
 
     YBTSMM* m_mm;
@@ -1337,6 +1365,8 @@ public:
     YBTSCallDesc(YBTSChan* chan, const XmlElement& xml, bool regular, const String* callRef);
     // Outgoing (MT)
     YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& callRef);
+    // Handover
+    YBTSCallDesc(YBTSChan* chan, String& desc);
     ~YBTSCallDesc();
     inline bool incoming() const
 	{ return m_incoming; }
@@ -1386,6 +1416,8 @@ public:
     static inline const char* stateName(int stat)
 	{ return lookup(stat,s_stateName); }
     static const TokenDict s_stateName[];
+    // Serialize into a String
+    void serialize(String& str);
 
     int m_state;
     bool m_incoming;
@@ -1409,6 +1441,8 @@ public:
     YBTSChan(YBTSConn* conn);
     // Outgoing
     YBTSChan(YBTSUE* ue, YBTSConn* conn = 0);
+    // Handover
+    YBTSChan(YBTSUE* ue, YBTSConn* conn, bool outgoing, String& state);
     inline YBTSConn* conn() const
 	{ return m_conn; }
     inline YBTSUE* ue() const
@@ -1417,12 +1451,22 @@ public:
     bool initIncoming(const XmlElement& xml, bool regular, const String* callRef);
     // Init outgoing chan. Return false to destruct the channel
     bool initOutgoing(Message& msg);
+    // Init handover chan. Return false to destruct the channel
+    bool initHandover();
     // Handle CC messages
     bool handleCC(const XmlElement& xml, const String* callRef, bool tiFlag);
     // Handle media start/alloc response
     void handleMediaStartRsp(bool ok);
+    // Handle Handover Required
+    void handleHoRequired(const String& info);
+    // Handle Handover Failure
+    void handleHoFailure(const XmlElement& xml);
     // Connection released notification
     void connReleased();
+    // Check if the call can be handed over
+    inline bool canHandover() const
+	{ return isAnswered() && ue() && ue()->canHandover() &&
+	    !(m_dtmf || m_hungup || m_paging || m_pending || m_authThread); }
     // Check if MT call can be accepted
     bool canAcceptMT();
     // Init MT call if possible
@@ -1433,6 +1477,8 @@ public:
     inline void stop()
 	{ hangup("interworking"); }
     Message* message(const char* name, bool minimal = false, bool data = false);
+    // Serialize into a String
+    bool serialize(String& str);
 
 protected:
     inline YBTSCallDesc* activeCall()
@@ -1500,8 +1546,8 @@ protected:
 #if 0
     virtual bool msgTone(Message& msg, const char* tone);
     virtual bool msgText(Message& msg, const char* text);
-    virtual bool msgUpdate(Message& msg);
 #endif
+    virtual bool msgUpdate(Message& msg);
     virtual void endDisconnect(const Message& msg, bool handled);
     virtual void destroyed();
 
@@ -1539,6 +1585,18 @@ protected:
     void notify(const char* error = "failure");
     RefPointer<YBTSChan> m_chan;
     Message* m_route;
+};
+
+class YBTSHoCommand : public String
+{
+public:
+    YBTSHoCommand(const char* value, unsigned char ref)
+	: String(value), m_ref(ref)
+	{ }
+    unsigned char reference() const
+	{ return m_ref; }
+private:
+    unsigned char m_ref;
 };
 
 class YBTSDriver : public Driver
@@ -1635,6 +1693,12 @@ public:
     const char* startMtSs(YBTSConn* conn, YBTSTid*& ss);
     // Radio ready notification. Return false if state is invalid
     bool radioReady();
+    // Handover Command
+    void handoverCmd(unsigned char ref, const XmlElement* cmd = 0, YBTSConn* conn = 0);
+    // Handle Handover Failure
+    void handleHoFailure(YBTSMessage& m, YBTSConn* conn);
+    // Handle Handover Complete
+    void handleHoComplete(YBTSMessage& m, YBTSConn* conn);
     void restart(unsigned int restartMs = 1, unsigned int stopIntervalMs = 0);
     void stopNoRestart();
     inline bool haveChan(const String& chanId) {
@@ -1805,6 +1869,8 @@ protected:
     Mutex m_mtSsMutex;                   // Protects MT SS list
     ObjList m_mtSs;                      // List of pending MT SS
     bool m_mtSsNotEmpty;                 // List of MT SS is not empty
+    ObjList m_hoWaiting;                 // List of messages waiting for Handover Ack
+    Mutex m_hoListMutex;
     int m_exportXml;                     // Export xml as string(-1), obj(1) or both(0)
     String m_statusCmd;
     String m_statusOverCmd;
@@ -1907,10 +1973,15 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(MediaStarted),
     MAKE_SIG(EstablishSAPI),
     MAKE_SIG(PhysicalInfo),
+    MAKE_SIG(HandoverRequired),
+    MAKE_SIG(HandoverAck),
     MAKE_SIG(Handshake),
     MAKE_SIG(RadioReady),
     MAKE_SIG(StartPaging),
     MAKE_SIG(StopPaging),
+    MAKE_SIG(NeighborsList),
+    MAKE_SIG(HandoverRequest),
+    MAKE_SIG(HandoverReject),
     MAKE_SIG(Heartbeat),
 #undef MAKE_SIG
     {0,0}
@@ -2892,6 +2963,16 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	case SigPhysicalInfo:
 	    m->m_xml = new XmlElement("PhysicalInfo",String((const char*)data,len));
 	    break;
+	case SigHandoverRequired:
+	    m->m_xml = new XmlElement("HandoverRequired",String((const char*)data,len));
+	    break;
+	case SigHandoverAck:
+	    {
+		String tmp;
+		tmp.hexify(data,len);
+		m->m_xml = new XmlElement("HandoverAck",tmp);
+	    }
+	    break;
 	case SigEstablishSAPI:
 	case SigHandshake:
 	case SigRadioReady:
@@ -2899,6 +2980,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	case SigConnLost:
 	case SigMediaError:
 	case SigMediaStarted:
+	case SigHandoverReject:
 	    break;
 	default:
 	    reason = "No decoder";
@@ -2916,10 +2998,20 @@ static inline bool encodeMsg(GSML3Codec& codec, const YBTSMessage& msg, DataBloc
     String& reason)
 {
     if (msg.xml()) {
-	unsigned int e = codec.encode(msg.xml(),buf);
-	if (!e)
-	    return true;
-	reason << "Codec error " << e << " (" << lookup(e,GSML3Codec::s_errorsDict,"unknown") << ")";
+	if (msg.xml()->getTag() == YSTRING("Raw")) {
+	    DataBlock raw;
+	    if (raw.unHexify(msg.xml()->getText()) && raw.data()) {
+		buf += raw;
+		return true;
+	    }
+	    reason = "Invalid hexadecimal string";
+	}
+	else {
+	    unsigned int e = codec.encode(msg.xml(),buf);
+	    if (!e)
+		return true;
+	    reason << "Codec error " << e << " (" << lookup(e,GSML3Codec::s_errorsDict,"unknown") << ")";
+	}
     }
     else
 	reason = "Empty XML";
@@ -2954,6 +3046,7 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    break;
 	case SigStartPaging:
 	case SigStopPaging:
+	case SigNeighborsList:
 	    if (!msg.xml()) {
 		reason = "Missing XML";
 		break;
@@ -2962,12 +3055,12 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    return true;
 	case SigHeartbeat:
 	case SigHandshake:
+	case SigHandoverRequest:
 	case SigConnRelease:
 	case SigStartMedia:
 	case SigStopMedia:
 	case SigAllocMedia:
 	case SigEstablishSAPI:
-	case SigPhysicalInfo:
 	    return true;
 	default:
 	    reason = "No encoder";
@@ -3184,11 +3277,13 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     YBTSConnIdHolder(connId),
     m_owner(owner),
     m_removed(false),
+    m_hardRelease(false),
     m_xml(0),
     m_ss(0),
     m_traffic(0),
     m_waitForTraffic(0),
     m_sapiUp(1),
+    m_reference(-1),
     m_timeout(0),
     m_usage(0),
     m_extTout(0),
@@ -3204,6 +3299,40 @@ YBTSConn::~YBTSConn()
 {
     TelEngine::destruct(m_xml);
     TelEngine::destruct(m_ss);
+}
+
+bool YBTSConn::serialize(String& str)
+{
+    if (!(ue() && ue()->serialize(str)))
+	return false;
+    str << " " << (int)m_traffic << ":" << (int)m_sapiUp;
+    // TODO
+    return true;
+}
+
+void YBTSConn::saveGsmState(String& state)
+{
+    if (ue() || !__plugin.mm())
+	return;
+    Debug(__plugin.signalling(),DebugNote,"Connection %u saving GSM state '%s'",
+	connId(),state.c_str());
+    setUE(new YBTSUE(__plugin.mm(),state));
+    int traf = m_traffic, sapi = m_sapiUp;
+    state >> traf >> ":" >> sapi >> " ";
+    m_traffic = traf; m_sapiUp = sapi;
+    m_savedState = state;
+}
+
+void YBTSConn::loadGsmState(RefPointer<YBTSChan>& chan, bool outgoing)
+{
+    DDebug(DebugInfo,"YBTSConn::loadGsmState '%s'",m_savedState.c_str());
+    if (chan || !m_savedState)
+	return;
+    chan = new YBTSChan(ue(),this,outgoing,m_savedState);
+    if (!chan->initHandover())
+	chan->deref();
+    m_savedState.clear();
+    m_reference = -1;
 }
 
 bool YBTSConn::startTraffic(uint8_t mode)
@@ -3293,6 +3422,24 @@ void YBTSConn::sapiEstablish(uint8_t sapi)
 bool YBTSConn::sendL3(XmlElement* xml, uint8_t info)
 {
     return m_owner->sendL3Conn(connId(),xml,info);
+}
+
+// Handle Handover Required
+void YBTSConn::gotHoRequired(const String& info)
+{
+    if (!canHandover()) {
+	DDebug(__plugin.signalling(),DebugAll,
+	    "Connection %u cannot start a handover at this time...",connId());
+	return;
+    }
+    RefPointer<YBTSChan> chan;
+    if (__plugin.findChan(connId(),chan))
+	chan->handleHoRequired(info);
+#ifdef DEBUG
+    else
+	Debug(__plugin.signalling(),DebugAll,
+	    "Connection %u cannot start handover without channel",connId());
+#endif
 }
 
 // Set connection UE. Return false if requested to change an existing, different UE
@@ -3773,7 +3920,7 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 	    TelEngine::destruct(ss);
 	}
 	if (notifyPeer) {
-	    YBTSMessage m(SigConnRelease,0,connId);
+	    YBTSMessage m(SigConnRelease,conn->hardRelease(),connId);
 	    send(m);
 	}
     }
@@ -4134,19 +4281,26 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		RefPointer<YBTSConn> conn;
 		if (proto == YSTRING("MM")) {
 		    findConn(conn,msg.connId(),true);
+		    conn->hardRelease(false);
 		    __plugin.mm()->handlePDU(msg,conn);
 		}
 		else if (proto == YSTRING("CC")) {
-		    if (findConnDrop(msg,conn,msg.connId()))
+		    if (findConnDrop(msg,conn,msg.connId())) {
+			conn->hardRelease(false);
 			__plugin.handleCC(msg,conn);
+		    }
 		}
 		else if (proto == YSTRING("SMS")) {
-		    if (findConnDrop(msg,conn,msg.connId()))
+		    if (findConnDrop(msg,conn,msg.connId())) {
+			conn->hardRelease(false);
 			__plugin.handleSmsPDU(msg,conn);
+		    }
 		}
 		else if (proto == YSTRING("SS")) {
-		    if (findConnDrop(msg,conn,msg.connId()))
+		    if (findConnDrop(msg,conn,msg.connId())) {
+			conn->hardRelease(false);
 			__plugin.handleSSPDU(msg,conn);
+		    }
 		}
 		else if (proto == YSTRING("RRM"))
 		    handleRRM(msg);
@@ -4177,6 +4331,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		RefPointer<YBTSConn> conn;
 		findConn(conn,msg.connId(),false);
 		if (conn) {
+		    conn->hardRelease(false);
 		    conn->sapiEstablish(msg.info());
 		    __plugin.checkMtService(conn->ue(),conn,false,true);
 		}
@@ -4185,10 +4340,32 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	case SigPhysicalInfo:
 	    if (msg.connId() && msg.xml()) {
 		RefPointer<YBTSConn> conn;
-		findConn(conn,msg.connId(),true);
+		findConn(conn,msg.connId(),false);
 		if (conn)
 		    conn->setPhyInfo(msg.xml()->getText());
 	    }
+	    return Ok;
+	case SigHandoverRequired:
+	    if (msg.connId() && msg.xml()) {
+		RefPointer<YBTSConn> conn;
+		findConn(conn,msg.connId(),false);
+		if (conn)
+		    conn->gotHoRequired(msg.xml()->getText());
+	    }
+	    return Ok;
+	case SigHandoverAck:
+	    if (msg.connId()) {
+		RefPointer<YBTSConn> conn;
+		findConn(conn,msg.connId(),true);
+		conn->setHandover(msg.info());
+		// Send HARDRELEASE if timer expires
+		conn->hardRelease(true);
+		setConnUsageInternal(*conn,false,0);
+		__plugin.handoverCmd(msg.info(),msg.xml(),conn);
+	    }
+	    return Ok;
+	case SigHandoverReject:
+	    __plugin.handoverCmd(msg.info());
 	    return Ok;
 	case SigHandshake:
 	    return handleHandshake(msg);
@@ -4217,8 +4394,23 @@ void YBTSSignalling::handleRRM(YBTSMessage& m)
 	RefPointer<YBTSConn> conn;
 	bool newConn = false;
 	findConnCreate(conn,m.connId(),newConn);
+	conn->hardRelease(false);
 	if (!__plugin.mm()->handlePagingResponse(m,conn,*ch) && newConn)
 	    dropConn(m.connId(),true);
+    }
+    else if (*t == YSTRING("HandoverFailure")) {
+	RefPointer<YBTSConn> conn;
+	if (findConnDrop(m,conn,m.connId())) {
+	    conn->hardRelease(false);
+	    __plugin.handleHoFailure(m,conn);
+	}
+    }
+    else if (*t == YSTRING("HandoverComplete")) {
+	RefPointer<YBTSConn> conn;
+	if (findConnDrop(m,conn,m.connId())) {
+	    conn->hardRelease(false);
+	    __plugin.handleHoComplete(m,conn);
+	}
     }
     else
 	Debug(this,DebugMild,"Unhandled '%s' in %s [%p]",t->c_str(),m.name(),this);
@@ -4516,6 +4708,38 @@ void YBTSUE::destroyed()
 	m->removeUE(this,"destroyed");
     Debug(&__plugin,DebugAll,"UE destroyed [%p]",this);
     RefObject::destroyed();
+}
+
+YBTSUE::YBTSUE(YBTSMM* mm, String& state)
+    : Mutex(false,"YBTSUE"),
+      m_mm(mm), m_registered(true), m_imsiDetached(false), m_removed(false),
+      m_askIMEI(false), m_pageCnt(0)
+{
+    int sep = state.find(':');
+    if (sep < 0)
+	return;
+    m_imsi = state.substr(0,sep);
+    state = state.substr(sep + 1);
+    sep = state.find(':');
+    if (sep < 0)
+	return;
+    m_imei = state.substr(0,sep);
+    state = state.substr(sep + 1);
+    sep = state.find(' ');
+    if (sep < 0) {
+	m_tmsi = state;
+	state.clear();
+    }
+    else {
+	m_tmsi = state.substr(0,sep);
+	state = state.substr(sep + 1);
+    }
+}
+
+bool YBTSUE::serialize(String& str)
+{
+    str << imsi() << ":" << imei() << ":" << tmsi();
+    return true;
 }
 
 
@@ -5656,6 +5880,43 @@ YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, const ObjList& xml, const String& cal
     // TODO: pick relevant info from XML list
 }
 
+// Handover
+YBTSCallDesc::YBTSCallDesc(YBTSChan* chan, String& desc)
+    : YBTSConnIdHolder(chan->connId()),
+    m_state(Null),
+    m_incoming(false),
+    m_regular(true),
+    m_timeout(0),
+    m_relSent(0),
+    m_chan(chan)
+{
+    __plugin.signalling()->setConnUsage(connId(),true);
+    DDebug(chan,DebugAll,"Loading call descriptor from '%s'",desc.c_str());
+    char t;
+    desc >> t;
+    m_regular = (t != 'e');
+    desc >> ":";
+    int sep = desc.find(':');
+    if (sep >= 0) {
+	static_cast<String&>(*this) = desc.substr(0,sep);
+	desc = desc.substr(sep + 1);
+	m_incoming = (at(0) == 'i');
+	m_callRef = substr(1);
+    }
+    desc >> m_state >> ":";
+    sep = desc.find('|');
+    if (sep >= 0) {
+	m_called = desc.substr(0,sep);
+	desc.substr(sep + 1);
+    }
+    else {
+	m_called = desc;
+	desc.clear();
+    }
+    DDebug(chan,DebugInfo,"Restored %s call '%s' state %s called '%s'",
+	(m_regular ? "regular" : "emergency"),c_str(),stateName(),m_called.c_str());
+}
+
 YBTSCallDesc::~YBTSCallDesc()
 {
     if (__plugin.signalling())
@@ -5746,6 +6007,13 @@ void YBTSCallDesc::sendGSMRel(bool rel, const String& callRef, bool tiFlag, cons
     __plugin.signalling()->sendL3Conn(connId,cc);
 }
 
+void YBTSCallDesc::serialize(String& str)
+{
+    if (m_relSent)
+	return;
+    // TODO
+    str << (m_regular ? "|r:" : "|e:")  << c_str() << ":" << m_state << ":" << m_called;
+}
 
 //
 // YBTSChan
@@ -5813,6 +6081,57 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
     Debug(this,DebugCall,"Outgoing address=%s [%p]",m_address.c_str(),this);
 }
 
+// Handover
+YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn, bool outgoing, String& state)
+    : Channel(__plugin,0,outgoing),
+    YBTSConnIdHolder(conn->connId()),
+    m_mutex(true,"YBTSChan"),
+    m_conn(conn),
+    m_ue(ue),
+    m_waitForTraffic(false),
+    m_cref(0),
+    m_dtmf(0),
+    m_mpty(false),
+    m_hungup(false),
+    m_paging(false),
+    m_haveTout(false),
+    m_tout(0),
+    m_activeCall(0),
+    m_pending(0),
+    m_route(0),
+    m_routeInitial(true),
+    m_authThread(0),
+    m_authIndex(0)
+{
+    Debug(this,DebugAll,"Loading GSM state '%s' [%p]",state.c_str(),this);
+    __plugin.signalling()->setConnUsage(connId(),true);
+    if (conn->hoReference() >= 0)
+	m_address << "HANDOVER" << conn->hoReference();
+    else {
+	Lock lck(m_ue);
+	m_ue->setPrefixedID(m_address);
+    }
+    Debug(this,DebugCall,"Handover address=%s [%p]",m_address.c_str(),this);
+    int tmp = state.find(':');
+    if (tmp >= 0) {
+	status(state.substr(0,tmp));
+	state = state.substr(tmp + 1);
+    }
+    tmp = 0;
+    state >> tmp;
+    m_cref = tmp;
+    DDebug(this,DebugInfo,"Restored channel state %s and cref %d",status().c_str(),(int)m_cref);
+    while (state.at(0) == '|') {
+	state >> "|";
+	YBTSCallDesc* call = new YBTSCallDesc(this,state);
+	m_calls.append(call);
+	if (!m_activeCall)
+	    m_activeCall = call;
+    }
+    if (state)
+	Debug(this,DebugWarn,"Channel state remainder: '%s'",state.c_str());
+}
+
 // Init incoming chan. Return false to destruct the channel
 bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* callRef)
 {
@@ -5840,7 +6159,6 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
 	m_route->addParam("privacy",String::boolText(true));
     else if (xml.findFirstChild(&s_ccSsCLIP))
 	m_route->addParam("privacy",String::boolText(false));
-    conn()->addPhyInfo(*m_route);
     Message* s = message("chan.startup");
     s->addParam("caller",m_route->getValue(YSTRING("caller")),false);
     s->addParam("called",call->m_called,false);
@@ -5859,8 +6177,8 @@ bool YBTSChan::initOutgoing(Message& msg)
     if (m_pending)
 	return false;
     m_pending = new ObjList;
+    const String& caller = msg[YSTRING("caller")];
     if (!msg.getBoolValue(YSTRING("privacy"))) {
-	const String& caller = msg[YSTRING("caller")];
 	if (caller) {
 	    XmlElement* x = new XmlElement("CallingPartyBCDNumber",caller);
 	    x->setAttributeValid(YSTRING("plan"),msg.getValue(YSTRING("callernumplan")));
@@ -5868,9 +6186,49 @@ bool YBTSChan::initOutgoing(Message& msg)
 	    m_pending->append(x);
 	}
     }
+    Message* s = message("chan.startup");
+    s->addParam("caller",caller,false);
+    s->addParam("called",msg.getValue(YSTRING("called")),false);
     lck.drop();
+    Engine::enqueue(s);
     initChan();
     return initMT();
+}
+
+// Init handover chan. Return false to destruct the channel
+bool YBTSChan::initHandover()
+{
+    Message* s = message("chan.startup");
+    if (isIncoming()) {
+	m_route = message("call.route");
+	ue()->lock();
+	ue()->addCaller(*m_route);
+	ue()->addParams(*m_route);
+	ue()->unlock();
+	m_route->addParam("called",address(),false);
+	s->addParam("caller",m_route->getValue(YSTRING("caller")),false);
+    }
+    s->addParam("called",address(),false);
+    Engine::enqueue(s);
+    initChan();
+    return route();
+}
+
+bool YBTSChan::serialize(String& str)
+{
+    if (!(conn() && conn()->serialize(str)))
+	return false;
+    str << " " << status() << ":" << (int)m_cref;
+
+    YBTSCallDesc* act = m_activeCall;
+    if (act)
+	act->serialize(str);
+    for (ObjList* l = m_calls.skipNull(); l; l = l->skipNext()) {
+	YBTSCallDesc* c = static_cast<YBTSCallDesc*>(l->get());
+	if (c != act)
+	    c->serialize(str);
+    }
+    return true;
 }
 
 // Build message, populate physical channel info
@@ -5918,6 +6276,7 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
 	    call->m_state == YBTSCallDesc::CallReceived) {
 	    call->sendCC(s_ccConnectAck);
 	    call->changeState(YBTSCallDesc::Active);
+	    status("answered");
 	    Engine::enqueue(message("call.answered"));
 	}
 	else
@@ -5926,6 +6285,8 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
     else if (*type == s_ccAlerting) {
 	if (call->m_state == YBTSCallDesc::CallConfirmed) {
 	    call->changeState(YBTSCallDesc::CallReceived);
+	    if (!isAnswered())
+		status("ringing");
 	    Message* m = message("call.ringing");
 	    // TODO: set early media
 	    Engine::enqueue(m);
@@ -5936,6 +6297,8 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
     else if (*type == s_ccConfirmed) {
 	if (call->m_state == YBTSCallDesc::CallPresent) {
 	    call->changeState(YBTSCallDesc::CallConfirmed);
+	    if (!isAnswered())
+		status("progressing");
 	    Engine::enqueue(message("call.progress"));
 	}
 	else
@@ -6205,14 +6568,22 @@ void YBTSChan::hangup(const char* reason, bool final)
     cancelAuthThread();
     ObjList calls;
     Lock lck(m_mutex);
+    bool hard = conn() && conn()->hardRelease();
     setReason(reason);
     m_activeCall = 0;
+    if (hard)
+	m_calls.clear();
     while (GenObject* o = m_calls.remove(false))
 	calls.append(o);
     bool done = m_hungup;
     m_hungup = true;
     String res = m_reason;
+    YBTSSignalling* sig = hard ? conn()->owner() : 0;
     lck.drop();
+    if (sig) {
+	sig->dropConn(conn(),true);
+	m_conn = 0;
+    }
     for (ObjList* o = calls.skipNull(); o; o = o->skipNull()) {
 	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->remove(false));
 	call->m_reason = res;
@@ -6301,6 +6672,61 @@ YBTSConn* YBTSChan::setConn(YBTSConn* conn)
 	__plugin.signalling()->setConnUsage(m_connId,true);
     }
     return m_conn;
+}
+
+// Handle Handover Required
+void YBTSChan::handleHoRequired(const String& info)
+{
+    if (!canHandover()) {
+	DDebug(this,DebugAll,"Cannot start a handover at this time...");
+	return;
+    }
+    // Syntax is: MY_LEVEL LEVEL1:CELLID1 LEVEL2:CELLID2 ...
+    int spc = info.find(' ');
+    if (spc <= 0)
+	return;
+    Message* m = Channel::message("call.update");
+    m->addParam("operation","ho-required");
+    m->addParam("level",info.substr(0,spc));
+    String tmp = info.substr(spc + 1);
+    int idx = 0;
+    while (tmp) {
+	int sep = tmp.find(':');
+	if (sep <= 0)
+	    break;
+	int spc = tmp.find(' ');
+	if (spc >= 0 && spc <= sep)
+	    break;
+	String name("cell.");
+	name << ++idx;
+	m->addParam(name,tmp.substr(sep + 1,((spc >= 0) ? (spc - sep - 1) : -1)));
+	name << ".level";
+	m->addParam(name,tmp.substr(0,sep));
+	if (spc < 0)
+	    break;
+	tmp = tmp.substr(spc + 1);
+    }
+    m->addParam("candidates",String(idx));
+    tmp.clear();
+    if (serialize(tmp))
+	m->addParam("gsm_state",tmp);
+    Engine::enqueue(m);
+}
+
+// Handle Handover Failure
+void YBTSChan::handleHoFailure(const XmlElement& xml)
+{
+    if (m_hungup)
+	return;
+    Message* m = Channel::message("call.update");
+    XmlElement* x = xml.findFirstChild(&s_message);
+    if (x) {
+	const String* s = x->childText(YSTRING("RRCause"));
+	if (!TelEngine::null(s))
+	m->addParam("reason",*s);
+    }
+    m->addParam("operation","ho-failure");
+    Engine::enqueue(m);
 }
 
 void YBTSChan::disconnected(bool final, const char *reason)
@@ -6396,9 +6822,11 @@ bool YBTSChan::msgAnswered(Message& msg)
     YBTSCallDesc* call = activeCall();
     if (!call)
 	return false;
-    call->connect(buildProgressIndicator(msg,false));
-    call->setTimeout(s_t313);
-    setTout(call->m_timeout);
+    if (call->m_state != YBTSCallDesc::Active) {
+	call->connect(buildProgressIndicator(msg,false));
+	call->setTimeout(s_t313);
+	setTout(call->m_timeout);
+    }
     return true;
 }
 
@@ -6444,10 +6872,36 @@ bool YBTSChan::msgDrop(Message& msg, const char* reason)
     return Channel::msgDrop(msg,reason);
 }
 
+bool YBTSChan::msgUpdate(Message& msg)
+{
+    const String& oper = msg[YSTRING("operation")];
+    if (oper.null())
+	return false;
+
+    if (oper == YSTRING("transport")) {
+	if (m_hungup || !m_conn || m_conn->removed())
+	    return false;
+	uint8_t info = msg.getIntValue("sapi") & 7;
+	if (msg.getBoolValue("sacch"))
+	    info |= 0x80;
+	const NamedString* param = msg.getParam(YSTRING("l3raw"));
+	if (param) {
+	    bool ok = m_conn->sendL3(new XmlElement("Raw",*param),info);
+	    if (ok && msg.getBoolValue(YSTRING("hard_release")))
+		m_conn->hardRelease(true);
+	    return ok;
+	}
+    }
+
+    return false;
+}
+
 void YBTSChan::endDisconnect(const Message& msg, bool handled)
 {
     if (!handled)
 	return;
+    if (m_conn && msg.getBoolValue(YSTRING("hard_release")))
+	m_conn->hardRelease(true);
     if (!(isIncoming() && m_route && m_conn && msg[s_error] == s_noAuth))
 	return;
     m_authIndex++;
@@ -6595,6 +7049,7 @@ YBTSDriver::YBTSDriver()
     m_mtSmsMutex(false,"YBTSMtSms"),
     m_mtSsMutex(false,"YBTSMtSS"),
     m_mtSsNotEmpty(false),
+    m_hoListMutex(false,"YBTS-HO"),
     m_exportXml(1)
 {
     Output("Loaded module YBTS");
@@ -6932,6 +7387,22 @@ void YBTSDriver::removeTerminatedCall(uint16_t connId)
 	o = o->skipNull();
     }
     m_haveCalls = (0 != m_terminatedCalls.skipNull());
+}
+
+// Handle Handover Failure messages
+void YBTSDriver::handleHoFailure(YBTSMessage& m, YBTSConn* conn)
+{
+    RefPointer<YBTSChan> chan;
+    if (__plugin.findChan(conn->connId(),chan))
+	chan->handleHoFailure(*m.xml());
+}
+
+// Handle Handover Complete messages
+void YBTSDriver::handleHoComplete(YBTSMessage& m, YBTSConn* conn)
+{
+    RefPointer<YBTSChan> chan;
+    if (!__plugin.findChan(conn->connId(),chan))
+	conn->loadGsmState(chan,false);
 }
 
 // Handshake done notification. Return false if state is invalid
@@ -7960,6 +8431,25 @@ const char* YBTSDriver::authConnMt(YBTSConn* conn, bool sms, unsigned int& toutM
     return fail;
 }
 
+void YBTSDriver::handoverCmd(unsigned char ref, const XmlElement* cmd, YBTSConn* conn)
+{
+    m_hoListMutex.lock();
+    for (ObjList* l = m_hoWaiting.skipNull(); l ; l = l->skipNext()) {
+	YBTSHoCommand* c = static_cast<YBTSHoCommand*>(l->get());
+	if (c->reference() == ref) {
+	    if (conn)
+		conn->saveGsmState(*c);
+	    if (cmd)
+		static_cast<String&>(*c) = cmd->getText();
+	    else
+		c->clear();
+	    m_hoWaiting.remove(c,false);
+	    break;
+	}
+    }
+    m_hoListMutex.unlock();
+}
+
 void YBTSDriver::start()
 {
     stop();
@@ -8743,6 +9233,7 @@ void YBTSDriver::initialize()
 	s_first = false;
 	setup();
 	installRelay(Progress);
+	installRelay(Update);
 	installRelay(MsgExecute);
 	installRelay(Halt);
 	installRelay(Help,120);
@@ -8893,6 +9384,63 @@ bool YBTSDriver::received(Message& msg, int id)
 		    if (dest.startSkip("conn"))
 			return msgStatusConn(msg,dest);
 		}
+	    }
+	    break;
+	case Control:
+	    if (msg[YSTRING("component")] == name()) {
+		if (m_state != RadioUp)
+		    return false;
+		const String& oper = msg[YSTRING("operation")];
+		if (oper == YSTRING("neighbors")) {
+		    const String& list = msg[YSTRING("list")];
+		    if (list.null())
+			return false;
+		    YBTSSignalling* sig = signalling();
+		    if (!sig)
+			return false;
+		    YBTSMessage m(SigNeighborsList,0,0,new XmlElement("neighbors",list));
+		    return sig->send(m);
+		}
+		if (oper == YSTRING("handover")) {
+		    int ref = msg.getIntValue(YSTRING("reference"),-1);
+		    if (ref < 0 || ref > 255)
+			return false;
+		    YBTSSignalling* sig = signalling();
+		    if (!sig)
+			return false;
+		    YBTSHoCommand tmp(msg.getValue(YSTRING("gsm_state")),ref);
+		    m_hoListMutex.lock();
+		    m_hoWaiting.append(&tmp)->setDelete(false);
+		    m_hoListMutex.unlock();
+		    YBTSMessage m(SigHandoverRequest,ref);
+		    const char* err = 0;
+		    if (!sig->send(m))
+			err = "send error";
+		    if (!err) {
+			uint64_t time = Time::now() + 1000000;
+			err = "timeout";
+			do {
+			    Thread::idle();
+			    m_hoListMutex.lock();
+			    if (!m_hoWaiting.find(&tmp))
+				err = 0;
+			    m_hoListMutex.unlock();
+			} while (err && (Time::now() < time));
+		    }
+		    if (tmp && !err) {
+			Debug(this,DebugAll,"Returning Handover Command: %s",tmp.c_str());
+			msg.setParam("command",tmp);
+			return true;
+		    }
+		    if (!err)
+			err = "rejection";
+		    m_hoListMutex.lock();
+		    m_hoWaiting.remove(&tmp,false);
+		    m_hoListMutex.unlock();
+		    Debug(this,DebugMild,"Handover Request %d failed (%s)",ref,err);
+		    return false;
+		}
+		return false;
 	    }
 	    break;
 	case Help:
