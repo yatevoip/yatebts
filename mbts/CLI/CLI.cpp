@@ -1118,7 +1118,7 @@ void Parser::addCommands()
 	addCommand("help", showHelp, "[command] -- list available commands or gets help on a specific command.");
 	addCommand("shutdown", exit_function, "[wait] -- shut down or restart OpenBTS, either immediately, or waiting for existing calls to clear with a timeout in seconds");
 	addCommand("load", printStats, "-- print the current activity loads.");
-	addCommand("cellid", cellID, "[MCC MNC LAC CI] -- get/set location area identity (MCC, MNC, LAC) and cell ID (CI)");
+	addCommand("cellid", cellID, "-- print location area identity (MCC, MNC, LAC) and cell ID (CI)");
 	addCommand("rawconfig", rawconfig, "[] OR [patt] OR [key val(s)] -- print the current configuration, print configuration values matching a pattern, or set/change a configuration value");
 	addCommand("trxfactory", trxfactory, "-- print the radio's factory calibration and meta information");
 	addCommand("audit", audit, "-- audit the current configuration for troubleshooting");
