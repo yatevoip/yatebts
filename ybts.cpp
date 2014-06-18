@@ -6581,8 +6581,9 @@ void YBTSChan::hangup(const char* reason, bool final)
     YBTSSignalling* sig = hard ? conn()->owner() : 0;
     lck.drop();
     if (sig) {
-	sig->dropConn(conn(),true);
+	RefPointer<YBTSConn> c = m_conn;
 	m_conn = 0;
+	sig->dropConn(c,true);
     }
     for (ObjList* o = calls.skipNull(); o; o = o->skipNull()) {
 	YBTSCallDesc* call = static_cast<YBTSCallDesc*>(o->remove(false));
