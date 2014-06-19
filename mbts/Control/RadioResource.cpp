@@ -305,22 +305,6 @@ void* Control::AccessGrantServiceLoop(void*)
 	return NULL;
 }
 
-#if 0
-void abortInboundHandover(TransactionEntry* transaction, unsigned cause, GSM::LogicalChannel *LCH=NULL)
-{
-	LOG(DEBUG) << "aborting inbound handover " << *transaction;
-	char ind[100];
-	unsigned holdoff = gConfig.getNum("GSM.Handover.FailureHoldoff");
-	sprintf(ind,"IND HANDOVER_FAILURE %u %u %u", transaction->ID(),cause,holdoff);
-	gPeerInterface.sendUntilAck(transaction,ind);
-
-	if (LCH) LCH->send(HARDRELEASE);
-
-	gTransactionTable.remove(transaction);
-}
-#endif
-
-
 
 bool Control::SaveHandoverAccess(unsigned handoverReference, GSM::L1FEC* l1, float RSSI, float timingError, const GSM::Time& timestamp)
 {
@@ -330,13 +314,13 @@ bool Control::SaveHandoverAccess(unsigned handoverReference, GSM::L1FEC* l1, flo
 	// We will need to use the transaction record to carry the parameters.
 	// We put this here to avoid dealing with the transaction table in L1.
 	int id = gConnMap.findRef(handoverReference);
-	if (id < 0) {
+	LogicalChannel* chan = (id >= 0) ? gConnMap.find(id) : 0;
+	if (!chan) {
 		LOG(ERR) << "no inbound handover with reference " << handoverReference;
 		return false;
 	}
-	LogicalChannel* chan = gConnMap.find(id);
-	if (!chan || (chan->layer1() != l1)) {
-		LOG(ERR) << "wrong channel for inbound handover with reference " << handoverReference;
+	if ((chan->layer1() != l1)) {
+		LOG(NOTICE) << "inbound handover with reference " << handoverReference << " on wrong channel " << *chan;
 		return false;
 	}
 
@@ -346,7 +330,6 @@ bool Control::SaveHandoverAccess(unsigned handoverReference, GSM::L1FEC* l1, flo
 	if (TA > gConfig.getNum("GSM.MS.TA.Max")) {
 		LOG(NOTICE) << "handover failure on due to TA=" << timingError << " for reference " << handoverReference;
 		// RR cause 8: Handover impossible, timing advance out of range
-//		abortInboundHandover(transaction,8);
 		return false;
 	}
 	LOG(DEBUG) << "saving TA=" << TA << " for handover access on id " << id << " channel " << *chan;
@@ -397,7 +380,6 @@ bool Control::ProcessHandoverAccess(GSM::LogicalChannel *chan)
 	if (!frame) {
 		LOG(NOTICE) << "timed out waiting for Handover Complete on " << *chan;
 		// RR cause 4: Abnormal release, no activity on the radio path
-//		abortInboundHandover(transaction,4,TCH);
 		return false;
 	}
 
@@ -407,7 +389,6 @@ bool Control::ProcessHandoverAccess(GSM::LogicalChannel *chan)
 			<< *chan << ": " << *frame;
 		delete frame;
 		// RR cause 0x62: Message not compatible with protocol state
-//		abortInboundHandover(transaction,0x62,TCH);
 		return false;
 	}
 	delete frame;
