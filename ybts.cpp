@@ -1599,6 +1599,8 @@ private:
     unsigned char m_ref;
 };
 
+static YBTSLAI s_lai;
+
 class YBTSDriver : public Driver
 {
 public:
@@ -1794,12 +1796,13 @@ protected:
     void checkMtSsTout(const Time& time = Time());
     const char* authConnMt(YBTSConn* conn, bool sms, unsigned int& toutMs);
     void start();
-    inline void startIdle() {
+    inline bool startIdle() {
 	    Lock lck(m_stateMutex);
-	    if (m_stopped || !m_engineStart || m_state != Idle || Engine::exiting())
-		return;
+	    if (m_stopped || !m_engineStart || m_state != Idle || Engine::exiting() || !s_lai.lai())
+		return false;
 	    lck.drop();
 	    start();
+	    return true;
 	}
     void stop();
     bool startPeer();
@@ -1901,7 +1904,6 @@ static Mutex s_globalMutex(false,"YBTSGlobal");
 static Mutex s_callStartMutex(false,"YBTSCallStart"); // Serialize channel creation to avoid duplicates for the same UE
 static uint64_t s_startTime = 0;
 static uint64_t s_idleTime = Time::now();
-static YBTSLAI s_lai;
 static String s_configFile;              // Configuration file path
 static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
@@ -9198,8 +9200,12 @@ void YBTSDriver::initialize()
 	}
     }
     else {
-	Debug(this,DebugConf,"Invalid LAI MNC='%s' MCC='%s' LAC='%s'",
+	Alarm(this,"config",DebugConf,"Invalid LAI MNC='%s' MCC='%s' LAC='%s'",
 	    mnc.c_str(),mcc.c_str(),lac.c_str());
+	s_lai.reset();
+    }
+    if (gsm.getIntValue(YSTRING("Radio.Band")) <= 0 || gsm.getIntValue(YSTRING("Radio.C0"),-1) < 0) {
+	Alarm(this,"config",DebugConf,"Missing radio band or C0 configuration");
 	s_lai.reset();
     }
     s_askIMEI = ybts.getBoolValue("imei_request",true);
@@ -9477,7 +9483,8 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
 	    ybtsStatus(tmp,retVal);
 	else if (tmp.startSkip(s_startCmd)) {
 	    cmdStartStop(true);
-	    startIdle();
+	    if (!startIdle())
+		retVal << "Could not start " BTS_CMD " at this time\r\n";
 	}
 	else if (tmp.startSkip(s_stopCmd)) {
 	    cmdStartStop(false);
