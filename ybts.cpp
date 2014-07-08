@@ -8304,7 +8304,8 @@ void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& 
 	    YBTS_SET_REASON_BREAK("missing remote CID");
 	const String* compType = comp->getAttribute(s_mapCompType);
 	if (TelEngine::null(compType) || *compType != YSTRING("Invoke")) {
-	    reason << "unexpected Facility IE component type '" << compType << "'";
+	    reason << "unexpected Facility IE component type '" <<
+		TelEngine::c_safe(compType) << "'";
 	    break;
 	}
 	YBTSTid::Type t = YBTSTid::Unknown;
@@ -8314,7 +8315,7 @@ void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& 
 		t = YBTSTid::Ussd;
 	}
 	if (t != YBTSTid::Ussd) {
-	    reason << "unknown Facility operation code " << oper;
+	    reason << "unknown Facility operation code " << TelEngine::c_safe(oper);
 	    break;
 	}
 	String ssId;
@@ -8346,7 +8347,7 @@ void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& 
     String s;
     if (reason && facilityXml) {
 	facilityXml->toString(s);
-	s = "(xml: " + s + ")";
+	s = " (xml: " + s + ")";
     }
     TelEngine::destruct(facilityXml);
     TelEngine::destruct(ss);
