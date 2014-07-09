@@ -6901,12 +6901,15 @@ bool YBTSChan::msgUpdate(Message& msg)
 
 void YBTSChan::endDisconnect(const Message& msg, bool handled)
 {
-    if (!handled)
+    bool hard = m_conn && msg.getBoolValue(YSTRING("hard_release"));
+    if (hard || !(handled && isIncoming() && m_route && m_conn && msg[s_error] == s_noAuth)) {
+	const String& reason = msg[s_reason];
+	if (reason)
+	    setReason(reason,&m_mutex);
+	if (hard)
+	    m_conn->hardRelease(true);
 	return;
-    if (m_conn && msg.getBoolValue(YSTRING("hard_release")))
-	m_conn->hardRelease(true);
-    if (!(isIncoming() && m_route && m_conn && msg[s_error] == s_noAuth))
-	return;
+    }
     m_authIndex++;
     if (m_authIndex > 2) {
 	m_conn->owner()->authReject(m_conn);
