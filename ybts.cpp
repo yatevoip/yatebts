@@ -8138,10 +8138,11 @@ void YBTSDriver::checkMtSs(YBTSConn* conn)
 	    ss->m_ue->stopPaging();
 	    ss->m_paging = false;
 	}
-	if (startMtSs(conn,ss))
+	const char* reason = startMtSs(conn,ss);
+	if (!reason)
 	    continue;
 	if (ss) {
-	    enqueueSS(ss->ssMessage(false),0,false,"busy");
+	    enqueueSS(ss->ssMessage(false),0,false,reason);
 	    TelEngine::destruct(ss);
 	}
     }
