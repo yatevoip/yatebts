@@ -95,7 +95,7 @@ strip: all
 install: all
 	@mkdir -p "$(DESTDIR)$(moddir)/server" && \
 	for i in $(PROGS) ; do \
-	    install -D "$$i" "$(DESTDIR)$(moddir)/server/$$i" ; \
+	    @INSTALL_D@ @INSTALL_L@ "$$i" "$(DESTDIR)$(moddir)/server/$$i" ; \
 	done
 	@mkdir -p "$(DESTDIR)$(confdir)/" && \
 	lst="`ls -1 @srcdir@/*.conf @srcdir@/*.sample @srcdir@/*.default @srcdir@/*.sql 2>/dev/null | sed 's/\.sample//g; s/\.default//g; s/[^ ]*\*\.[^ ]*//g' | sort | uniq`" ; \

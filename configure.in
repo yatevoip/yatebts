@@ -86,6 +86,7 @@ YATE_SHR=""
 YATE_CFG=""
 THREAD_LIB=""
 INSTALL_D=""
+INSTALL_L=""
 yc="yate-config"
 AC_ARG_WITH(yate,AC_HELP_STRING([--with-yate=DIR],[use Yate from DIR]),[ac_cv_use_yate=$withval],[ac_cv_use_yate=yes])
 if [[ "x$ac_cv_use_yate" = "xno" ]]; then
@@ -110,6 +111,7 @@ YATE_SHR=`"$yc" --share 2>/dev/null`
 YATE_CFG=`"$yc" --config 2>/dev/null`
 THREAD_LIB=`"$yc" --param=THREAD_LIB 2>/dev/null`
 INSTALL_D=`"$yc" --param=INSTALL_D 2>/dev/null`
+INSTALL_L=`"$yc" --param=INSTALL_L 2>/dev/null`
 YATE_INC=`echo "$CFLAGS $YATE_DEF -DHAVE_CONFIG_H" | sed 's/-fno-exceptions *//; s/  / /g' 2>/dev/null`
 if [[ "x$YATE_VER" = "x" ]]; then
     YATE_VER="no"
@@ -137,6 +139,7 @@ AC_SUBST(YATE_SHR)
 AC_SUBST(YATE_CFG)
 AC_SUBST(THREAD_LIB)
 AC_SUBST(INSTALL_D)
+AC_SUBST(INSTALL_L)
 
 
 HAVE_USB=no
