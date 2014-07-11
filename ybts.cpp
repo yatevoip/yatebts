@@ -5264,11 +5264,24 @@ bool YBTSMM::getUESafe(RefPointer<YBTSUE>& ue, const String& tmsi, const String&
 	if (!u->alive())
 	    continue;
 	Lock lckUE(u);
-	if (tmsi && tmsi != u->tmsi())
-	    continue;
-	if (imsi && imsi != u->imsi())
-	    continue;
-	if (imei && imei != u->imei())
+	bool matched = false;
+	if (tmsi && u->tmsi()) {
+	    if (tmsi != u->tmsi())
+		continue;
+	    matched = true;
+	}
+	if (imsi && u->imsi()) {
+	    if (imsi != u->imsi())
+		continue;
+	    matched = true;
+	}
+	// TMSI or IMSI matched: IMEI must match if not empty
+	// Otherwise: IMEI must be given and match (we MUST have something to match!!!)
+	if (matched) {
+	    if (imei && u->imei() && imei != u->imei())
+		continue;
+	}
+	else if (!imei || imei != u->imei())
 	    continue;
 	ue = u;
 	if (!ue)
