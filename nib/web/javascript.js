@@ -78,7 +78,7 @@ function advanced(identifier)
 
 	var ie = getInternetExplorerVersion();
 
-	var not_advanced = ["imsi","iccid","opc","ki"]; 
+	var not_advanced = ["imsi","iccid","opc","ki","smsc"]; 
 	for(var i=0;i<elems.length;i++)
 	{
 		elem_name = elems[i].name;
@@ -163,7 +163,7 @@ function show_submenu_fields(name)
 
 function show_hide_cols()
 {
-	var cols = ["tr_imsi", "tr_iccid", "tr_ki", "tr_opc"];
+	var cols = ["tr_imsi", "tr_iccid", "tr_ki", "tr_opc","tr_smsc"];
 	 for (var i=0;i<cols.length;i++) {
 		 if (!document.getElementById(cols[i]))
 			 continue;

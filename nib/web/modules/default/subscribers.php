@@ -73,8 +73,8 @@ function list_subscribers()
 			$i++;
 		}
 
-		$formats = array("IMSI"=>"imsi","msisdn","short_number","ki","op","IMSI Type"=>"imsi_type","function_display_bit_field:active"=>"active");
-		table($all_subscribers, $formats, "subscriber", "imsi", array("&method=edit_subscriber"=>"Edit","&method=delete_subscriber"=>"Delete"), array("&method=add_subscriber"=>"Add subscriber", "&method=edit_regexp"=>"Accept by REGEXP"));
+		$formats = array("IMSI"=>"imsi","msisdn","short_number","ki","op","IMSI Type"=>"imsi_type","function_display_bit_field:active"=>"active", "function_write_subcriber_on_sim:"=>"imsi,ki");
+		table($all_subscribers, $formats, "subscriber", "imsi", array("&method=edit_subscriber"=>"Edit","&method=delete_subscriber"=>"Delete"), array("&method=add_subscriber"=>"Add subscriber", "&method=edit_regexp"=>"Accept by REGEXP", "&method=export_subscribers_in_csv"=>"Export subscribers", "&method=import_subscribers"=>"Import subscribers"));
 	} else {
 		start_form();
 		addHidden(null, array("method"=>"edit_regexp", "regexp"=>$regexp));
@@ -154,6 +154,8 @@ function edit_regexp_write_file()
 		$cc = array();
 		if (isset($res[1]["country_code"]))
 			$cc["country_code"] = $res[1]["country_code"];
+		if (isset($res[1]["smsc"]))
+			$cc["smsc"] = $res[1]["smsc"];
 	}
 	$regexp = getparam("regexp");
 
@@ -180,47 +182,55 @@ function edit_regexp_write_file()
 		notice("Finished setting regular expression", "subscribers");
 }
 
-function country_code()
+function country_code_and_smsc()
 {
 	global $yate_conf_dir;
 
 	$filename = $yate_conf_dir."subscribers.conf";
-	$res = get_country_code();
+	$res = get_cc_smsc();
 	$country_code = "";
-	if (is_array($res[1]))
+	$smsc = "";
+	if (is_array($res[1])) {
 		$country_code = $res[1]["country_code"];
+		$smsc = $res[1]["smsc"];
+	}
 
 	if (!is_file($filename) || !strlen($country_code)) 
-		edit_country_code();
+		edit_country_code_and_smsc();
 	else {
-		$fields = array("country_code"=>array("value"=>$country_code, "display"=>"fixed"));
+		$fields = array("country_code"=>array("value"=>$country_code, "display"=>"fixed"),
+			"smsc" => array("value"=>$smsc, "display"=>"fixed", "column_name"=>"SMSC"));
 		start_form();
-		addHidden(null,array("method"=>"edit_country_code", "country_code"=>$country_code));
-		editObject(null,$fields,"Country code for the majority of your subscribers.",array("Modify"),null,true);
+		addHidden(null,array("method"=>"edit_country_code_and_smsc", "country_code"=>$country_code, "smsc"=>$smsc));
+		editObject(null,$fields,"Country code and SMSC for the majority of your subscribers.",array("Modify"),null,true);
 		end_form();
 	}
 }
 
-function edit_country_code($error=null,$error_fields=array())
+function edit_country_code_and_smsc($error=null,$error_fields=array())
 {
 	global $method;
 
-	$method = "edit_country_code";
+	$method = "edit_country_code_and_smsc";
 
 	$country_code = getparam("country_code");
-	$fields = array("country_code"=>array("value"=>$country_code, "compulsory"=>true, "comment"=>" Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK"));
+	$smsc = getparam("smsc");
+	$fields = array(
+		"country_code"=>array("value"=>$country_code, "compulsory"=>true, "comment"=>" Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK"),
+		"smsc"=>array("column_name"=>"SMSC", "value"=>$smsc, "compulsory"=>true, "comment"=>"A short message service center (SMSC) used to store, forward, convert and deliver SMS messages.")
+	);
 
 	error_handle($error,$fields,$error_fields);
         start_form();
 	addHidden("write_file");
-       	editObject(NULL,$fields,"Set Country Code","Save");
+       	editObject(NULL,$fields,"Set Country Code and SMSC","Save");
         end_form();
 }
 
-function edit_country_code_write_file()
+function edit_country_code_and_smsc_write_file()
 {
 	$cc_file = array();
-	$res = get_country_code();
+	$res = get_cc_smsc();
 
 	if (!$res[0])
 		errormess($res[1], "no");
@@ -228,23 +238,26 @@ function edit_country_code_write_file()
 		$cc_file = $res[1];
 
 	$cc_param = getparam("country_code");
+	$smsc_param = getparam("smsc");
 
 	if (!$cc_param)
-		return edit_country_code("Please set the country code!", array("country_code"));
+		return edit_country_code_and_smsc("Please set the country code!", array("country_code"));
 	if (!ctype_digit($cc_param))
-		return edit_country_code("Country Code invalid!", array("country_code"));
-	if (is_array($cc_file) && in_array($cc_param, $cc_file)) {
-		notice("Finished setting Country Code.", "country_code");
+		return edit_country_code_and_smsc("Country Code invalid!", array("country_code"));
+	if (!$smsc_param)
+		return edit_country_code_and_smsc("Please set SMSC!", array("smsc"));
+	if (is_array($cc_file) && in_array($cc_param, $cc_file) && in_array($smsc_param, $cc_file)) {
+		notice("Finished setting Country Code and SMSC.", "country_code_and_smsc");
 		return;
 	}
 
-	$res = set_country_code($cc_param);
+	$res = set_cc_smsc($cc_param,$smsc_param);
 	if (!$res[0])
-		return edit_country_code($res[1]);
-	notice("Finished writting Country Code into subscribers.js.", "country_code");
+		return edit_country_code_and_smsc($res[1]);
+	notice("Finished writting Country Code and SMSC into subscribers.conf.", "country_code_and_smsc");
 }
 
-function get_country_code()
+function get_cc_smsc()
 {
 	global $yate_conf_dir;
 
@@ -257,8 +270,10 @@ function get_country_code()
 	
 	$content = array();
 	foreach ($subs_file->sections as $name => $value) {
-		if ($name == "general" && isset($value["country_code"]))
-			$content["country_code"] = $value["country_code"];
+		if ($name == "general") {
+			$content["country_code"] = isset($value["country_code"]) ? $value["country_code"] : "";
+			$content["smsc"] = isset($value["smsc"]) ? $value["smsc"] : "";
+		}
 	}
 
 	if (!count($content))
@@ -267,7 +282,7 @@ function get_country_code()
 	return array(true, $content);
 }
 
-function set_country_code($country_code)
+function set_cc_smsc($country_code, $smsc)
 {
 	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment, $subscriber_example;
 
@@ -277,6 +292,7 @@ function set_country_code($country_code)
 		$subs_file->initial_comment = $global_comment;
 		$content[0] = rtrim($country_code_comment);
 		$content["country_code"] = $country_code."\n";
+		$content["smsc"] = $smsc."\n";
 		$content[1] = rtrim($regexp_comment);
 		$content[2] = $subscriber_comment;
 		$content[3] = $subscriber_example;	
@@ -286,9 +302,7 @@ function set_country_code($country_code)
 		$old_data = array();
 		$have_regex = false;
 		foreach ($subs->sections as $name => $value) {
-			if ($name == "general" && isset($value["country_code"]))
-				$value["country_code"] = $country_code;
-			if (isset($value["regexp"])) {
+			if ($name == "general" && isset($value["regexp"])) {
 				$have_regex = true;
 				$regex = $value["regexp"];
 			}
@@ -302,6 +316,7 @@ function set_country_code($country_code)
 			$subs_file->initial_comment = $global_comment;
 			$content[0] = rtrim($country_code_comment);
 			$content["country_code"] = $country_code."\n";
+			$content["smsc"] = $smsc."\n";
 			$content[1] = $regexp_comment;
 			$content[2] = $subscriber_comment;
 			$subs_file->structure["general"] = $content;
@@ -313,6 +328,7 @@ function set_country_code($country_code)
 			$subs_file->initial_comment = $global_comment;
 			$content[0] = rtrim($country_code_comment);
 			$content["country_code"] = $country_code."\n";
+			$content["smsc"] = $smsc."\n";
 			$content[1] = rtrim($regexp_comment);
 			$content["regexp"] = $regex."\n";
 			$content[2] = $subscriber_comment;
@@ -320,7 +336,6 @@ function set_country_code($country_code)
 			$subs_file->structure["general"] = $content;
 		}
 	}
-
 	$subs_file->openForWrite();
 	if (!$subs_file->status())
 		return array(false, $subs_file->getError());
@@ -400,6 +415,9 @@ function edit_subscriber_write_file()
 		return edit_subscriber("Please set 'imsi'",array("imsi"));
 	if (strlen($imsi)!=14 && strlen($imsi)!=15)
 		return edit_subscriber("Invalid IMSI $imsi. IMSI length must be 14 or 15 digits long.",array("imsi"));
+	if (!preg_match('/^[0-9a-fA-F]{32}$/i', getparam("ki")))
+		return edit_subscriber("Invalid KI:".getparam("ki").". KI needs to be 128 bits, in hex format.");
+
 	$subscriber = array("imsi"=>$imsi);
 
 	$fields = array("msisdn"=>false, "short_number"=>false, "active"=>false, "ki"=>true, "op"=>false, "imsi_type"=>true);
@@ -495,6 +513,10 @@ function set_subscribers($subscribers, $general = array())
 		$cc[0] = rtrim($country_code_comment);
 		$cc["country_code"] = $general["country_code"]."\n";
 	}
+	
+	if (isset($general["smsc"]))
+		$cc["smsc"] = $general["smsc"]."\n";
+
 	$cc[1] = $regexp_comment;
 	$cc[2] = $subscriber_comment;
 
@@ -527,6 +549,8 @@ function set_regexp($regexp, $general = array())
 	if (count($general)) {
 		$cc[0] = rtrim($country_code_comment);
 		$cc["country_code"] = $general["country_code"]."\n";
+		if (isset($general["smsc"]))
+			$cc["smsc"] = $general["smsc"]."\n"; 
 	}
 	$cc[1] = rtrim($regexp_comment);
 	$cc["regexp"] = $regexp."\n";
@@ -581,6 +605,8 @@ function get_regexp($keep_country_code = false)
 		if ($keep_country_code) {
 			if (isset($value["country_code"])) 
 				$content["country_code"] = $value["country_code"]; 
+			if (isset($value["smsc"]))
+				$content["smsc"] = $value["smsc"];
 			if (isset($value["regexp"]))
 				$content["regexp"] = $value["regexp"];
 		} else {
@@ -665,10 +691,11 @@ function display_add_into_subscribers($imsi, $ki)
 		print "";
 }
 
-function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi = "on",$insert_subscribers = "on")
+function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi = true, $insert_subscribers = true, $add_existing_subscriber=false, $params = array())
 {
-	global $yate_conf_dir, $sim_type;
+	global $yate_conf_dir, $sim_type, $method;
 
+	$method = "write_sim_form";
 	$pysim_installed = detect_pysim_installed();
 
         if (!$pysim_installed[0]) {
@@ -680,14 +707,17 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 
 	$file = new ConfFile($filename);
 
-	$res = get_country_code();
+	$res = get_cc_smsc();
 
-	$cc = "";
-	if ($res[0] && is_array($res[1]))
+	$cc = $smsc = "";
+	if ($res[0] && is_array($res[1])) {
 		$cc = $res[1]["country_code"];
+		$smsc = $res[1]["smsc"];
+	}
+
 	$mcc = "001";
 	$mnc = "01";
-	$advanced_mcc = $advanced_mnc = $advanced_op = false;
+	$advanced_mcc = $advanced_mnc = $advanced_op = $advanced_smsc = false;
 	if (isset($file->structure["gsm"]["Identity.MCC"])) {
 		$mcc = $file->structure["gsm"]["Identity.MCC"];
 		$advanced_mcc = true;
@@ -700,9 +730,81 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 		$op = $file->structure["gsm"]["Identity.ShortName"];
 		$advanced_op = true;
 	}
-	 
+	$params["smsc"] = get_smsc();
+	
+	if (!empty($params["smsc"]))
+		$advanced_smsc = true;
 
-	nib_note("There are two methods of writing the SIM cards, depending on the state of the \"Generate random IMSI\" field. If the field is selected, the SIM credentials are randomly generated. Otherwise, the data must be inserted manually. Please check that your SIM Card Reader is inserted into the USB port of your device. Before saving data, please insert a SIM card into the SIM Card Reader.");
+
+	if (!$add_existing_subscriber) {
+		nib_note("There are two methods of writing the SIM cards, depending on the state of the \"Generate random IMSI\" field. If the field is selected, the SIM credentials are randomly generated. Otherwise, the data must be inserted manually. Please check that your SIM Card Reader is inserted into the USB port of your device. Before saving data, please insert a SIM card into the SIM Card Reader.");
+	} else {
+		if (test_existing_imsi_in_csv($params["imsi"]))
+			nib_note("This IMSI: ".$params["imsi"]." is already written on another SIM card.");
+	}
+
+	$type_card = get_card_types();
+	$type_card["selected"] = $sim_type; 
+
+	if (!$cc) 
+		$fields["country_code"] = array("required" => true, "value"=>$cc, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK");
+
+	if (!$add_existing_subscriber) {
+		$fields["generate_random_imsi"] =  array("comment" => "Checked - if you want the parameter for the card to be generated randomly or uncheck - to insert your card values manually", "column_name"=>"Generate random IMSI", "javascript" => 'onclick="show_hide_cols()"', "display"=>"checkbox", "value"=>$generate_random_imsi);
+		//show/hide fields when generate_random_imsi is unselected/selected
+		$fields["imsi"] = array("required"=>true,"column_name"=>"IMSI", "comment" => "Insert IMSI to be written to the card. Ex.:001011641603116", "triggered_by"=>"generate_random_imsi");
+		$fields["iccid"] = array("required"=>true,"column_name"=>"ICCID", "comment" => "Insert ICCID(Integrated Circuit Card Identifier) to be written to the card. Ex.: 8940001017992212557", "triggered_by"=>"generate_random_imsi");
+		$fields["ki"] = array("required"=>true,"column_name"=>"Ki", "comment" => "Insert Ki to be written to the card. Ex.: 3b07f45b11d2003247e9ae6f13de7573", "triggered_by"=>"generate_random_imsi");
+		$fields["opc"] = array("required"=>true,"column_name"=>"OPC", "comment" => "Insert OPC to be written to the card. Ex.: 6cb49bb6f99e97c3913924e7a1f32650", "triggered_by"=>"generate_random_imsi");
+	
+		if ($params["smsc"] == "") {
+			$fields["smsc"] = array("required"=>true, "column_name"=>"SMSC", "comment"=>"Short message server center.", "advanced"=>true, "javascript"=>"onClick=advanced('sim')", "triggered_by"=>"generate_random_imsi");
+		}
+	} else {
+		$fields["imsi"] = array("column_name"=>"IMSI", "value"=> $params["imsi"],"display"=>"fixed");
+		$fields["iccid"] = array("required"=>true,"column_name"=>"ICCID", "value"=> $params["iccid"], "comment" => "Insert ICCID(Integrated Circuit Card Identifier) to be written to the card. Ex.: 8940001017992212557.");
+		$fields["ki"] = array("display"=>"fixed", "column_name"=>"Ki", "value" => $params["ki"]);
+		$fields["opc"] = array("required"=>true,"column_name"=>"OPC", "value"=> $params["opc"], "comment" => "Insert OPC to be written to the card. Ex.: 6cb49bb6f99e97c3913924e7a1f32650.");
+		if ($params["smsc"] == "") {
+			$fields["smsc"] = array("required"=>true, "column_name"=>"SMSC", "comment"=>"Short message server center.");
+		}
+	}
+	if (!$add_existing_subscriber) {
+		$fields["insert_subscribers"] = array("comment" => "Uncheck if you don't want SIM credentials to be written in subscribers.js.", "display"=>"checkbox", "value" => $insert_subscribers); 
+	}
+	//advanced fields if they are set in ybts.conf file
+	$fields["operator_name"] = $advanced_op ? array("required" => true,"advanced"=> true, "value" =>$op, "comment" => "Set Operator name on SIM.") : array("required" => true, "comment" => "Set Operator name on SIM.");
+	if ($cc)
+		$fields["country_code"] = array("required" => true, "value"=>$cc, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK", "advanced"=> true);
+	$fields["card_type"] = array($type_card,"advanced"=> true, "required"=>true, "display"=>"select", "column_name"=> "Card Type", "comment" =>" Select the card type for writing SIM credentials. The SIM cards that you received are \"GrcardSim\". For other card types, see the list of cards supported by PySim. It is not guaranteed that your card will be written, even if it is in that list."); 
+	$fields["mobile_country_code"] = $advanced_mcc ? array("required" => true,"advanced"=> true, "value" => $mcc, "comment" => "Set Mobile Country Code.", "javascript"=>"onClick=advanced('sim')") :
+							array("required" => true,"value" => $mcc, "comment" => "Set Mobile Country Code.");
+	$fields["mobile_network_code"] = $advanced_mnc ? array("required" => true,"advanced"=> true, "value" => $mnc, "comment" => "Set Mobile Network Code.", "javascript"=>"onClick=advanced('sim')") :
+							array("required" => true,"value" => $mnc, "comment" => "Set Mobile Network Code.");
+	
+	if (strlen($params["smsc"])>0){
+		$fields["smsc_adv"] = array("required"=>true, "column_name"=>"SMSC", "comment"=>"Short message server center.", "value"=>$params["smsc"], "advanced"=>true, "javascript"=>"onClick=advanced('sim')");
+	}
+	if ($generate_random_imsi != "on") {
+		unset($fields["imsi"]["triggered_by"]);
+		unset($fields["iccid"]["triggered_by"]);
+		unset($fields["ki"]["triggered_by"]);
+		unset($fields["opc"]["triggered_by"]);
+		unset($fields["smsc"]["triggered_by"]);
+	}
+	
+	error_handle($error,$fields,$error_fields);
+	start_form(NULL,"post",false,"outbound");
+	if ($add_existing_subscriber) 
+		addHidden("to_pysim", array("generate_random_imsi"=>$generate_random_imsi, "add_existing_subscriber"=>$add_existing_subscriber, "imsi"=>$params["imsi"], "ki"=>$params["ki"]));
+	else
+		addHidden("to_pysim", array("generate_random_imsi"=>$generate_random_imsi));
+	editObject(NULL,$fields,"Set SIM data for writting","Save");
+	end_form();
+}
+
+function get_card_types()
+{
 	$type_card = array(
 		array('card_type_id'=>'fakemagicsim', 'card_type'=>'FakeMagicSim'),
 		array('card_type_id'=>'supersim', 'card_type'=>'SuperSim', ),
@@ -713,46 +815,12 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 		array('card_type_id'=>'sysmoUSIM-GR1', 'card_type'=>'Sysmocom SysmoUSIM-GR1'),
 		array('card_type'=>'auto','card_type_id'=>'auto')//autodetection is implemented in PySim/cards.py only for classes: FakeMagicSim, SuperSim, MagicSim the other types of card will fail (at this time 2014-04-16)
 	);
-	$type_card["selected"] = $sim_type; //type of card that was successfully written 
-
-	if (!$cc) 
-		$fields["country_code"] = array("required" => true, "value"=>$cc, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK");
-
-	$fields["generate_random_imsi"] =  array("comment" => "Checked - if you want the parameter for the card to be generated randomly or uncheck - to insert your card values manually", "column_name"=>"Generate random IMSI", "javascript" => 'onclick="show_hide_cols()"', "display"=>"checkbox", "value"=>$generate_random_imsi);
-	//show/hide fields when generate_random_imsi is unselected/selected
-	$fields["imsi"] = array("required"=>true,"column_name"=>"IMSI", "comment" => "Insert IMSI to be written to the card. Ex.:001011641603116", "triggered_by"=>"generate_random_imsi");
-	$fields["iccid"] = array("required"=>true,"column_name"=>"ICCID", "comment" => "Insert ICCID(Integrated Circuit Card Identifier) to be written to the card. Ex.: 8940001017992212557", "triggered_by"=>"generate_random_imsi");
-	$fields["ki"] = array("required"=>true,"column_name"=>"Ki", "comment" => "Insert Ki to be written to the card. Ex.: 3b07f45b11d2003247e9ae6f13de7573", "triggered_by"=>"generate_random_imsi");
-	$fields["opc"] = array("required"=>true,"column_name"=>"OPC", "comment" => "Insert OPC to be written to the card. Ex.: 6cb49bb6f99e97c3913924e7a1f32650", "triggered_by"=>"generate_random_imsi");
-	
-	$fields["insert_subscribers"] = array("comment" => "Uncheck if you don't want SIM credentials to be written in subscribers.js.", "display"=>"checkbox", "value" => $insert_subscribers); 
-	//advanced fields if they are set in ybts.conf file
-	$fields["operator_name"] = $advanced_op ? array("required" => true,"advanced"=> true, "value" =>$op, "comment" => "Set Operator name on SIM.") : array("required" => true, "comment" => "Set Operator name on SIM.");
-	if ($cc)
-		$fields["country_code"] = array("required" => true, "value"=>$cc, "comment" => "Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK", "advanced"=> true);
-	$fields["card_type"] = array($type_card,"advanced"=> true, "required"=>true, "display"=>"select", "column_name"=> "Card Type", "comment" =>" Select the card type for writing SIM credentials. The SIM cards that you received are \"GrcardSim\". For other card types, see the list of cards supported by PySim. It is not guaranteed that your card will be written, even if it is in that list."); 
-	$fields["mobile_country_code"] = $advanced_mcc ? array("required" => true,"advanced"=> true, "value" => $mcc, "comment" => "Set Mobile Country Code.", "javascript"=>" onClick=advanced('sim')") :
-							array("required" => true,"value" => $mcc, "comment" => "Set Mobile Country Code.");
-	$fields["mobile_network_code"] = $advanced_mnc ? array("required" => true,"advanced"=> true, "value" => $mnc, "comment" => "Set Mobile Network Code.", "javascript"=>" onClick=advanced('sim')") :
-							array("required" => true,"value" => $mnc, "comment" => "Set Mobile Network Code.");
-	
-	if (!$generate_random_imsi) {
-		unset($fields["imsi"]["triggered_by"]);
-		unset($fields["iccid"]["triggered_by"]);
-		unset($fields["ki"]["triggered_by"]);
-		unset($fields["opc"]["triggered_by"]);
-	}
-
-	error_handle($error,$fields,$error_fields);
-	start_form(NULL,"post",false,"outbound");
-	addHidden("to_pysim");
-	editObject(NULL,$fields,"Set SIM data for writting","Save");
-	end_form();
+	return $type_card;
 }
 
 function write_sim_form_to_pysim()
 {
-	global $yate_conf_dir;
+	global $yate_conf_dir, $method;
 
 	$error = "";
 	$params = array("operator_name","country_code","mobile_country_code","mobile_network_code", "card_type");
@@ -774,12 +842,25 @@ function write_sim_form_to_pysim()
 	}
 
 	$change_command = false;	
-	if (getparam("generate_random_imsi") != "on")
+
+	if (getparam("generate_random_imsi") != "on" || getparam("add_existing_subscriber"))
 	       	$change_command = true;
 
 	if ($change_command) {
 		//validation on fields
-		$params = array("imsi", "iccid", "ki", "opc");
+
+		$data["smsc"] = getparam("smsc")!=NULL ? getparam("smsc") : getparam("smsc_adv");
+		if ($data["smsc"] == "" && !ctype_digit($data["smsc"])) {
+		         $error .= "SMSC must be digits only!<br/>\n";
+			 $error_fields[] = $param;
+		}
+
+		if (getparam("add_existing_subscriber")){ 
+			$params = array("iccid", "opc");
+			$data["imsi"] = getparam("imsi");
+			$data["ki"] = getparam("ki");
+		} else	
+			$params = array("imsi", "iccid", "ki", "opc");
 		foreach ($params as $key => $param) {
 			if (!getparam($param)) {
 				$error .= "This parameter '".strtoupper($param). "' cannot be empty!<br/>\n";
@@ -798,15 +879,18 @@ function write_sim_form_to_pysim()
 			} elseif ($param == "iccid" && !ctype_digit(getparam($param)) && strlen(getparam($param)) != 19) {
 				$error .= "ICCID: ". getparam($param) ." must contain 19 digits!<br/>\n";
 				$error_fields[] = $param;
-			}  
+			}	
 			$data[$param] = getparam($param);
-
 		}
 	}
 	if (!strlen($error))
 		$output = execute_pysim($data, $change_command);
-	else
-		return write_sim_form($error, $error_fields, getparam("generate_random_imsi"),getparam("insert_subscribers"));
+	else {
+		if (getparam("add_existing_subscriber"))
+			return write_sim_form($error, $error_fields, getparam("generate_random_imsi"),getparam("insert_subscribers"),true, $data);
+		else
+			return write_sim_form($error, $error_fields, getparam("generate_random_imsi"),getparam("insert_subscribers"));
+	}
 
 	if ($output)
 		print "<pre>".$output."</pre>";
@@ -817,7 +901,10 @@ function write_sim_form_to_pysim()
 		write_generated_imsi_to_file($all_sim_written[count($all_sim_written)-1]);
 	}
 
-	manage_sims();
+	if (getparam("add_existing_subscriber"))
+		list_subscribers();
+	else
+		manage_sims();
 }
 
 function write_imsi_in_subscribers()
@@ -891,8 +978,11 @@ function execute_pysim($params, $command_manually=false)
 	 * E.g.:  ./pySim-prog.py -n 26C3 -c 49 -x 262 -y 42 -i <IMSI> -s <ICCID>
 	 */ 
 	if ($command_manually)
-		$command = 'stdbuf -o0 ' . $pysim_path.'/'.'pySim-prog.py -e -p 0 -t '. $params["card_type"]. " -n ".$params["operator_name"]."  --write-csv ".$pysim_csv." -i ". $params["imsi"]. " -s ".$params["iccid"]. " -o ". $params["opc"]. " -k ". $params["ki"];
-
+		$command = 'stdbuf -o0 ' . $pysim_path.'/'.'pySim-prog.py -e -p 0 -t '. $params["card_type"]. " -n ".$params["operator_name"]."  --write-csv ".$pysim_csv." -i ". $params["imsi"]." -s ".$params["iccid"]. " -o ". $params["opc"]." -k ". $params["ki"]." -c ".$params["country_code"]." -x ".$params["mobile_country_code"]." -y ".$params["mobile_network_code"];
+	
+	if (isset($params["smsc"]))
+		$command .= " -m ".$params["smsc"];
+	
 	$descriptorspec = array(
 		0 => array("pipe","r"),// stdin is a pipe that the child will read from
 		1 => array("pipe","w"),//stdout
@@ -978,26 +1068,14 @@ function read_csv()
 	if (!file_exists($filename))
 		return $sim_data;
 
-	$handle = fopen($filename, "r");
-	$content = fread($handle,filesize($filename));
-	$content = eregi_replace('"','',$content); // in case they choose to mark text fields with "
-	$content = eregi_replace("'",'',$content);  // in case they choose to mark text fields with '
-	$content = explode("\n",$content);
-
-	for ($i=0; $i<count($content); $i++) {
-		$row = explode(',',$content[$i]);
-		if (!is_array($row) || count($row) < 8)
-			continue;
-		// the order in csv file: name,iccid,mcc,mnc,imsi,smsp,ki,opc
-		$sim_data[$i]["operator_name"] = $row[0];
-		$sim_data[$i]["iccid"] = $row[1];
-		$sim_data[$i]["mobile_country_code"] = $row[2];
-		$sim_data[$i]["mobile_network_code"] = $row[3];
-		$sim_data[$i]["imsi"] = $row[4];
-		// $sim_data[$i]["smsp"] = $row[5];
-		$sim_data[$i]["ki"] = $row[6];
-		$sim_data[$i]["opc"] = $row[7];
+	$formats = array("operator_name", "iccid", "mobile_country_code", "mobile_network_code", "imsi", "smsp", "ki", "opc");
+	$csv = new CsvFile($filename,$formats, array(), false);
+	if ($csv->getError()) {
+		nib_note($csv->getError());
+		return $sim_data;
 	}
+
+	$sim_data = $csv->file_content;
 	return $sim_data;
 }
 
@@ -1005,13 +1083,290 @@ function test_existing_imsi_in_csv($imsi)
 {
 	$sim_data = read_csv();
 
-	for ($i=0; $i<count($sim_data); $i++) 
-		$sim_imsis[] = $sim_data[$i]["imsi"];
+	$sim_imsis = array();
+
+	for ($i=0; $i<count($sim_data); $i++){ 
+		if (isset($sim_data[$i]["imsi"]))
+			$sim_imsis[] = $sim_data[$i]["imsi"];
+	}
 
 	if (in_array($imsi, $sim_imsis))
 		return true;
 
 	return false;
+}
+
+function get_params_subscriber_from_pysim_csv($imsi)
+{
+	if (!test_existing_imsi_in_csv($imsi))
+		return array();
+
+	$params = array();
+	$sim_data = read_csv();
+
+	for ($i=0; $i<count($sim_data); $i++)
+		if ($sim_data[$i]["imsi"]== $imsi)
+			return $sim_data[$i];
+}
+
+function write_subcriber_on_sim($imsi, $ki)
+{
+	return '<a href="main.php?module=subscribers&method=write_subscriber_form&imsi='.$imsi.'&ki='.$ki.'"><img src="images/sim_programmer.png" /></a>';
+}
+
+function write_subscriber_form()
+{
+	$iccid_required = get_iccid_required_params();
+	$params = array("imsi" => getparam("imsi"), "ki"=>getparam("ki"));
+	$sim_data = get_params_subscriber_from_pysim_csv($params["imsi"]);
+	if (count($sim_data)) 
+		$params = $sim_data;
+	$params["smsc"] = get_smsc();
+
+	if (!isset($params["iccid"]))
+		$params["iccid"] = get_iccid_random($iccid_required["cc"], $iccid_required["mcc"], $iccid_required["mnc"]);
+	if (!isset($params["opc"]))
+		$params["opc"] = get_opc_random();
+
+	write_sim_form($error=null,$error_fields=array(), "on", "off", true, $params);
+}
+
+function get_iccid_required_params()
+{
+	global $yate_conf_dir;
+
+	$res = get_cc_smsc();
+	if ($res[0] && is_array($res[1])) 
+		$cc = $res[1]["country_code"];
+		
+	$filename = $yate_conf_dir."ybts.conf";
+	$file = new ConfFile($filename);
+	$mcc = "001";
+	$mnc = "01";
+
+	if (isset($file->structure["gsm"]["Identity.MCC"]))
+		$mcc = $file->structure["gsm"]["Identity.MCC"];
+	if (isset($file->structure["gsm"]["Identity.MNC"]))
+		$mnc = $file->structure["gsm"]["Identity.MNC"];
+
+	$params = array("cc"=>$cc, "mcc"=>$mcc, "mnc"=>$mnc);
+
+	return $params;
+}
+
+function get_smsc()
+{
+	$smsc = "";
+	
+	$res = get_cc_smsc();
+	if (is_array($res[1])) 
+		$smsc = $res[1]["smsc"];
+
+	return $smsc;
+}
+
+function import_subscribers($error=null,$error_fields=array())
+{
+	$fields = array(
+		"insert_file_location" => array("display"=>"file", "file_example"=>"import_example.csv"),
+		"note!" => array("value"=>"File type must be .csv.", "display"=>"fixed")
+	);
+
+	error_handle($error,$fields,$error_fields);
+	start_form(NULL,"post",true);
+	addHidden("from_csv");
+	editObject(NULL,$fields,"Import subscribers from .csv file", "Upload");
+	end_form();
+}
+
+function import_subscribers_from_csv()
+{
+	global $module, $yate_conf_dir;
+
+	$filename = basename($_FILES["insert_file_location"]["name"]);
+	$ext = strtolower(substr($filename,-4));
+	if ($ext != ".csv")
+		return import_subscribers("File format must be .csv", array("insert_file_location"));
+
+	$real_name = time().".csv";
+	$file = "$yate_conf_dir/$real_name";
+	if (!move_uploaded_file($_FILES["insert_file_location"]['tmp_name'],$file))
+		return import_subscribers("Could not upload file.", array("insert_file_location"));
+
+	$new_subscribers = get_subscribers_from_uploaded_csv($file);
+
+	if (!$new_subscribers[0])
+		return import_subscribers($new_subscribers[1], array("insert_file_location"));
+
+	$new_subscribers = $new_subscribers[1];
+
+	//insert subscribers into subscribers.conf
+
+	$subscribers = get_subscribers(true);
+
+	if (!$subscribers[0]) {
+		$keep_general = array();
+		$regexp = get_regexp(true);
+	        if ($regexp[0] && strlen($regexp[1])) {
+			$regexp = $regexp[1];
+			if (isset($regexp[1]["country_code"]))
+				$keep_general["country_code"] = $regexp[1]["country_code"];
+			if (isset($regexp[1]["smsc"]))
+				$keep_general["smsc"] = $regexp[1]["country_code"];
+		}
+		$res = set_subscribers($new_subscribers, $keep_general);
+		if (!$res[0]) 
+			return import_subscribers("Import subscribers failed. Error: ".$res[1]); 
+		
+		$res = restart_yate();
+		if ($res[0] && isset($res[1])) //yate is not running
+			notice("Finished importing subscribers. " .$res[1], "list_subscribers");
+		elseif (!$res[0]) //errors on socket connection
+			notice("Finished importing subscribers. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "list_subscribers");
+		else //yate was restarted
+			notice("Finished importing subscribers.", "list_subscribers");
+
+	} else {
+		$imsi_duplicate = array();
+		$subscribers = $subscribers[1];
+		if (isset($subscribers["general"])) {
+			$keep_general = $subscribers["general"];
+			unset($subscribers["general"]);
+		}
+		foreach ($new_subscribers as $imsi => $data) {
+			if (isset($subscribers[$imsi])) {
+				//test if the data are different and set in array the imsi duplicated with different data
+				if ($data["msisdn"] != $subscribers[$imsi]["msisdn"] || $data["short_number"] != $subscribers[$imsi]["short_number"] || $data["active"] != $subscribers[$imsi]["active"] || $data["ki"] != $subscribers[$imsi]["ki"] || $data["imsi_type"] != $subscribers[$imsi]["imsi_type"]) {
+					$imsi_duplicate[] = $imsi;
+				}
+			}
+		}
+		$merge_subs = array_merge($subscribers, $new_subscribers);
+		$_SESSION["new_subs"] =  $merge_subs;
+		$_SESSION["imsi_duplicate"] = $imsi_duplicate;
+		$_SESSION["keep_general"] = $keep_general;
+		if (count($imsi_duplicate))
+			overwrite_imsi_form();
+		else {
+			$res = set_subscribers($merge_subs, $keep_general);
+			if (!$res[0]) 
+				return import_subscribers("Import subscribers failed. Error: ".$res[1]); 
+			$res = restart_yate();
+			if ($res[0] && isset($res[1])) //yate is not running
+				notice("Finished importing subscribers. " .$res[1], "list_subscribers");
+			elseif (!$res[0]) //errors on socket connection
+				notice("Finished importing subscribers. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "list_subscribers");
+			else //yate was restarted
+				notice("Finished importing subscribers.", "list_subscribers");
+		}
+	}
+}
+
+function get_subscribers_from_uploaded_csv($file)
+{
+	$new_subscribers = array();
+	$formats = array("imsi","msisdn","short_number","active","ki","op","imsi_type");
+	$csv = new CsvFile($file,$formats);
+
+	if (!count($csv->file_content) && $csv->getError())
+		return array(false, $csv->getError());
+
+	foreach ($csv->file_content as $key => $subs_data) {
+		if (isset($subs_data["imsi"])){
+			$new_subscribers[$subs_data["imsi"]] = $csv->file_content[$key];
+			unset($new_subscribers[$subs_data["imsi"]]["imsi"]);
+		}	
+	}
+
+	return array(true,$new_subscribers);
+}
+
+function overwrite_imsi_form($error=null, $error_fields=array())
+{
+	global $method;
+
+	$method="overwrite_imsi";
+	$imsi_duplicated = array();
+	if (isset($_SESSION["imsi_duplicate"]))
+		$imsi_duplicate = $_SESSION["imsi_duplicate"];
+
+	$i=0;
+	foreach ($imsi_duplicate as $key => $imsi) {
+		$fields["imsi".$i] = array("display"=>"fixed", "value"=>$imsi, "column_name"=>"IMSI");
+		$i++;
+	}
+	$fields["note!"] = array("value"=>"The IMSI found in csv file are the same as the ones in subscribers.conf but with different values.", "display"=>"fixed");
+
+	error_handle($error,$fields,$error_fields);
+	start_form();
+	addHidden("in_file");
+	editObject(NULL,$fields, "Overwrite existing subscribers", "Overwrite IMSIs");
+	end_form();
+}
+
+function overwrite_imsi_in_file()
+{
+	if (isset($_SESSION["new_subs"]))
+		$merge_subs = $_SESSION["new_subs"];
+
+	if (isset($_SESSION["keep_general"]))
+		$keep_general = $_SESSION["keep_general"];
+
+	if (!count($merge_subs))
+		return overwrite_imsi_form("No subscribers found to overwrite.");
+
+	$res = set_subscribers($merge_subs, $keep_general);
+	if (!$res[0]) 
+	 	return overwrite_imsi_form("The subscribers were not overwritten. Error: ". $res[1]);
+
+	unset($_SESSION["new_subs"],$_SESSION["keep_general"],$_SESSION["imsi_duplicate"]);
+	$res = restart_yate();
+	if ($res[0] && isset($res[1])) //yate is not running
+		notice("Finished overwritting subscribers. " .$res[1], "list_subscribers");
+	elseif (!$res[0]) //errors on socket connection
+		notice("Finished overwritting subscribers. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "list_subscribers");
+	else //yate was restarted
+		notice("Finished overwritting subscribers.", "list_subscribers");
+}
+
+function export_subscribers_in_csv()
+{
+	global $yate_conf_dir;
+
+	$subscribers = get_subscribers();
+	if (!$subscribers[0]) {
+		nib_note("No subscribers to export.");
+		return;
+	}
+	$smsc = get_smsc();
+	$formats = array("IMSI", "Msisdn", "Short_number", "Active", "Ki", "OP", "IMSI_Type", "ICCID", "SMSC", "OPC");
+	$i=0;
+	$arr = array();
+	foreach ($subscribers[1] as $imsi => $params) {
+		//array_push($params,$imsi);	
+		$params_pysim = get_params_subscriber_from_pysim_csv($imsi);
+		if (count($params_pysim)) {
+			$params["ICCID"] = $params_pysim["iccid"];
+			$params["OPC"] = trim($params_pysim["opc"]);
+		}
+		$params["IMSI"] = $imsi;
+		$params["SMSC"] = $smsc; 
+		$arr[] = $params;
+	}
+
+	foreach ($arr as $key => $val)
+		$new[] = change_key_name($val, array("msisdn"=>"Msisdn","short_number"=>"Short_number", "active"=>"Active", "ki"=>"Ki", "op"=>"OP", "imsi_type"=>"IMSI_Type"));
+
+	$filename = "list_subscribers.csv";
+
+	$csv = new CsvFile($yate_conf_dir.$filename, $formats, $new, false, false);
+
+	if (!$csv->status())
+		return notice($csv->getError(),"list_subscribers");
+
+	$csv->write();
+
+	notice("Content was exported. <a href=\"download.php?file=$filename\">Download</a>", "list_subscribers");
 }
 
 ?>

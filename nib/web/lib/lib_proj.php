@@ -386,4 +386,45 @@ function check_permission($dir)
 
 	return array(true);
 }
+
+function change_key_name($array, $key_changes)
+{
+	foreach ($array as $key => $value){ 
+		if (is_array($value)) {
+			$array[$key] = change_key_name($value,$key_changes);
+		} else {
+			foreach($key_changes as $old_key => $new_key) {
+				$array[$new_key] =  $array[$old_key];  
+			}
+		}	
+	}
+	foreach($key_changes as $old_key => $new_key) 
+		unset($array[$old_key]);          
+
+	return $array;   
+}
+
+function get_opc_random()
+{
+	$opc = bin2hex(openssl_random_pseudo_bytes(16));	
+	return $opc;
+}
+
+function get_iccid_random($cc,$mcc,$mnc)
+{
+	$iccid = "89" . $cc . $mcc . $mnc;
+	$number_length = 19 - strlen($iccid);
+	$number = random_numbers($number_length);
+	$iccid .= $number;
+
+	return $iccid;
+}
+
+function random_numbers($digits) 
+{
+	$min = pow(10, $digits - 1);
+	$max = pow(10, $digits) - 1;
+	return mt_rand($min, $max);
+}
+
 ?>

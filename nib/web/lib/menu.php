@@ -203,6 +203,8 @@ function submenu()
 		}
 	}
 
+	$change_structure_names = array("country_code_and_smsc"=>"Country&nbsp;Code&nbsp;and&nbsp;SMSC");
+
 	foreach($struct["$dir"."_".$module] as $option) {
 		/*      $res = submenu_check($dir,$module,$option);
 		 *                      if(!$res)
@@ -221,7 +223,11 @@ function submenu()
 			print("<td class=\"option\"><a class=\"secondlinkselected\" href=\"main.php?module=$module&method=$option\">");//.strtoupper($option)."</a></td>");
 		elseif(!$printed)
 			print("<td class=\"option\"><a class=\"secondlink\" href=\"main.php?module=$module&method=$option\">");//.strtoupper($option)."</a></td>");
-		print str_replace(" ","&nbsp;",ucwords(str_replace("_"," ",$option)));
+
+		if (isset($change_structure_names[$option]))
+			print $change_structure_names[$option];
+		else
+			print str_replace(" ","&nbsp;",ucwords(str_replace("_"," ",$option)));
 		print("</a></td><td class=\"option_separator\"><div></div></td>");
 		$i++;
 	}

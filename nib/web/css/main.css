@@ -458,7 +458,7 @@ td.endtable
 	padding-top: 5px;
 }
 
-a.content
+a.content, a.edit
 {
 	color: #1a1a1a; /*#0189d7;*/
 	cursor:pointer;
