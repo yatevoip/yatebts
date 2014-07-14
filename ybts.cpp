@@ -4967,6 +4967,7 @@ void YBTSSubmit::notify(bool final)
 	    "MO submit thread type=%s TMSI=%s IMSI=%s callRef=%s abnormally terminated [%p]",
 	    YBTSTid::typeName(m_type),ue->tmsi().safe(),ue->imsi().safe(),
 	    m_callRef.c_str(),this);
+    lck.drop();
     if (!__plugin.signalling())
 	return;
     switch (m_type) {
