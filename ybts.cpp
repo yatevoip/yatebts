@@ -1534,6 +1534,8 @@ protected:
     void cancelAuthThread();
     // Set connection if not already set
     YBTSConn* setConn(YBTSConn* conn);
+    // Set data source/consumer
+    void setMedia();
     virtual void disconnected(bool final, const char *reason);
     virtual bool callRouted(Message& msg);
     virtual void callAccept(Message& msg);
@@ -6433,12 +6435,7 @@ void YBTSChan::handleMediaStartRsp(bool ok)
 	if (start)
 	    startMT();
     }
-    if (__plugin.media()) {
-	if (!getSource())
-	    __plugin.media()->setSource(this);
-	if (!getConsumer())
-	    __plugin.media()->setConsumer(this);
-    }
+    setMedia();
 }
 
 // Connection released notification
@@ -6691,6 +6688,17 @@ YBTSConn* YBTSChan::setConn(YBTSConn* conn)
     return m_conn;
 }
 
+// Set data source/consumer
+void YBTSChan::setMedia()
+{
+    if (!__plugin.media())
+	return;
+    if (!getSource())
+	__plugin.media()->setSource(this);
+    if (!getConsumer())
+	__plugin.media()->setConsumer(this);
+}
+
 // Handle Handover Required
 void YBTSChan::handleHoRequired(const String& info)
 {
@@ -6769,10 +6777,7 @@ void YBTSChan::callAccept(Message& msg)
     m_reason.clear();
     lck.drop();
     Channel::callAccept(msg);
-    if (__plugin.media()) {
-	__plugin.media()->setSource(this);
-	__plugin.media()->setConsumer(this);
-    }
+    setMedia();
     // Remember message params to re-execute if we are disconnected before progressing
     lck.acquire(driver());
     m_route = new Message(msg);
