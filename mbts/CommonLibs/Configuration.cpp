@@ -70,6 +70,20 @@ float ConfigurationRecord::floatNumber() const
 	return val;
 }
 
+bool ConfigurationRecord::strToBoolean(const std::string& str, bool defVal)
+{
+	if (!str.length())
+	    return defVal;
+	const char** s;
+	for (s = gBoolFalse; *s; s++)
+		if (str == *s)
+			return false;
+	for (s = gBoolTrue; *s; s++)
+		if (str == *s)
+			return true;
+	return defVal;
+}
+
 
 ConfigurationTable::ConfigurationTable(const char* filename, const char *wCmdName, ConfigurationKeyMap wSchema)
 {
@@ -624,16 +638,8 @@ string ConfigurationTable::getStr(const string& key)
 bool ConfigurationTable::getBool(const string& key)
 {
 	try {
-		const ConfigurationRecord& rec = lookup(key);
-		string val = rec.value();
-		const char** s;
-		for (s = gBoolFalse; *s; s++)
-			if (val == *s)
-				return false;
-		for (s = gBoolTrue; *s; s++)
-			if (val == *s)
-				return true;
-		return rec.number() != 0;
+		ScopedLock lock(mLock);
+		return lookup(key).boolean();
 	} catch (ConfigurationTableKeyNotFound) {
 		// Raise an alert and re-throw the exception.
 		gLogEarly(LOG_DEBUG, "configuration parameter %s has no defined value", key.c_str());

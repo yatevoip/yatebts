@@ -74,6 +74,7 @@ class ConfigurationRecord {
 
 	std::string mValue;
 	long mNumber;
+	bool mBool;
 	bool mDefined;
 
 	public:
@@ -85,22 +86,26 @@ class ConfigurationRecord {
 	ConfigurationRecord(const std::string& wValue):
 		mValue(wValue),
 		mNumber(strtol(wValue.c_str(),NULL,0)),
+		mBool(strToBoolean(mValue,mNumber != 0)),
 		mDefined(true)
 	{ }
 
 	ConfigurationRecord(const char* wValue):
 		mValue(std::string(wValue)),
 		mNumber(strtol(wValue,NULL,0)),
+		mBool(strToBoolean(mValue,mNumber != 0)),
 		mDefined(true)
 	{ }
 
 
 	const std::string& value() const { return mValue; }
 	long number() const { return mNumber; }
+	bool boolean() const { return mBool; }
 	bool defined() const { return mDefined; }
 
 	float floatNumber() const;
 
+	static bool strToBoolean(const std::string& str, bool defVal = false);
 };
 
 
