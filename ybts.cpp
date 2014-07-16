@@ -6988,10 +6988,10 @@ void YBTSChanThread::run()
 	if (reason)
 	    Debug(m_chan,DebugNote,"Failed to complete authentication: %s [%p]",
 		reason.c_str(),(YBTSChan*)m_chan);
-	if (m_conn && m_conn->authSent(YBTSConn::FMoCall)) {
-	    Debug(m_chan,DebugNote,"Rejecting authentication [%p]",(YBTSChan*)m_chan);
-	    authReject();
-	}
+	if (!ok && m_conn && m_conn->owner())
+	    m_conn->owner()->authCancel(m_conn,this);
+	if (!Thread::check(false) && __plugin.haveChan(m_chan->id()))
+	    m_chan->hangup(reason);
 	return;
     }
     authSetParams(*m_route);
@@ -7037,6 +7037,7 @@ void YBTSChanThread::notify(const char* error)
     Lock lck(chan->driver());
     if (chan->m_authThread == this)
 	chan->m_authThread = 0;
+    lck.drop();
     chan = 0;
 }
 
