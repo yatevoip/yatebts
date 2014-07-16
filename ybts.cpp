@@ -933,9 +933,10 @@ public:
     // Read socket. Parse and handle received data
     virtual void processLoop();
     void init(Configuration& cfg);
-    inline bool findConn(RefPointer<YBTSConn>& conn, uint16_t connId, bool create) {
+    inline bool findConn(RefPointer<YBTSConn>& conn, uint16_t connId, bool create,
+	    bool removed = false) {
 	    Lock lck(m_connsMutex);
-	    return findConnInternal(conn,connId,create);
+	    return findConnInternal(conn,connId,create,removed);
 	}
     inline bool findConnCreate(RefPointer<YBTSConn>& conn, uint16_t connId,
 	bool& created) {
@@ -978,8 +979,9 @@ protected:
     void dropSS(uint16_t connId, YBTSTid* tid, bool toMs, bool toNetwork,
 	const char* reason = 0);
     bool sendInternal(YBTSMessage& msg);
-    YBTSConn* findConnInternal(uint16_t connId);
-    bool findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create);
+    YBTSConn* findConnInternal(uint16_t connId, YBTSConn** removed = 0);
+    bool findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create,
+	bool removed = false);
     bool findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* ue);
     void changeState(int newStat);
     int handlePDU(YBTSMessage& msg);
@@ -1920,6 +1922,7 @@ static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling in
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
 static unsigned int s_restartMs = YBTS_RESTART_DEF; // Time (in miliseconds) to wait for restart
 static unsigned int s_restartMax = YBTS_RESTART_COUNT_DEF; // Restart counter
+static unsigned int s_releaseConnMs = 30000; // Released connection delete interval
 // Call Control Timers (in milliseconds)
 // ETSI TS 100 940 Section 11.3
 static unsigned int s_t305 = 30000;      // DISC sent, no inband tone available
@@ -3709,11 +3712,25 @@ int YBTSSignalling::checkTimers(const Time& time)
     if (m_haveConnTout) {
 	ObjList removeSS;
 	ObjList remove;
+	ObjList deleted;
 	m_connsMutex.lock();
 	if (m_connsTimeout && m_connsTimeout <= time) {
 	    m_connsTimeout = 0;
-	    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
+	    bool notRemoved = true;
+	    ObjList* o = m_conns.skipNull();
+	    for (; o; o = (notRemoved ? o->skipNext() : o->skipNull())) {
 		YBTSConn* c = static_cast<YBTSConn*>(o->get());
+		notRemoved = true;
+		if (c->removed()) {
+		    if (Engine::exiting() || c->m_timeout <= time) {
+			Debug(this,DebugAll,"Removing released connection %u [%p]",c->connId(),this);
+			deleted.append(o->remove(false));
+			notRemoved = false;
+		    }
+		    else
+			setConnToutCheckInternal(c->m_timeout);
+		    continue;
+		}
 		if (c->m_ss && c->m_ss->m_timeout) {
 		    if (Engine::exiting() || c->m_ss->m_timeout <= time) {
 			removeSS.append(c->m_ss);
@@ -3903,15 +3920,36 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 {
     RefPointer<YBTSConn> conn;
     Lock lck(m_connsMutex);
-    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
+    for (ObjList* o = m_conns.skipNull(); o;) {
 	YBTSConn* c = static_cast<YBTSConn*>(o->get());
-	if (c->connId() != connId)
+	if (c->connId() != connId) {
+	    o = o->skipNext();
 	    continue;
+	}
+	if (c->removed()) {
+	    if (notifyPeer)
+		o = o->skipNext();
+	    else {
+		// Removed connection for which we received conn lost from mbts
+		o->remove();
+		o = o->skipNull();
+	    }
+	    continue;
+	}
 	conn = c;
 	c->authEnd(false,"net-out-of-order");
 	c->m_removed = true;
-	Debug(this,DebugAll,"Removing connection (%p,%u) [%p]",c,connId,this);
-	o->remove();
+	if (notifyPeer && s_releaseConnMs) {
+	    Debug(this,DebugAll,"Releasing connection (%p,%u) [%p]",c,connId,this);
+	    c->m_usage = 0;
+	    c->resetAuth();
+	    c->m_timeout = Time::now() + (uint64_t)s_releaseConnMs * 1000;
+	    setConnToutCheckInternal(c->m_timeout);
+	}
+	else {
+	    Debug(this,DebugAll,"Removing connection (%p,%u) [%p]",c,connId,this);
+	    o->remove();
+	}
 	break;
     }
     lck.drop();
@@ -4122,6 +4160,8 @@ bool YBTSSignalling::findConnSSTid(RefPointer<YBTSConn>& conn, const String& ssI
 // Increase/decrease connection usage. Update its timeout
 bool YBTSSignalling::setConnUsageInternal(YBTSConn& conn, bool on, int flag, bool update)
 {
+    if (conn.removed())
+	return true;
     switch (flag) {
 	case YBTSConn::FMoSms:
 	    if (on)
@@ -4207,30 +4247,38 @@ bool YBTSSignalling::sendInternal(YBTSMessage& msg)
     return true;
 }
 
-YBTSConn* YBTSSignalling::findConnInternal(uint16_t connId)
+YBTSConn* YBTSSignalling::findConnInternal(uint16_t connId, YBTSConn** removed)
 {
     for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
 	YBTSConn* c = static_cast<YBTSConn*>(o->get());
-	if (c->connId() == connId)
+	if (c->connId() != connId)
+	    continue;
+	if (!c->removed())
 	    return c;
+	if (removed)
+	    *removed = c;
     }
     return 0;
 }
 
-bool YBTSSignalling::findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create)
+bool YBTSSignalling::findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create,
+    bool removed)
 {
     conn = 0;
-    YBTSConn* c = findConnInternal(connId);
+    YBTSConn* removedConn = 0;
+    YBTSConn* c = findConnInternal(connId,&removedConn);
     if (c) {
 	conn = c;
-	return true;
+	return conn != 0;
     }
-    if (create) {
+    if (create && !removedConn) {
 	conn = new YBTSConn(this,connId);
 	m_conns.append(conn);
 	Debug(this,DebugAll,"Added connection (%p,%u) [%p]",
 	    (YBTSConn*)conn,conn->connId(),this);
     }
+    else if (removed && removedConn)
+	conn = removedConn;
     return conn != 0;
 }
 
@@ -4239,7 +4287,7 @@ bool YBTSSignalling::findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* 
     conn = 0;
     for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
 	YBTSConn* c = static_cast<YBTSConn*>(o->get());
-	if (c->ue() == ue) {
+	if (!c->removed() && c->ue() == ue) {
 	    conn = c;
 	    return true;
 	}
@@ -4284,9 +4332,18 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 		const String& proto = msg.xml()->getTag();
 		RefPointer<YBTSConn> conn;
 		if (proto == YSTRING("MM")) {
-		    findConn(conn,msg.connId(),true);
-		    conn->hardRelease(false);
-		    __plugin.mm()->handlePDU(msg,conn);
+		    if (findConn(conn,msg.connId(),true)) {
+			conn->hardRelease(false);
+			__plugin.mm()->handlePDU(msg,conn);
+		    }
+		    else if (debugAt(DebugNote)) {
+			const String* t = 0;
+			XmlElement* ch = msg.xml()->findFirstChild(&s_message);
+			if (ch)
+			    t = ch->getAttribute(s_type);
+			Debug(this,DebugNote,"Late MM '%s' on conn %u  [%p]",
+			    TelEngine::c_str(t),msg.connId(),this);
+		    }
 		}
 		else if (proto == YSTRING("CC")) {
 		    if (findConnDrop(msg,conn,msg.connId())) {
@@ -4360,12 +4417,16 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	case SigHandoverAck:
 	    if (msg.connId()) {
 		RefPointer<YBTSConn> conn;
-		findConn(conn,msg.connId(),true);
-		conn->setHandover(msg.info());
-		// Send HARDRELEASE if timer expires
-		conn->hardRelease(true);
-		setConnUsageInternal(*conn,false,0);
-		__plugin.handoverCmd(msg.info(),msg.xml(),conn);
+		if (findConn(conn,msg.connId(),true)) {
+		    conn->setHandover(msg.info());
+		    // Send HARDRELEASE if timer expires
+		    conn->hardRelease(true);
+		    setConnUsageInternal(*conn,false,0);
+		    __plugin.handoverCmd(msg.info(),msg.xml(),conn);
+		}
+		else
+		    Debug(this,DebugNote,"Late %s on conn %u  [%p]",
+			msg.name(),msg.connId(),this);
 	    }
 	    return Ok;
 	case SigHandoverReject:
@@ -4397,10 +4458,13 @@ void YBTSSignalling::handleRRM(YBTSMessage& m)
     else if (*t == YSTRING("PagingResponse")) {
 	RefPointer<YBTSConn> conn;
 	bool newConn = false;
-	findConnCreate(conn,m.connId(),newConn);
-	conn->hardRelease(false);
-	if (!__plugin.mm()->handlePagingResponse(m,conn,*ch) && newConn)
-	    dropConn(m.connId(),true);
+	if (findConnCreate(conn,m.connId(),newConn)) {
+	    conn->hardRelease(false);
+	    if (!__plugin.mm()->handlePagingResponse(m,conn,*ch) && newConn)
+		dropConn(m.connId(),true);
+	}
+	else
+	    Debug(this,DebugNote,"Late PagingResponse on conn %u [%p]",m.connId(),this);
     }
     else if (*t == YSTRING("HandoverFailure")) {
 	RefPointer<YBTSConn> conn;
@@ -9116,38 +9180,48 @@ bool YBTSDriver::msgStatusConn(Message& msg, String& line)
     s << "name=" << name();
     if (!line || line == s_all) {
 	unsigned int n = 0;
+	unsigned int removed = 0;
 	String tmp;
 	if (m_signalling) {
 	    bool details = msg.getBoolValue(YSTRING("details"),true);
 	    Lock lck(m_signalling->m_connsMutex);
 	    for (ObjList* o = m_signalling->m_conns.skipNull(); o; o = o->skipNext()) {
-		n++;
+		YBTSConn* c = static_cast<YBTSConn*>(o->get());
+		if (!c->removed())
+		    n++;
+		else
+		    removed++;
 		if (!details)
 		    continue;
-		YBTSConn* c = static_cast<YBTSConn*>(o->get());
-		tmp.append(String(c->connId()),",") << "=";
+		String imsi, tmsi;
 		if (c->ue()) {
 		    Lock lckUe(c->ue());
-		    tmp << c->ue()->imsi();
+		    imsi = c->ue()->imsi();
+		    tmsi = c->ue()->tmsi();
 		}
+		tmp.append(String(c->connId()),",") << "=" << imsi << "|" << tmsi;
 		tmp << "|" << c->m_usage;
+		tmp << "|" << String::boolText(!c->removed());
 	    }
 	}
-	s.append("format=",",") << "IMSI|Usage";
+	s.append("format=",",") << "IMSI|TMSI|Usage|Active";
 	s << ";count=" << n;
+	s << ",removed=" << removed;
 	s.append(tmp,";");
     }
     else if (m_signalling) {
 	RefPointer<YBTSConn> c;
 	line.trimBlanks();
-	if (m_signalling->findConn(c,line.toInteger(),false)) {
+	if (m_signalling->findConn(c,line.toInteger(),false,true)) {
 	    Lock lck(c);
 	    s.append("id=",";") << c->connId();
-	    s << ",imsi=";
+	    String imsi, tmsi;
 	    if (c->ue()) {
 		Lock lckUe(c->ue());
-		s << c->ue()->imsi();
+		imsi = c->ue()->imsi();
+		tmsi = c->ue()->tmsi();
 	    }
+	    s << ",imsi=" << imsi << ",tmsi=" << tmsi;
 	    String buf;
 	    buf.hexify(&c->m_sapiUp,1);
 	    s << ",sapi=0x" << buf;
@@ -9158,6 +9232,7 @@ bool YBTSDriver::msgStatusConn(Message& msg, String& line)
 	    s << ",ss=" << String::boolText(c->m_ss != 0);
 	    s << ",timeout=";
 	    addTout(s,c->m_timeout,true);
+	    s << ",active=" << String::boolText(!c->removed());
 	}
     }
     s << "\r\n";
@@ -9198,6 +9273,7 @@ void YBTSDriver::initialize()
 	YBTS_RESTART_COUNT_DEF,YBTS_RESTART_COUNT_MIN);
     s_restartMs = ybts.getIntValue(YSTRING("restart_interval"),
 	YBTS_RESTART_DEF,YBTS_RESTART_MIN,YBTS_RESTART_MAX);
+    s_releaseConnMs = ybts.getIntValue(YSTRING("releaseconn_interval"),30000,1000,60000);
     s_t305 = ybts.getIntValue(YSTRING("t305"),30000,20000,60000);
     s_t308 = ybts.getIntValue(YSTRING("t308"),5000,4000,20000);
     s_t313 = ybts.getIntValue(YSTRING("t313"),5000,4000,20000);
