@@ -1105,6 +1105,8 @@ public:
 	    String tmp;
 	    list.addParam("caller",setPrefixedID(tmp));
 	}
+    // Update TMSI/IMSI/IMEI if empty
+    void update(const NamedList& params, const String& prefix = "i");
     bool startPaging(BtsPagingChanType type);
     void stopPaging();
     void stopPagingNow();
@@ -4704,6 +4706,18 @@ YBTSDataSource* YBTSMedia::find(unsigned int connId)
 //
 // YBTSUE
 //
+// Update TMSI/IMSI/IMEI if empty
+void YBTSUE::update(const NamedList& params, const String& prefix)
+{
+    Lock lck(this);
+    if (!m_tmsi)
+	m_tmsi = params[prefix + "tmsi"];
+    if (!m_imsi)
+	m_imsi = params[prefix + "imsi"];
+    if (!m_imei)
+	m_imei = params[prefix + "imei"];
+}
+
 // Start paging, return true if already paging
 bool YBTSUE::startPaging(BtsPagingChanType type)
 {
@@ -5038,9 +5052,13 @@ void YBTSSubmit::notify(bool final)
 	return;
     switch (m_type) {
 	case YBTSTid::Sms:
+	    if (m_ok)
+		ue->update(m_msg);
 	    __plugin.signalling()->moSmsRespond(connId(),m_callRef,m_cause,&m_data);
 	    break;
 	case YBTSTid::Ussd:
+	    if (m_ok)
+		ue->update(m_msg);
 	    if (!__plugin.signalling()->moSSExecuted(connId(),m_callRef,m_ok,m_msg) &&
 		m_ok) {
 		Message* m = __plugin.message("ussd.finalize");
@@ -5311,11 +5329,11 @@ bool YBTSMM::getUETarget(RefPointer<YBTSUE>& ue, const String& dest,
     ue = 0;
     String tmp(dest);
     if (tmp.startSkip("TMSI",false))
-	return getUESafe(ue,tmp,params[YSTRING("imsi")]);
+	return getUESafe(ue,tmp,params[YSTRING("oimsi")]);
     if (tmp.startSkip("IMSI",false))
-	return getUESafe(ue,params[YSTRING("tmsi")],tmp);
+	return getUESafe(ue,params[YSTRING("otmsi")],tmp);
     if (tmp.startSkip("IMEI",false))
-	return getUESafe(ue,params[YSTRING("tmsi")],params[YSTRING("imsi")],tmp);
+	return getUESafe(ue,params[YSTRING("otmsi")],params[YSTRING("oimsi")],tmp);
     return false;
 }
 
@@ -6837,6 +6855,8 @@ bool YBTSChan::callRouted(Message& msg)
 
 void YBTSChan::callAccept(Message& msg)
 {
+    if (ue())
+	ue()->update(msg);
     Lock lck(m_mutex);
     m_reason.clear();
     lck.drop();
