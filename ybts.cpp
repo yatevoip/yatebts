@@ -8408,7 +8408,7 @@ void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& 
 	}
 	String ssId;
 	ssId << ssIdPrefix() << ssIndex() << "/" << conn->connId();
-	ss = new YBTSTid(YBTSTid::Ussd,callRef,true,m.info(),ssId);
+	ss = new YBTSTid(t,callRef,true,m.info(),ssId);
 	ss->m_startCID = cid;
 	ss->setConnId(conn->connId());
 	Lock lck(conn);
