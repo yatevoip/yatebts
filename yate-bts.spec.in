@@ -205,6 +205,8 @@ Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE serve
 %files roaming
 %defattr(-, root, root)
 %{_datadir}/yate/scripts/roaming.js
+%{_datadir}/yate/scripts/handover.js
+%{_datadir}/yate/scripts/lib_str_util.js
 %config(noreplace) %{_sysconfdir}/yate/roamingconf.js
 
 %post roaming
@@ -234,6 +236,13 @@ if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/ysipchan.conf
 	[message]
 	enable=yes
 	auth_required=false
+
+	[options]
+	enable=no
+
+	[methods]
+	options=no
+	info=no
 
 	EOF
 fi

@@ -923,3 +923,22 @@ Radio.C0=
 ; This parameter is applied on reload
 ; Defaults to no
 ;auth.ussd=no
+
+
+[handover]
+; This section configures handover parameters used by roaming.js
+
+; enable: boolean: Globally enable handover functions
+; Default is enabled
+;enable=yes
+
+; neighbors: string: Comma separated list of neighbor SIP addresses
+; Each neighbor will be periodically queried for target handover availability
+; Example: neighbors=10.0.0.1, 10.0.0.2, 10.0.0.3:5065
+; Default is empty
+;neighbors=
+
+; reason: string: Text to place in the Reason SIP header
+; An empty or boolean false value disables the Reason header
+; Default: GSM;text="Handover"
+;reason=GSM;text="Handover"

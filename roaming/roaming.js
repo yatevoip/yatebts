@@ -2,6 +2,8 @@
  * roaming.js
  * This file is part of the Yate-BTS Project http://www.yatebts.com
  *
+ * SIP based roaming interface for YateBTS
+ *
  * Copyright (C) 2014 Null Team
  *
  * This software is distributed under multiple licenses;
@@ -24,7 +26,11 @@
  * roaming=roaming.js
  */
 
+#require "lib_str_util.js"
+#require "handover.js"
+
 #require "roamingconf.js"
+
 
 /**
  * Handle "auth" message
@@ -428,7 +434,7 @@ function reqResponse(request_type,sr,msi,msg,server)
 		case "register":
 		case "auth":
 		    if (register_translations[sr.code]!=undefined)
-			msg.error = register_translations[sr.code];		    	    
+			msg.error = register_translations[sr.code];
 		    break;
 		case "mosms":
 		    if (mosms_translations[sr.code]!=undefined)
@@ -490,7 +496,7 @@ function getIMSI(tmsi, msisdn)
  * Handle routing request for SMSs
  * @param msg Object. Message to be handled
  */
-function onRouteSMS(msg)
+function routeSMS(msg)
 {
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
@@ -597,18 +603,20 @@ function onMoSMS(msg)
     return true;
 }
 
-/** 
+/**
  * Handle call.route message
  * @param msg Object. Message to be handled
  */
 function onRoute(msg)
 {
     if (msg.route_type=="msg")
-	return onRouteSMS(msg);
+	return routeSMS(msg);
     if (msg.route_type!="call" && msg.route_type!="") {
 	msg.error = "service-unavailable";
 	return false;
     }
+    if (routeHandover(msg))
+	return true;
 
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
@@ -628,9 +636,9 @@ function onRoute(msg)
 	    return false;
 	}
 
-	current_calls[msg.id] = imsi;		
+	current_calls[msg.id] = imsi;
 	addRoutingParams(msg,imsi);
-	// call from inside that must be routed to VLR/MSC if we are online	
+	// call from inside that must be routed to VLR/MSC if we are online
 	if (msg.callednumtype=="international")
 	    msg.called = "+"+msg.called;
 	
@@ -656,7 +664,7 @@ function onRoute(msg)
 	    return false;
 	}
 
-    	// call is from openvolte to user registered in this bts
+	// call is from openvolte to user registered in this bts
 	var caller = msg.caller;
 	if (caller.substr(0,1)=="+") {
 	    msg.caller = caller.substr(1);
@@ -664,7 +672,7 @@ function onRoute(msg)
 	}
 
 	addRoutingParams(msg,imsi);
-    	msg.retValue("ybts/IMSI"+imsi);
+	msg.retValue("ybts/IMSI"+imsi);
     }
 
     return true;
@@ -673,13 +681,16 @@ function onRoute(msg)
 /*
  * Handle chan.hangup message
  * @param msg Object Message to be handled
- */ 
+ */
 function onHangup(msg)
 {
+    if (msg.id == "")
+	return false;
     if (current_calls[msg.id]!="") {
 	Engine.debug("Cleaning "+msg.id+" from current MO calls");
 	delete current_calls[msg.id];
     }
+    delete ho_outbound[msg.id];
     return false;
 }
 
@@ -698,7 +709,7 @@ function addPhyInfo(msg)
  * Check if subscriber has ongoing call
  * @param called_imsi String
  * @return Bool true in case imsi has ongoing call, false otherwise
- */ 
+ */
 function hasOngoingCall(called_imsi)
 {
     for (var imsi of current_calls) 
@@ -707,6 +718,11 @@ function hasOngoingCall(called_imsi)
     return false;
 }
 
+/*
+ * Retrieve IMSI based on called parameter
+ * @param called String Called number: Called can be phone number, TMSI.., IMSI...
+ * @return String IMSI of called number or "" if called is not associated to known IMSI
+ */
 function getIMSIFromCalled(called)
 {
     if (called.match(/IMSI/))
@@ -756,7 +772,7 @@ function readYBTSConf()
     var gsm_advanced = conf.getSection("gsm_advanced");
     if (gsm_advanced)
 	t3212 = gsm_advanced.getValue("Timer.T3212");
-   
+
     if (t3212 == undefined)
 	t3212 = 1440; // defaults to 24 minutes
     else {
@@ -875,36 +891,25 @@ function updateSubscribers(msg)
 }
 
 /*
- * Returns 16 bit(or more) hex value
- * @param String String representation of int value that should be returned as hex
- * @return String representing the hex value of @val
- */ 
-function get16bitHexVal(val)
-{
-    val = parseInt(val);
-    if (isNaN(val))
-	return false;
-
-    val = val.toString(16);
-    val = val.toString();
-    while (val.length<4)
-	val = "0"+val;
-
-    return val;
-}
-
-/*
- * Check if there are subscribers that should be expired
+ * Various periodic cleanups
  */
-function onInterval()
+function onClearInterval()
 {
     var now = Date.now() / 1000;
-
+    // Check if there are subscribers that should be expired
     for (var imsi in subscribers) {
 	if (subscribers[imsi]["expires"]<now) {
-	    Engine.debug(Engine.debugInfo, "Expiring subscriber "+imsi);
+	    Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
 	    delete subscribers[imsi];
 	    saveUE(imsi);
+	}
+    }
+    // Neighbors holdoff clear
+    for (var n of neighbors) {
+	if (n.holdoff && (now > n.holdoff)) {
+	    n.holdoff = false;
+	    if (debug)
+		Engine.debug(Engine.DebugNote,"No longer holding off cell " + n.cellid);
 	}
     }
 }
@@ -947,10 +952,10 @@ function getSIPRegistrar(tmsi)
 	    last_used_node = 0;
 	node = ov_nodes[last_used_node]["node"];
 
-	Engine.debug(Engine.DebugInfo,"No tmsi. Using next node from list:"+node);
+	Engine.debug(Engine.DebugInfo,"No tmsi. Using next node from list: "+node);
 	return nodes_sip[node];
     }
-    
+
     if (reg_sip!="" || reg_sip!=null)
 	return reg_sip;
 
@@ -958,15 +963,18 @@ function getSIPRegistrar(tmsi)
     return false;
 }
 
+/*
+ * Build a random node index
+ * @return Node index in ov_nodes array
+ */
 function randomNode()
 {
-    var node = Math.random(0,ov_nodes.length);
-    return node;
+    return Math.random(0,ov_nodes.length);
 }
 
 /*
  * Read and check configuration from roamingconf.js and ybts.conf
- */ 
+ */
 function checkConfiguration()
 {
     if (expires=="")
@@ -1006,34 +1014,130 @@ function checkConfiguration()
     readUEs();
 }
 
+/*
+ * Perform completion of partial command lines
+ * @param msg Message object
+ * @param line Partial command line
+ * @param part Partial word to complete
+ */
+function completeCommand(msg,line,part)
+{
+    switch (line) {
+	case undefined:
+	case "":
+	case "help":
+	    oneCompletion(msg,"neighbors",part);
+	    break;
+	case "debug":
+	case "reload":
+	    oneCompletion(msg,"roaming",part);
+	    break;
+    }
+}
+
+/*
+ * Handle rmanager commands
+ * @param msg Message object
+ */
+function onCommand(msg)
+{
+    if (!msg.line) {
+	completeCommand(msg,msg.partline,msg.partword);
+	return false;
+    }
+    switch (msg.line) {
+	case "neighbors":
+	    var tmp = "Band ARFCN BSIC Cell ID        Address               Status\r\n";
+	    tmp += "---- ----- ---- -------------- --------------------- -------\r\n";
+	    for (var p of neighbors) {
+		tmp += strFix(p.band,-4) + " " + strFix(p.arfcn,-5) + " "
+		    + strFix(p.bsic,-3) + "  " + strFix(p.cellid,-14) + " " + strFix(p.sip,21);
+		switch (p.active) {
+		    case false:
+			tmp += " Offline";
+			break;
+		    case true:
+			tmp += " Online";
+			break;
+		    default:
+			tmp += " Unknown";
+		}
+		tmp += "\r\n";
+	    }
+	    if (my_cell) {
+		tmp += strFix(my_cell.band,-4) + " " + strFix(my_cell.arfcn,-5) + " "
+		    + strFix(my_cell.bsic,-3) + "  " + strFix(my_cell.cellid,-14) + " --- Local YateBTS --- ";
+		if (bts_available)
+		    tmp += "Online\r\n";
+		else
+		    tmp += "Offline\r\n";
+	    }
+	    msg.retValue(tmp);
+	    return true;
+    }
+    return false;
+}
+
+/*
+ * Handle debugging commands
+ * @param msg Message object
+ */
+function onDebug(msg)
+{
+    Engine.setDebug(msg.line);
+    debug = Engine.debugEnabled();
+    msg.retValue("Roaming debug " + Engine.debugEnabled() + " level " + Engine.debugLevel() + "\r\n");
+    return true;
+}
+
+/*
+ * Provide help for rmanager command line
+ * @param msg Message object
+ * @return True if help was requested specifically for this command
+ */
+function onHelp(msg)
+{
+    if (msg.line) {
+	if (msg.line == "neighbors") {
+	    msg.retValue(neighHelp + "Show the neighboring cells\r\n");
+	    return true;
+	}
+	return false;
+    }
+    msg.retValue(msg.retValue() + neighHelp);
+    return false;
+}
+
 // hold temporary info: nonce and realm for authenticating various requests
-var tempinfo = {};
+tempinfo = {};
 // hold temporary chanid-imsi association for authenticating INVITEs
-var tempinfo_route = {};
+tempinfo_route = {};
 // alarm for configuration issues
-var alarm_conf = 3;
+alarm_conf = Engine.DebugConf;
 // hold current MO calls
-var current_calls = {};
+current_calls = {};
 
 register_translations = {
-	"500":"network-failure",				// Server Internal Error 
+	"500":"network-failure",				// Server Internal Error
 	"410":"IMSI-unknown-in-HLR",				// Gone
-	"403":"illegal-MS",					// Fornidden
-	"488":"roaming-not-allowed-in-this-location-area",	// Not Acceptable Here 
+	"403":"illegal-MS",					// Forbidden
+	"488":"roaming-not-allowed-in-this-location-area",	// Not Acceptable Here
 	"503":"protocol-error-unspecified"			// Service Unavailable
 };
 
 mosms_translations = {
-	"415":"127",	// Unsupported Media Type => Interworking 
+	"415":"127",	// Unsupported Media Type => Interworking
 	"403":"29",	// Forbidden =>  Facility rejected
 	"488":"127",	// Not Acceptable Here => Interworking
-	"502":"38", 	// Bad Gateway => Network out of order 
-	"480":"41"	// Temporarily Unavailable => Temporary failure  
+	"502":"38", 	// Bad Gateway => Network out of order
+	"480":"41"	// Temporarily Unavailable => Temporary failure
 };
 
 
 Engine.debugName("roaming");
 Message.trackName(Engine.debugName());
+if (debug)
+    Engine.debugEnabled(true);
 checkConfiguration();
 Message.install(onRegister,"user.register",80);
 Message.install(onUnregister,"user.unregister",80);
@@ -1041,12 +1145,15 @@ Message.install(onRoute,"call.route",80);
 Message.install(onAuth,"auth",80);
 Message.install(onMoSMS,"msg.execute",80,"callto","smsc_yatebts");
 Message.install(onDisconnected,"chan.disconnected",40);
-Message.install(onHangup,"chan.hangup",80);
+Message.install(onHangup,"chan.hangup",80,"module","ybts");
 Message.install(onExecute,"call.execute",80);
 Message.install(addPhyInfo,"call.progress",50,"module","ybts");
 Message.install(addPhyInfo,"call.ringing",50,"module","ybts");
 Message.install(addPhyInfo,"call.answered",50,"module","ybts");
 Message.install(addPhyInfo,"chan.dtmf",50,"module","ybts");
+Message.install(onCommand,"engine.command",120);
+Message.install(onHelp,"engine.help",150);
+Message.install(onDebug,"engine.debug",150,"module","roaming");
+Engine.setInterval(onClearInterval,2000);
 
-Engine.setInterval(onInterval,60000);
-
+/* vi: set ts=8 sw=4 sts=4 noet: */
