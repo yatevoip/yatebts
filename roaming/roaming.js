@@ -604,16 +604,74 @@ function onMoSMS(msg)
 }
 
 /**
+ * Handle USSD route
+ * @param msg Object. Message to be handled
+ */
+function routeUSSD(msg)
+{
+    if (msg.module === "ybts") {
+	// MO USSD
+	var imsi = msg.imsi;
+	var tmsi = msg.tmsi;
+	if (!imsi && tmsi)
+	    imsi = getIMSI(tmsi);
+	if (imsi || tmsi) {
+	    if (imsi && subscribers[imsi] != undefined) {
+		var sip_server = getSIPRegistrar(tmsi);
+		if (sip_server) {
+		    msg["sipussd.domain"] = sip_server;
+		    if (accnet_header) {
+			msg["osip_P-Access-Network-Info"] = accnet_header;
+			msg["copyparams"] = "osip_P-Access-Network-Info";
+		    }
+		    msg.retValue("sipussd/");
+		    return true;
+		}
+		msg.error = "41"; // Temporary Failure
+	    }
+	    else
+		msg.error = "28"; // Unidentified subscriber
+	}
+	else
+	    msg.error = "111"; // Protocol error, unspecified
+    }
+    else if (msg.module === "sip") {
+	// MT USSD
+	var imsi = getIMSIFromCalled(msg.called);
+	if (imsi == "" || subscribers[imsi] == undefined) {
+	    msg.error = "offline";
+	    return false;
+	}
+	var cp = "" + msg.copyparams;
+	if (cp)
+	    cp += ",";
+	msg["sipussd.execute.oimsi"] = imsi;
+	msg["sipussd.execute.otmsi"] = subscribers[imsi]["tmsi"];
+	msg["copyparams"] = cp + "sipussd.execute.oimsi,sipussd.execute.otmsi";
+	msg["sipussd.callto"] = "ybts/IMSI" + imsi;
+    }
+    return false;
+}
+
+/**
  * Handle call.route message
  * @param msg Object. Message to be handled
  */
 function onRoute(msg)
 {
-    if (msg.route_type=="msg")
-	return routeSMS(msg);
-    if (msg.route_type!="call" && msg.route_type!="") {
-	msg.error = "service-unavailable";
-	return false;
+    switch (msg.route_type) {
+	case undefined:
+	case null:
+	case "":
+	case "call":
+	    break;
+	case "msg":
+	    return routeSMS(msg);
+	case "ussd":
+	    return routeUSSD(msg);
+	default:
+	    msg.error = "service-unavailable";
+	    return false;
     }
     if (routeHandover(msg))
 	return true;
