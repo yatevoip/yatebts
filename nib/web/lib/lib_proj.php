@@ -297,6 +297,14 @@ function nib_note($text)
 	print "</div>";
 }
 
+function warning_note($text)
+{
+	print "<div class='note'>";
+	print "<font class='error'>Warning!</font>&nbsp;";
+	print $text;
+	print "</div>";
+}
+
 function generate_table_format_from_socket($socket_response)
 {
 	//Ex: $socket_response = string(221) "IMSI MSISDN --------------- --------------- 00101000000000 +4381234 00101001100110 +2500001 00101001100120 +8788783 001900000000002 +6669990 00101000000003 +6789723 00101000000002 +2943456 " 

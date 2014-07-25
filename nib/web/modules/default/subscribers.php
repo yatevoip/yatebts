@@ -126,10 +126,25 @@ function rejected_imsis()
 
 function edit_regexp($error=null,$error_fields=array())
 {
+	global $yate_conf_dir;
+
 	if (getparam("Set_subscribers")=="Set subscribers")
 		return edit_subscriber();
 
 	$regexp = getparam("regexp");
+
+	$ybts_file = new ConfFile($yate_conf_dir."ybts.conf");
+
+	$warning_data = array();
+	if (isset($ybts_file->structure["security"]["auth.call"])) 
+		$warning_data[] = $ybts_file->structure["security"]["auth.call"];
+	if (isset($ybts_file->structure["security"]["auth.sms"]))
+		$warning_data[] =  $ybts_file->structure["security"]["auth.sms"];
+	if (isset($ybts_file->structure["security"]["auth.ussd"]))
+		$warning_data[] = $ybts_file->structure["security"]["auth.ussd"];
+
+	if (in_array("yes", $warning_data))
+		warning_note("You can't set mobile terminated authentication for calls, SMS, USSD when regular expression is used. Authentication requests will be ignored in this scenario.");
 
 	nib_note("If a regular expression is used, 2G/3G authentication cannot be used. For 2G/3G authentication, please set subscribers individually.");
 	$fields = array(
