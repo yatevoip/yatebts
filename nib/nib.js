@@ -385,10 +385,7 @@ function readConfiguration(return_subscribers)
     initNnsf();
 
     var ybts_conf = new ConfigFile(Engine.configFile("ybts"),true);
-    var ybts_section = ybts_conf.getSection("ybts");
-    imsi_cleanup = ybts_section.getValue("tmsi_expire");
-    if (imsi_cleanup=="")
-	imsi_cleanup = 3600 * 24 * 10;
+    imsi_cleanup = ybts_conf.getValue("ybts","tmsi_expire",864000); // 3600 * 24 * 10
 
     delete upd_subscribers["general"];
 

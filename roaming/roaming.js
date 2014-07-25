@@ -754,13 +754,14 @@ function readYBTSConf()
 {
     var conf = new ConfigFile(Engine.configFile("ybts"),true);
     var gsm_section = conf.getSection("gsm");
-    var ybts_section = conf.getSection("ybts");
+    if (!gsm_section) {
+	Engine.alarm(alarm_conf, "Missing gsm section in ybts.conf. Please set required configurations in this section.");
+	return;
+    }
 
     mcc = gsm_section.getValue("Identity.MCC");
     mnc = gsm_section.getValue("Identity.MNC");
-    imsi_cleanup = ybts_section.getValue("tmsi_expire");
-    if (imsi_cleanup=="")
-	imsi_cleanup = 3600 * 24 * 10;
+    imsi_cleanup = conf.getValue("ybts","tmsi_expire",864000); // 3600 * 24 * 10
 
     var lac = gsm_section.getValue("Identity.LAC");
     var ci = gsm_section.getValue("Identity.CI");
