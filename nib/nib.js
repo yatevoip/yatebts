@@ -384,10 +384,11 @@ function readConfiguration(return_subscribers)
 	nnsf_node = def_nnsf_node;
     initNnsf();
 
-    if (configuration["general"]["imsi_cleanup"]!="")
-	imsi_cleanup = configuration["general"]["imsi_cleanup"];
-    else
-	imsi_cleanup = 3600 * 24 * 7;
+    var ybts_conf = new ConfigFile(Engine.configFile("ybts"),true);
+    var ybts_section = ybts_conf.getSection("ybts");
+    imsi_cleanup = ybts_section.getValue("tmsi_expire");
+    if (imsi_cleanup=="")
+	imsi_cleanup = 3600 * 24 * 10;
 
     delete upd_subscribers["general"];
 
@@ -1271,6 +1272,9 @@ function onComplete(msg, line, partial, part)
 	    oneCompletion(msg,"sms",part);
 	    oneCompletion(msg,"rejected",part);
 	    return;
+	case "reload":
+	    oneCompletion(msg,"nib",part);
+	    return;
     }
 
     switch (partial) {
@@ -1279,6 +1283,16 @@ function onComplete(msg, line, partial, part)
 	    oneCompletion(msg,"nib",part);
 	    break;
     }
+}
+
+function onReload(msg)
+{
+    if (msg.plugin && (msg.plugin != "nib"))
+	return false;
+
+    updateSubscribersInfo();
+    Engine.output("NIB: Finished updating subscribers and configurations.\r\n");
+    return !!msg.plugin;
 }
 
 function onCommand(msg)
@@ -1315,7 +1329,7 @@ function onCommand(msg)
 
 	case "nib reload":
 	    updateSubscribersInfo();
-	    msg.retValue("Finished updating subscribers.\r\n");
+	    msg.retValue("Finished updating subscribers and configurations.\r\n");
 	    return true;
 
 	case "nib":
@@ -1327,17 +1341,17 @@ function onCommand(msg)
     return false;
 }
 
-var eliza_number = "35492";
-var david_number = "32843";
-var nib_smsc_number = "12345";
-var sms_attempts = 3;
-var registered_subscribers = {};
-var pendingSMSs = [];
-var seenIMSIs = {};  // imsi:count_rejected
-var ussd_sessions = {};
-var alarm_conf = 3;
-var def_nnsf_bits = 8;
-var def_nnsf_node = 123;
+eliza_number = "35492";
+david_number = "32843";
+nib_smsc_number = "12345";
+sms_attempts = 3;
+registered_subscribers = {};
+pendingSMSs = [];
+seenIMSIs = {};  // imsi:count_rejected
+ussd_sessions = {};
+alarm_conf = 3;
+def_nnsf_bits = 8;
+def_nnsf_node = 123;
 
 Engine.debugName("nib");
 Message.install(onUnregister,"user.unregister",80);
@@ -1348,6 +1362,7 @@ Message.install(onSMS,"msg.execute",80,"callto","nib_smsc");
 Message.install(onCommand,"engine.command",120);
 Message.install(onHelp,"engine.help",120);
 Message.install(onAuth,"auth",80);
+Message.install(onReload,"engine.init",110);
 
 Engine.setInterval(onInterval,1000);
 readConfiguration();

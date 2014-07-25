@@ -1211,6 +1211,7 @@ Defaults to yes"
 				"display" => "text",
 				"value" => "864000",
 				"comment" => "Interval, in seconds, to keep TMSIs.
+This interval should be enforced in the applications, not ybts.cpp
 This parameter is applied on reload.
 Allowed interval: 7200..2592000.",
 				"validity"=> array("check_field_validity",7200,2592000)

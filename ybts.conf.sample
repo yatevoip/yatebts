@@ -897,6 +897,12 @@ Radio.C0=
 ; Defaults to object
 ;export_xml_as=object
 
+; Interval, in seconds, to keep TMSIs.
+; This interval should be enforced in the applications, not ybts.cpp
+; This parameter is applied on reload.
+; Allowed interval: 7200..2592000.
+;tmsi_expire=864000
+
 
 [security]
 ; This section configures security related parameters
