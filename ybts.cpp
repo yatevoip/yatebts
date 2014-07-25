@@ -4066,7 +4066,7 @@ bool YBTSSignalling::moSSExecuted(YBTSConn* conn, const String& callRef, bool ok
 	tid->m_peerId = params[YSTRING("peerid")];
     else {
 	lck.drop();
-	dropSS(conn,tid,true,false,params.getValue(s_error));
+	dropSS(conn,tid,true,false,params.getValue(s_error,"interworking"));
 	TelEngine::destruct(tid);
     }
     return true;
