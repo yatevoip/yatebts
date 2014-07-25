@@ -1216,14 +1216,6 @@ This parameter is applied on reload.
 Allowed interval: 7200..2592000.",
 				"validity"=> array("check_field_validity",7200,2592000)
 			),
-			"datafile" => array(
-				"display" => "text",
-				"value" => "ybtsdata.conf",
-				"comment" => "Path to data file used to save TMSI table and current index.
-If set to an empty string it will disable persistent TMSI and index storage.
-WARNING: Never disable TMSI index storage - better set a short TMSI expire time.
-Defaults to ybtsdata.conf in configuration directory."
-			),
 			"t305" => array(
 				"display" => "text",
 				"value" => "30000",

@@ -754,9 +754,13 @@ function readYBTSConf()
 {
     var conf = new ConfigFile(Engine.configFile("ybts"),true);
     var gsm_section = conf.getSection("gsm");
+    var ybts_section = conf.getSection("ybts");
 
     mcc = gsm_section.getValue("Identity.MCC");
     mnc = gsm_section.getValue("Identity.MNC");
+    imsi_cleanup = ybts_section.getValue("tmsi_expire");
+    if (imsi_cleanup=="")
+	imsi_cleanup = 3600 * 24 * 10;
 
     var lac = gsm_section.getValue("Identity.LAC");
     var ci = gsm_section.getValue("Identity.CI");
@@ -980,9 +984,6 @@ function checkConfiguration()
     if (expires=="")
 	expires = 3600;
 
-    if (imsi_cleanup=="")
-	imsi_cleanup = 3600 * 24;
-
     if (nodes_sip==undefined || typeof(nodes_sip)!="object") {
     	if (!reg_sip)
 	    Engine.alarm(alarm_conf,"Please configure reg_sip or nodes_sip parameter in roamingconf.js located in the configurations directory.");
@@ -1108,6 +1109,20 @@ function onHelp(msg)
     return false;
 }
 
+/*
+ * Handle the reload command
+ * @param msg Message object
+ */
+function onReload(msg)
+{
+    if (msg.plugin && (msg.plugin != "roaming"))
+	return false;
+    loadNeighbors();
+    setBtsAvailable();
+    readYBTSConf();
+    return !!msg.plugin;
+}
+
 // hold temporary info: nonce and realm for authenticating various requests
 tempinfo = {};
 // hold temporary chanid-imsi association for authenticating INVITEs
@@ -1154,6 +1169,7 @@ Message.install(addPhyInfo,"chan.dtmf",50,"module","ybts");
 Message.install(onCommand,"engine.command",120);
 Message.install(onHelp,"engine.help",150);
 Message.install(onDebug,"engine.debug",150,"module","roaming");
+Message.install(onReload,"engine.init",110);
 Engine.setInterval(onClearInterval,2000);
 
 /* vi: set ts=8 sw=4 sts=4 noet: */

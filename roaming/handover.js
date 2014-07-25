@@ -627,19 +627,6 @@ function onModuleUpdate(msg)
     return false;
 }
 
-/*
- * Handle the reload command
- * @param msg Message object
- */
-function onReload(msg)
-{
-    if (msg.plugin && (msg.plugin != "roaming"))
-	return false;
-    loadNeighbors();
-    setBtsAvailable();
-    return !!msg.plugin;
-}
-
 // BTS availability
 bts_available = undefined;
 // neighbors list
@@ -668,7 +655,6 @@ Message.install(onChanUpdate,"call.update",90);
 Message.install(onSipOptions,"sip.options",90);
 Message.install(onSipInfo,"sip.info",90);
 Message.install(onModuleUpdate,"module.update",90,"module","ybts");
-Message.install(onReload,"engine.init",110);
 setBtsAvailable();
 
 /* vi: set ts=8 sw=4 sts=4 noet: */
