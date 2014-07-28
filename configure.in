@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(Yate-BTS, 4.0.0)
+AC_INIT(Yate-BTS, 4.0.1)
 AC_CONFIG_SRCDIR([README])
 AC_PREREQ(2.52)
 AC_CONFIG_HEADERS([config.h])
