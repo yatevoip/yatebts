@@ -52,7 +52,7 @@ PROGS:=
 FILES:=
 LIBTHR := @THREAD_LIB@
 CCFLAGS:= @YATE_INC@
-CFLAGS :=$(subst -fno-check-new,,$(CCFLAGS))
+CFLAGS :=$(subst -Wno-overloaded-virtual,,$(CCFLAGS))
 LDFLAGS:= @LDFLAGS@
 
 # Makefile.head end
