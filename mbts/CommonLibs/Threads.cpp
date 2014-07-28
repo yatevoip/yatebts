@@ -120,7 +120,7 @@ void Thread::start(void *(*task)(void*), void *arg, const char* name, ...)
 			: mTask(task), mArg(arg)
 		{
 			vsnprintf(mName, 15, name, ap);
-			mName[16] = '\0';
+			mName[15] = '\0';
 		}
 
 		static void* run(void* arg)
