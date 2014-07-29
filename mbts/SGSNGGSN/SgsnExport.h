@@ -178,7 +178,7 @@ struct SgsnAdapter {
 };
 
 // This is the external interface to the SGSN.
-struct Sgsn {
+class Sgsn {
 	public:
 	static bool isUmts() { return SgsnAdapter::isUmts(); }
 

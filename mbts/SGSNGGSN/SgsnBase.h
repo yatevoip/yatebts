@@ -44,10 +44,10 @@ extern bool sgsnDebug();
 #define SGSNWARN(stuff)  GGSNLOG2(WARNING,"SGSN:",stuff)
 //#define SGSNDEBUG(stuff)  GGSNLOG1(DEBUG,"SGSN:",stuff) not used
 
-class LlcEngine;
-class LlcEntity;
-class LlcEntityUserData;
-class LlcEntityGmm;
+struct LlcEngine;
+struct LlcEntity;
+struct LlcEntityUserData;
+struct LlcEntityGmm;
 class Sndcp;
 class SgsnInfo;
 class Sgsn;

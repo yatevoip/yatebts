@@ -26,7 +26,7 @@
 #include "miniggsn.h"
 
 namespace SGSN {
-class LlcEntityGmm;
+struct LlcEntityGmm;
 class L3GprsFrame;
 void *miniGgsnReadServiceLoop(void *arg);
 void *miniGgsnWriteServiceLoop(void *arg);
@@ -103,7 +103,7 @@ extern Ggsn gGgsn;
 //		the IP address for some time after it is released.
 // Note: the L3 Create PDP Context message is sent to the MM SAPI of the llc,
 // not the LLC sap to which this is attached.
-struct Sndcp;
+class Sndcp;
 class PdpContext
 {	public:
 	// A real pdp context would live in a GGSN and include a TEID [tunnel endpoint]

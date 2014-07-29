@@ -31,9 +31,9 @@ namespace GPRS { class MSInfo; }
 namespace SGSN {
 struct LlcEntity;
 class SgsnInfo;
-struct Sgsn;
+class Sgsn;
 class PdpContext;
-struct Sndcp;
+class Sndcp;
 
 // GSM04.64 6.2.3 table 2.
 struct LlcSapi {

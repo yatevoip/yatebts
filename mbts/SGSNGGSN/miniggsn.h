@@ -21,7 +21,7 @@
 
 namespace SGSN {
 
-struct PdpContext;
+class PdpContext;
 
 // MiniGGSN IP connections.
 // This holds the IP address and is slightly different than a PDPContext:
