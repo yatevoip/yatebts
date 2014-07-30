@@ -163,7 +163,7 @@ Radio.C0=
 ; Defaults to no arguments
 ;Args=
 
-; MinimumRxRSSI: integer: Minimum semnal strength (in dB) of acceptable bursts
+; MinimumRxRSSI: integer: Minimum signal strength (in dB) of acceptable bursts
 ; Bursts received at the physical layer below this threshold are ignored
 ; Do not adjust without proper calibration
 ; Interval allowed: -90..90

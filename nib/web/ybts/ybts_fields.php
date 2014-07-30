@@ -1009,7 +1009,7 @@ Defaults to no arguments."
 			"MinimumRxRSSI" => array(
 				"display" => "text",
 				"value" => "-63",
-				"comment" => "Minimum semnal strength (in dB) of acceptable bursts.
+				"comment" => "Minimum signal strength (in dB) of acceptable bursts.
 Bursts received at the physical layer below this threshold are ignored.
 Do not adjust without proper calibration.
 Interval allowed: -90..90
