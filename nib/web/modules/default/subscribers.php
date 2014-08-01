@@ -387,19 +387,22 @@ function edit_subscriber($error=null,$error_fields=array())
 	if (get_param($subscriber,"imsi_type"))
 		$imsi_type["selected"] = get_param($subscriber,"imsi_type");
 	$active = (get_param($subscriber,"active") == "on") ? 't' : 'f';
+	$op = get_param($subscriber,"op") ? get_param($subscriber,"op") : "00000000000000000000000000000000";
 
 	$fields = array(
 		"imsi"   => array("value"=>$imsi, "required"=>true, "comment"=>"SIM card id", "column_name"=>"IMSI"),
 		"msisdn" => array("value"=>get_param($subscriber,"msisdn"), "comment"=>"DID associated to this IMSI. When outside call is made, this number will be used as caller number.", "column_name"=>"MSISDN"),
 		"short_number" => array("value" => get_param($subscriber,"short_number"),"comment"=>"Short number that can be used to call this subscriber."),
 		"active" => array("value"=>$active, "display"=>"checkbox"),
-		"imsi_type" => array($imsi_type, "display"=>"select", "column_name"=>"IMSI Type", "required"=>true, "comment"=> "Type of SIM associated to the IMSI"),
+		"imsi_type" => array($imsi_type, "display"=>"select", "column_name"=>"IMSI Type", "required"=>true, "comment"=> "Type of SIM associated to the IMSI", "javascript" => 'onclick="show_hide_op()"'),
 		"ki" => array("value"=>get_param($subscriber,"ki"), "comment"=>"Card secret", "required"=>true),
-		"op" => array("value"=>get_param($subscriber,"op"), "comment"=>"Operator secret. Empty for 2G IMSIs.<br/>00000000000000000000000000000000 for 3G IMSIs.")
+		"op" => array("value"=>$op, "triggered_by"=>"imsi_type", "comment"=>"Operator secret. Empty for 2G IMSIs.<br/>00000000000000000000000000000000 for 3G IMSIs.")
 	);
 	
 	if ($imsi && count($subscriber) && !in_array("imsi",$error_fields))
 		$fields["imsi"]["display"] = "fixed";
+	if ($imsi && $imsi_type["selected"] == "3G")
+		unset($fields["op"]["triggered_by"]);
 	if (!count($subscriber))
 		$imsi = NULL;
 
@@ -432,6 +435,7 @@ function edit_subscriber_write_file()
 		return edit_subscriber("Invalid IMSI $imsi. IMSI length must be 14 or 15 digits long.",array("imsi"));
 	if (!preg_match('/^[0-9a-fA-F]{32}$/i', getparam("ki")))
 		return edit_subscriber("Invalid KI:".getparam("ki").". KI needs to be 128 bits, in hex format.");
+	
 
 	$subscriber = array("imsi"=>$imsi);
 
@@ -445,6 +449,8 @@ function edit_subscriber_write_file()
 //	$subscriber["active"] = ($subscriber["active"]=="on") ? 1 : 0;
 	if ($subscriber["imsi_type"]=="2G")
 		$subscriber["op"] = "";
+	if (getparam("imsi_type")=="3G" && (getparam("op")==NULL || getparam("op")==""))
+		return edit_subscriber("OP can't be empty!", array("op"));
 
 	if (getparam("imsi_val") && isset($subscribers[$imsi])) {
 		$modified = false;
@@ -1249,8 +1255,12 @@ function import_subscribers_from_csv()
 			unset($subscribers["general"]);
 		}
 		foreach ($new_subscribers as $imsi => $data) {
+			if ($data["imsi_type"] == "2G")
+				$new_subscribers[$imsi]["op"] = "";
+			if ($data["imsi_type"] == "3G" &&  $data["op"] == "")
+				$new_subscribers[$imsi]["op"] = "00000000000000000000000000000000";
 			if (isset($subscribers[$imsi])) {
-				//test if the data are different and set in array the imsi duplicated with different data
+				//test if the data from imported file is different from the one set in configuration file and keep the duplicated IMSIs
 				if ($data["msisdn"] != $subscribers[$imsi]["msisdn"] || $data["short_number"] != $subscribers[$imsi]["short_number"] || $data["active"] != $subscribers[$imsi]["active"] || $data["ki"] != $subscribers[$imsi]["ki"] || $data["imsi_type"] != $subscribers[$imsi]["imsi_type"]) {
 					$imsi_duplicate[] = $imsi;
 				}
