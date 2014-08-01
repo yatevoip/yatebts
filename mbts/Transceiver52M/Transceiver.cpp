@@ -400,7 +400,7 @@ SoftVector *Transceiver::pullRadioVector(GSM::Time &wTime,
   }
   else {
     // RACH burst
-    if (success = detectRACHBurst(*vectorBurst, 6.0, mSPSRx, &amplitude, &TOA))
+    if ((success = detectRACHBurst(*vectorBurst, 6.0, mSPSRx, &amplitude, &TOA)))
       channelResponse[timeslot] = NULL;
     else
       mNoises.insert(avg);

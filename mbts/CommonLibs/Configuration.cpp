@@ -363,7 +363,7 @@ bool ConfigurationTable::isValidValue(const std::string& name, const std::string
 		}
 		case ConfigurationKey::CHOICE: {
 			int startPos = -1;
-			uint endPos = 0;
+			size_t endPos = 0;
 
 			std::string tmp = key.getValidValues();
 
@@ -392,7 +392,7 @@ bool ConfigurationTable::isValidValue(const std::string& name, const std::string
 			}
 		}
 		case ConfigurationKey::CIDR: {
-			uint delimiter;
+			size_t delimiter;
 			std::string ip;
 			int cidr = -1;
 
@@ -441,7 +441,7 @@ bool ConfigurationTable::isValidValue(const std::string& name, const std::string
 		}
 
 		case ConfigurationKey::IPANDPORT: {
-			uint delimiter;
+			size_t delimiter;
 			std::string ip;
 			int port = -1;
 
@@ -1094,7 +1094,7 @@ void ConfigurationKey::printDescription(const ConfigurationKey &key, ostream& os
 
 	} else if (key.getType() == ConfigurationKey::CHOICE) {
 		int startPos = -1;
-		uint endPos = 0;
+		size_t endPos = 0;
 
 		do {
 			startPos++;

@@ -685,7 +685,7 @@ void Transceiver::driveControl(unsigned ARFCN)
       LOG(ERR) << "bogus message on control interface";
       sprintf(response,"RSP HANDOVER 1 %d",timeslot);
     }
-    else if ((ARFCN < 0) || (ARFCN >= MAXARFCN)) {
+    else if (ARFCN >= MAXARFCN) {
       LOG(ERR) << "bogus message on control interface";
       sprintf(response,"RSP HANDOVER 1 %d",timeslot);
     }
@@ -702,7 +702,7 @@ void Transceiver::driveControl(unsigned ARFCN)
       LOG(ERR) << "bogus message on control interface";
       sprintf(response,"RSP NOHANDOVER 1 %d",timeslot);
     }
-    else if ((ARFCN < 0) || (ARFCN >= MAXARFCN)) {
+    else if (ARFCN >= MAXARFCN) {
       LOG(ERR) << "bogus message on control interface";
       sprintf(response,"RSP NOHANDOVER 1 %d",timeslot);
     }
@@ -721,7 +721,7 @@ void Transceiver::driveControl(unsigned ARFCN)
       LOG(ERR) << "bogus message on control interface";
       sprintf(response,"RSP SETSLOT 1 %d %d",timeslot,corrCode);
     }
-    else if ((ARFCN < 0) || (ARFCN >= MAXARFCN)) {
+    else if (ARFCN >= MAXARFCN) {
       LOG(ERR) << "bogus message on control interface";
       sprintf(response,"RSP SETSLOT 1 %d %d",timeslot,corrCode);
     }

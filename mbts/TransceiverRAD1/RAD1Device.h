@@ -44,7 +44,6 @@ class RAD1Device: public RadioDevice {
 private:
 
   static const double masterClockRate; ///< the RAD1 clock rate
-  double desiredSampleRate; 	///< the desired sampling rate
   rnrad1Rx* m_uRx;	///< the RAD1 receiver
   rnrad1Tx* m_uTx;	///< the RAD1 transmitter
 
@@ -66,9 +65,6 @@ private:
   bool isAligned;
 
   Mutex writeLock;
-
-  TIMESTAMP currTimestamp;	///< timestamp of internal data buffer
-  unsigned currLen;		///< size of internal data buffer
 
   TIMESTAMP timestampOffset;       ///< timestamp offset b/w Tx and Rx blocks
   TIMESTAMP latestWriteTimestamp;  ///< timestamp of most recent ping command

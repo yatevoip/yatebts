@@ -19,7 +19,6 @@ class rnrad1Rx : public rnrad1Core
   fusb_devhandle	*mDevHandle;
   fusb_ephandle		*mEndptHandle;
   int			 mBytesSeen;		// how many bytes we've seen
-  bool			 mFirstRead;
   bool			 mEnabled;
 
  protected:

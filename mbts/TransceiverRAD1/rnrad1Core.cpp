@@ -138,7 +138,7 @@ struct libusb_device *rad1FindDevice (int nth, bool allowFx2, libusb_context *ct
   size_t cnt = libusb_get_device_list(ctx, &list);
   size_t i = 0;
 
-  if (cnt < 0)
+  if ((long int)cnt < 0)
     LOG(ERR) << "libusb_get_device_list failed: " <<_get_usb_error_str(cnt);
 
   for (i = 0; i < cnt; i++) {
@@ -252,7 +252,7 @@ bool rad1LoadFirmware (libusb_device_handle *udh, const char *filename,
   int i;
 
   while (!feof(f)){
-	char *shut_up_gcc = fgets(s, sizeof (s), f); /* we should not use more than 263 bytes normally */
+    while(fgets(s, sizeof (s), f)) {break;} /* we should not use more than 263 bytes normally */
     if(s[0]!=':'){
       LOG(ERR) "File " << filename << " has invalid line: " << s;
       goto fail;
@@ -489,8 +489,6 @@ bool rad1_load_standard_bits (int nth, bool force,
 {
   rad1LoadStatus    s;
   const char            *filename;
-  const char            *proto_filename;
-  int hw_rev;
 
   // start by loading the firmware
   s = rad1LoadFirmwareNth (nth, firmware_filename.data(), force, ctx);
