@@ -820,6 +820,7 @@ function readYBTSConf()
     mcc = gsm_section.getValue("Identity.MCC");
     mnc = gsm_section.getValue("Identity.MNC");
     imsi_cleanup = conf.getValue("ybts","tmsi_expire",864000); // 3600 * 24 * 10
+    imsi_cleanup = parseInt(imsi_cleanup);
 
     var lac = gsm_section.getValue("Identity.LAC");
     var ci = gsm_section.getValue("Identity.CI");
