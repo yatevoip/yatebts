@@ -1196,6 +1196,7 @@ register_translations = {
 	"500":"network-failure",				// Server Internal Error
 	"410":"IMSI-unknown-in-HLR",				// Gone
 	"403":"illegal-MS",					// Forbidden
+	"406":"PLMN-not-allowed",				// Not Acceptable
 	"488":"roaming-not-allowed-in-this-location-area",	// Not Acceptable Here
 	"503":"protocol-error-unspecified"			// Service Unavailable
 };
