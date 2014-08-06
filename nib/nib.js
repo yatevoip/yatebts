@@ -66,7 +66,7 @@ function readUEsFromConf()
 	var imei = subscriber_info[1];
 	var msisdn = subscriber_info[2];
 	var expires = subscriber_info[3];
-	var expires = parseInt(expires);
+	expires = parseInt(expires);
 	var loc = subscriber_info[4];
 	registered_subscribers[imsi] = {"tmsi":tmsi,"imei":imei,"msisdn":msisdn,"expires":expires,"location":loc};
 	count_ues = count_ues+1;
@@ -551,22 +551,24 @@ function getSubscriberIMSI(msisdn,tmsi)
     var imsi_key, nr, short_number, user_tmsi;
 
     if (msisdn) {
-	for (imsi_key in subscribers) {
-	    nr = subscribers[imsi_key]["msisdn"];
-	    if (nr.length>0) {
-		// strip + from start of number
-		if (nr.substr(0,1)=="+")
-		    nr = nr.substr(1);
+	if (subscribers) {
+	    for (imsi_key in subscribers) {
+		nr = subscribers[imsi_key]["msisdn"];
+		if (nr.length>0) {
+		    // strip + from start of number
+		    if (nr.substr(0,1)=="+")
+			nr = nr.substr(1);
 
-		//if (nr==msisdn || nr.substr(0,msisdn.length)==msisdn || (msisdn.substr(0,1)=="+" && msisdn.substr(1,nr.length)==nr))
-		if (msisdn.substr(-nr.length)==nr)
-		    return imsi_key;
+		    //if (nr==msisdn || nr.substr(0,msisdn.length)==msisdn || (msisdn.substr(0,1)=="+" && msisdn.substr(1,nr.length)==nr))
+		    if (msisdn.substr(-nr.length)==nr)
+			return imsi_key;
+	        }
+
+		short_number = subscribers[imsi_key]["short_number"];
+		if (short_number.length>0) 
+		    if (short_number==msisdn)
+			return imsi_key;
 	    }
-
-	    short_number = subscribers[imsi_key]["short_number"];
-	    if (short_number.length>0) 
-		if (short_number==msisdn)
-		    return imsi_key;
 	}
 
 	for (imsi_key in registered_subscribers) {
