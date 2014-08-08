@@ -4380,7 +4380,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    return Ok;
 	case SigMediaStarted:
 	case SigMediaError:
-	    if (msg.connId()) {
+	    if (msg.hasConnId()) {
 		bool ok = (msg.primitive() == SigMediaStarted);
 		RefPointer<YBTSConn> conn;
 		findConn(conn,msg.connId(),false);
@@ -4390,7 +4390,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    }
 	    return Ok;
 	case SigEstablishSAPI:
-	    if (msg.connId()) {
+	    if (msg.hasConnId()) {
 		RefPointer<YBTSConn> conn;
 		findConn(conn,msg.connId(),false);
 		if (conn) {
@@ -4401,7 +4401,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    }
 	    return Ok;
 	case SigPhysicalInfo:
-	    if (msg.connId() && msg.xml()) {
+	    if (msg.hasConnId() && msg.xml()) {
 		RefPointer<YBTSConn> conn;
 		findConn(conn,msg.connId(),false);
 		if (conn)
@@ -4409,7 +4409,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    }
 	    return Ok;
 	case SigHandoverRequired:
-	    if (msg.connId() && msg.xml()) {
+	    if (msg.hasConnId() && msg.xml()) {
 		RefPointer<YBTSConn> conn;
 		findConn(conn,msg.connId(),false);
 		if (conn)
@@ -4417,7 +4417,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    }
 	    return Ok;
 	case SigHandoverAck:
-	    if (msg.connId()) {
+	    if (msg.hasConnId()) {
 		RefPointer<YBTSConn> conn;
 		if (findConn(conn,msg.connId(),true)) {
 		    conn->setHandover(msg.info());
