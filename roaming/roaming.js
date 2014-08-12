@@ -670,7 +670,6 @@ function onRoute(msg)
 	case "ussd":
 	    return routeUSSD(msg);
 	default:
-	    msg.error = "service-unavailable";
 	    return false;
     }
     if (routeHandover(msg))
