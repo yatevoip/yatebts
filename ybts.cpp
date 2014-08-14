@@ -6388,7 +6388,7 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
 	    if (!isAnswered())
 		status("ringing");
 	    Message* m = message("call.ringing");
-	    // TODO: set early media
+	    m->addParam("earlymedia",String::boolText(false));
 	    Engine::enqueue(m);
 	}
 	else
@@ -6399,7 +6399,9 @@ bool YBTSChan::handleCC(const XmlElement& xml, const String* callRef, bool tiFla
 	    call->changeState(YBTSCallDesc::CallConfirmed);
 	    if (!isAnswered())
 		status("progressing");
-	    Engine::enqueue(message("call.progress"));
+	    Message* m = message("call.progress");
+	    m->addParam("earlymedia",String::boolText(false));
+	    Engine::enqueue(m);
 	}
 	else
 	    call->sendWrongState();
