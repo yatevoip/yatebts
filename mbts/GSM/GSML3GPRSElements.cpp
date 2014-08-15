@@ -39,11 +39,21 @@ void L3GPRSCellOptions::writeBits(L3Frame& dest, size_t &wp) const
 	dest.writeField(wp,gco.mBS_CV_MAX,4);
 	dest.writeField(wp,0,1);	// optional PAN_ fields omitted.
 	LOG(INFO)<< "beacon"<<LOGVAR2("NW_EXT_UTBF",gco.mNW_EXT_UTBF);
-	if (!gco.mNW_EXT_UTBF) {
+	unsigned rel = gco.mRelSupported;
+	if (gco.mNW_EXT_UTBF && (rel < 4))
+		rel = 4;
+	if (rel < 4) {
 		dest.writeField(wp,0,1);	// optional extension information omitted
 	} else {
+		LOG(INFO)<< "advertising GPRS Rel-" << rel;
 		dest.writeField(wp,1,1);	// extension information included.
-		unsigned extlen = 6;		// 6 bits of extension information.
+		unsigned extlen = 6;		// 6 bits of extension information for Rel-4.
+		if (rel >= 10)
+			extlen += 6;
+		else if (rel >= 7)
+			extlen += 5;
+		else if (rel >= 6)
+			extlen += 4;
 		dest.writeField(wp,extlen,6);	// length of extension.
 		// R99 extensions:
 		dest.writeField(wp,0,1);	// No EGPRS.
@@ -55,12 +65,22 @@ void L3GPRSCellOptions::writeBits(L3Frame& dest, size_t &wp) const
 		// CCN is network assisted cell change and is also part of GERAN feature pack I.
 		dest.writeField(wp,0,1);	// CCN_ACTIVE. CCN described 44.060 5.5.1.1a
 		dest.writeField(wp,gco.mNW_EXT_UTBF,1);	// Finally.
-		// Rel-6 extensions:
 		// We dont want any of these, but here they are as documentation.
-		//dest.writeField(wp,0,1);	// No MULTIPLE_TBF_CAPABILITY
-		//dest.writeField(wp,0,1);	// No EXT_UTBF_NODATA
-		//dest.writeField(wp,0,1);	// No DTM_ENHANCEMENTS_CAPABILITY
-		//dest.writeField(wp,0,1);	// No MBMS procedures
+		if (rel >= 6) {
+			// Rel-6 extensions:
+			dest.writeField(wp,0,1);	// No MULTIPLE_TBF_CAPABILITY
+			dest.writeField(wp,0,1);	// No EXT_UTBF_NODATA
+			dest.writeField(wp,0,1);	// No DTM_ENHANCEMENTS_CAPABILITY
+			dest.writeField(wp,0,1);	// No MBMS procedures
+		}
+		if (rel >= 7) {
+			// Rel-7 extensions:
+			dest.writeField(wp,0,1);	// No REDUCED_LATENCY_ACCESS
+		}
+		if (rel >= 10) {
+			// Rel-10 extensions:
+			dest.writeField(wp,0,1);	// No NMO_I_ALTERNATE
+		}
 		// End of Rel extensions, we are allowed to truncate here.
 		dest.writeField(wp,0,1);	// Required spare bit - this is very confusing in the spec.
 	}
@@ -69,10 +89,18 @@ void L3GPRSCellOptions::writeBits(L3Frame& dest, size_t &wp) const
 size_t L3GPRSCellOptions::lengthBits() const
 {
 	GPRS::GPRSCellOptions_t& gco = GPRS::GPRSGetCellOptions();
+	unsigned rel = gco.mRelSupported;
+	if (gco.mNW_EXT_UTBF && (rel < 4))
+		rel = 4;
 	size_t result = 2+3+3+3+1+1+4+1+1;
-	if (gco.mNW_EXT_UTBF) {
-		result += 6 + 6 + 1;	// 6 bit len + 6 bits of extension + 1 spare bit.
-	}
+	if (rel >= 10)
+		result += 6+ 6+4+1+1 +1;
+	else if (rel >= 7)
+		result += 6+ 6+4+1 +1;
+	else if (rel >= 6)
+		result += 6+ 6+4 +1;
+	else if (rel >= 4)
+		result += 6+ 6 +1;	// 6 bit len + 6 bits of extension + 1 spare bit.
 	return result;
 }
 

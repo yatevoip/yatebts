@@ -737,6 +737,17 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
+	tmp = new ConfigurationKey("GPRS.Release","2",
+		"",
+		ConfigurationKey::DEVELOPER,
+		ConfigurationKey::VALRANGE,
+		"2:10",
+		false,
+		"Supported GPRS Protocol Release."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
 	tmp = new ConfigurationKey("GPRS.RRBP.Min","0",
 		"?",
 		ConfigurationKey::DEVELOPER,

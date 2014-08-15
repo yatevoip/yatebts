@@ -187,6 +187,7 @@ static unsigned T3192Codes[8] = {
 // BS_CV_MAX is the max number of RLC blocks used by any RLC message.
 // NW_EXT_UTBF is extended uplink TBF mode: 44.060 9.3.1b and 9.3.1.3
 GPRSCellOptions_t::GPRSCellOptions_t() :
+	mRelSupported(gConfig.getNum("GPRS.Release")), // Supported Protocol Release
 	mNMO(gConfig.getNum("GPRS.NMO")-1),	// IE value is spec NMO - 1.
 	//mNMO(1),		// Dont let customers change this.
 	mT3168Code(gConfig.getNum("GPRS.CellOptions.T3168Code")), // T3168Code 5 => 5000msec

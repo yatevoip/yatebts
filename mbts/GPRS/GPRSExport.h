@@ -52,6 +52,7 @@ enum ChannelCodingType {	// Compression/Coding schemes CS-1 to CS-4 coded as 0-3
 
 // See notes at GPRSCellOptions_t::GPRSCellOptions_t()
 struct GPRSCellOptions_t {
+    unsigned mRelSupported;
 	unsigned mNMO;
     unsigned mT3168Code;        // range 0..7
     unsigned mT3192Code;        // range 0..7

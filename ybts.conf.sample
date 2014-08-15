@@ -691,6 +691,12 @@ Radio.C0=
 ; Reassign.Enable: boolean: Enable TBF Reassignment.
 ;Reassign.Enable=yes
 
+; Release: integer: Protocol Release claiming to be supported
+; Interval allowed 2:10. Defaults to 2.
+; If Uplink.Persist is not zero the release is forced to at least 4.
+; Set this to at least 6 to work around a System Information 13 decoding bug in Wireshark
+;Release=4
+
 ; SendIdleFrames: boolean: Should be 0 for current transceiver or 1 for deprecated version of transceiver.
 ;SendIdleFrames=no
 
