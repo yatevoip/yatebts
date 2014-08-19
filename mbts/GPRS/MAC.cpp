@@ -466,7 +466,13 @@ void L2MAC::macForgetMS(MSInfo *ms, bool forever)
 	//ScopedLock lock2(macExpiredMSs.mListLock);
 	if (forever) {
 		macExpiredMSs.remove(ms);	// Just in case it was on this list.
+		// Clean up TBFs associated with this MS
+		macLock.lock();
+		TBF *tbf;
+		for (RListIterator<TBF*> itr(ms->msTBFs); itr.next(tbf); )
+			tbf->mtDelete(1);
 		delete ms;
+		macLock.unlock();
 		return;
 	}
 	macExpiredMSs.push_front(ms);
