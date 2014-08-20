@@ -469,8 +469,10 @@ void L2MAC::macForgetMS(MSInfo *ms, bool forever)
 		// Clean up TBFs associated with this MS
 		macLock.lock();
 		TBF *tbf;
-		for (RListIterator<TBF*> itr(ms->msTBFs); itr.next(tbf); )
+		for (RListIterator<TBF*> itr(ms->msTBFs); itr.next(tbf); ) {
+			tbf->mtDetach();
 			tbf->mtDelete(1);
+		}
 		delete ms;
 		macLock.unlock();
 		return;
