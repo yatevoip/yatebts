@@ -73,6 +73,27 @@ function routeHandover(msg)
     return false;
 }
 
+function hangupHandover(msg)
+{
+    delete ho_outbound[msg.id];
+}
+
+/*
+ * Various periodic cleanups
+ */
+function handoverClearInterval(now)
+{
+    if (now === undefined)
+	now = Date.now() / 1000;
+    // Neighbors holdoff clear
+    for (var n of neighbors) {
+	if (n.holdoff && (now > n.holdoff)) {
+	    n.holdoff = false;
+	    if (debug)
+		Engine.debug(Engine.DebugNote,"No longer holding off cell " + n.cellid);
+	}
+    }
+}
 /*
  * Load cell and neighbors information from configuration file ybts.conf
  */

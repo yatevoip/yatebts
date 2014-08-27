@@ -672,8 +672,10 @@ function onRoute(msg)
 	default:
 	    return false;
     }
-    if (routeHandover(msg))
-	return true;
+    if (routeHandover) {
+	if (routeHandover(msg))
+	    return true;
+    }
 
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
@@ -747,7 +749,8 @@ function onHangup(msg)
 	Engine.debug("Cleaning "+msg.id+" from current MO calls");
 	delete current_calls[msg.id];
     }
-    delete ho_outbound[msg.id];
+    if (hangupHandover)
+	hangupHandover(msg);
     return false;
 }
 
@@ -967,14 +970,8 @@ function onClearInterval()
 	    saveUE(imsi);
 	}
     }
-    // Neighbors holdoff clear
-    for (var n of neighbors) {
-	if (n.holdoff && (now > n.holdoff)) {
-	    n.holdoff = false;
-	    if (debug)
-		Engine.debug(Engine.DebugNote,"No longer holding off cell " + n.cellid);
-	}
-    }
+    if (handoverClearInterval)
+	handoverClearInterval(now);
 }
 
 /*
@@ -1086,7 +1083,8 @@ function completeCommand(msg,line,part)
 	case undefined:
 	case "":
 	case "help":
-	    oneCompletion(msg,"neighbors",part);
+	    if (neighbors)
+		oneCompletion(msg,"neighbors",part);
 	    break;
 	case "debug":
 	case "reload":
@@ -1109,20 +1107,22 @@ function onCommand(msg)
 	case "neighbors":
 	    var tmp = "Band ARFCN BSIC Cell ID        Address               Status\r\n";
 	    tmp += "---- ----- ---- -------------- --------------------- -------\r\n";
-	    for (var p of neighbors) {
-		tmp += strFix(p.band,-4) + " " + strFix(p.arfcn,-5) + " "
-		    + strFix(p.bsic,-3) + "  " + strFix(p.cellid,-14) + " " + strFix(p.sip,21);
-		switch (p.active) {
-		    case false:
-			tmp += " Offline";
-			break;
-		    case true:
-			tmp += " Online";
-			break;
-		    default:
-			tmp += " Unknown";
+	    if (neighbors) {
+		for (var p of neighbors) {
+		    tmp += strFix(p.band,-4) + " " + strFix(p.arfcn,-5) + " "
+			+ strFix(p.bsic,-3) + "  " + strFix(p.cellid,-14) + " " + strFix(p.sip,21);
+		    switch (p.active) {
+			case false:
+			    tmp += " Offline";
+			    break;
+			case true:
+			    tmp += " Online";
+			    break;
+			default:
+			    tmp += " Unknown";
+		    }
+		    tmp += "\r\n";
 		}
-		tmp += "\r\n";
 	    }
 	    if (my_cell) {
 		tmp += strFix(my_cell.band,-4) + " " + strFix(my_cell.arfcn,-5) + " "
@@ -1176,8 +1176,10 @@ function onReload(msg)
 {
     if (msg.plugin && (msg.plugin != "roaming"))
 	return false;
-    loadNeighbors();
-    setBtsAvailable();
+    if (loadNeighbors)
+	loadNeighbors();
+    if (setBtsAvailable)
+	setBtsAvailable();
     readYBTSConf();
     return !!msg.plugin;
 }
