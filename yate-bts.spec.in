@@ -210,10 +210,10 @@ Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE serve
 %config(noreplace) %{_sysconfdir}/yate/roamingconf.js
 
 %post roaming
-if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/ysipchan.conf 2>/dev/null; then
+if ! grep -q '; Installed by yate-bts-roaming +handover' %{_sysconfdir}/yate/ysipchan.conf 2>/dev/null; then
     mv -f -n %{_sysconfdir}/yate/ysipchan.conf %{_sysconfdir}/yate/ysipchan.conf.rpmold
     cat <<-EOF >%{_sysconfdir}/yate/ysipchan.conf
-	; Installed by yate-bts-roaming, do not remove this comment line
+	; Installed by yate-bts-roaming +handover, do not remove this comment line
 
 	[general]
 	lazy100=yes
