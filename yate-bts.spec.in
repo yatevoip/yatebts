@@ -383,15 +383,19 @@ test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
 %prep
 %setup -q -n %{name}
 
-%if "%{no_auto_deps}" == "1"
 %define local_find_requires %{_builddir}/%{name}/local-find-requires
-%define local_find_provides %{_builddir}/%{name}/local-find-provides
 #
 %{__cat} <<EOF >%{local_find_requires}
 #! /bin/sh
-grep -v '\.yate$' | %{__find_requires} | grep -v '^perl'
+grep -v '\.yate$' | %{__find_requires} | grep -v '^\(perl\|pear\)'
 exit 0
 EOF
+#
+chmod +x %{local_find_requires}
+%define __find_requires %{local_find_requires}
+
+%if "%{no_auto_deps}" == "1"
+%define local_find_provides %{_builddir}/%{name}/local-find-provides
 #
 %{__cat} <<EOF >%{local_find_provides}
 #! /bin/sh
@@ -399,9 +403,8 @@ EOF
 exit 0
 EOF
 #
-chmod +x %{local_find_requires} %{local_find_provides}
+chmod +x %{local_find_provides}
 %define _use_internal_dependency_generator 0
-%define __find_requires %{local_find_requires}
 %define __find_provides %{local_find_provides}
 %define __perl_requires /bin/true
 %endif
