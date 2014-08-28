@@ -318,7 +318,7 @@ table.secondmenu
 	/*padding-left:15px;*/
 }
 
-table.holdcontent
+table.holdcontent, div.footer_note
 {
 	margin-left: 1%;
 	border:1px solid #cccccc;
@@ -328,6 +328,8 @@ table.holdcontent
 	padding:10px;
 	font:12px  Arial, Verdana, Helvetica, sans-serif;
 }
+
+div.footer_note {border:none; padding-top:11px;}
 
 td.holdcontent
 {
