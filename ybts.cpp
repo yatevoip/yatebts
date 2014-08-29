@@ -2559,14 +2559,16 @@ static inline XmlElement* buildCCCallState(int stat)
 }
 
 // Build Progress Indicator IE
-static inline XmlElement* buildProgressIndicator(const Message& msg, bool earlyMedia)
+static inline XmlElement* buildProgressIndicator(const Message& msg, bool earlyMedia, bool mandatory = false)
 {
-    const String& s = msg[YSTRING("progress.indicator")];
-    if (s)
-	return new XmlElement(s_ccProgressInd,s);
-    if (earlyMedia && msg.getBoolValue(YSTRING("earlymedia"),true))
-	return new XmlElement(s_ccProgressInd,"in-band-information-available");
-    return 0;
+    const char* s = msg.getValue(YSTRING("progress.indicator"));
+    if (!s) {
+	if (earlyMedia && msg.getBoolValue(YSTRING("earlymedia"),true))
+	    s = "in-band-information-available";
+	else if (mandatory)
+	    s = "unspecified";
+    }
+    return s ? new XmlElement(s_ccProgressInd,s) : 0;
 }
 
 // Retrieve TID (transaction identifier data)
@@ -6900,7 +6902,7 @@ bool YBTSChan::msgProgress(Message& msg)
 	return false;
     if (call->incoming())
 	call->progressing(buildProgressIndicator(msg,
-	    msg.getBoolValue(YSTRING("media"),getPeer() && getPeer()->getSource())));
+	    msg.getBoolValue(YSTRING("media"),getPeer() && getPeer()->getSource()),true));
     return true;
 }
 
