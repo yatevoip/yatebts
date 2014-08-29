@@ -377,7 +377,7 @@ The ARFCN set will be C0, C0+2, C0+4, ...Interval allowed: 1..10
 Defaults to 1 (single ARFCN unit)"	
 			),
 			"Radio.MaxExpectedDelaySpread" => array( 
-				array("selected" => 4, 1,2,3,4),
+				array("selected" => 2, 1,2,3,4),
 				"display" => "select",
 				"comment" => "Expected worst-case delay spread
 Expressed in symbol periods, roughly 3.7 us or 1.1 km per unit.
@@ -385,7 +385,7 @@ This parameter is dependent on the terrain type in the installation area.
 Typical values: 1 -> open terrain, small coverage, 4 -> large coverage area.
 This parameter has a large effect on computational requirements of the software radio.
 Interval allowed: 1..4.
-Defaults to 4."
+Defaults to 2."
 			),
 			"Radio.NeedBSIC" => array( 
 				"display" => "checkbox",

@@ -439,8 +439,8 @@ Radio.C0=
 ; This parameter has a large effect on computational requirements of the
 ;  software radio
 ; Interval allowed: 1..4
-; Defaults to 4
-;Radio.MaxExpectedDelaySpread=4
+; Defaults to 2
+;Radio.MaxExpectedDelaySpread=2
 
 ; Radio.NeedBSIC: boolean: Does the Radio type require the full BSIC
 ; Defaults to no

@@ -1489,7 +1489,7 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Radio.MaxExpectedDelaySpread","4",
+	tmp = new ConfigurationKey("GSM.Radio.MaxExpectedDelaySpread","2",
 		"symbol periods",
 		ConfigurationKey::CUSTOMERTUNE,
 		ConfigurationKey::VALRANGE,
