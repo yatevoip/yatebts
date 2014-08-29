@@ -194,12 +194,12 @@ Defaults to 15",
 				"validity" => array("check_field_validity",10,20)
 			),	
 			"CellSelection.CELL-RESELECT-HYSTERESIS" => array( 
-				array("selected"=>"0", array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"0","CellSelection.CELL-RESELECT-HYSTERESIS"=>"0dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"1","CellSelection.CELL-RESELECT-HYSTERESIS"=> "2dB"), array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"2","CellSelection.CELL-RESELECT-HYSTERESIS"=> "4dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"3","CellSelection.CELL-RESELECT-HYSTERESIS"=> "6dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"4","CellSelection.CELL-RESELECT-HYSTERESIS"=> "8dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"5","CellSelection.CELL-RESELECT-HYSTERESIS"=> "10dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"6","CellSelection.CELL-RESELECT-HYSTERESIS"=>"12dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"7","CellSelection.CELL-RESELECT-HYSTERESIS"=>"14dB" )),
+				array("selected"=>"3", array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"0","CellSelection.CELL-RESELECT-HYSTERESIS"=>"0dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"1","CellSelection.CELL-RESELECT-HYSTERESIS"=> "2dB"), array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"2","CellSelection.CELL-RESELECT-HYSTERESIS"=> "4dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"3","CellSelection.CELL-RESELECT-HYSTERESIS"=> "6dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"4","CellSelection.CELL-RESELECT-HYSTERESIS"=> "8dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"5","CellSelection.CELL-RESELECT-HYSTERESIS"=> "10dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"6","CellSelection.CELL-RESELECT-HYSTERESIS"=>"12dB"),array("CellSelection.CELL-RESELECT-HYSTERESIS_id"=>"7","CellSelection.CELL-RESELECT-HYSTERESIS"=>"14dB" )),
 				"display"=>"select",
 				"comment" => "Cell Reselection Hysteresis.
 See GSM 04.08 10.5.2.4, Table 10.5.23 for encoding, Hysteresis is 2N dB.
-Interval allowed: 0..7 (corresponds to 0..14 dB). 
-Defaults to 0"
+Interval allowed: 0..7 (corresponds to 0..14 dB).
+Defaults to 3"
 			 ),	
 			"CellSelection.MS-TXPWR-MAX-CCH" => array( 
 				array("selected"=>0, 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31),
