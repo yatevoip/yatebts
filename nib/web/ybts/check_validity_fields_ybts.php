@@ -69,6 +69,8 @@ function check_radio_band($field_name, $field_value, $restricted_value)
 
 	foreach ($permitted_values as $radio_band_val => $radio_c0_val) {
 		if ($restricted_value == $radio_band_val) {
+			 $field_value = explode("-",$field_value);
+			 $field_value = $field_value[1];
 			 $int_value = (int)$field_value;
 			 $min = $radio_c0_val[0];
 			 $max = $radio_c0_val[1];

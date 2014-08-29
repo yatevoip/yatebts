@@ -170,7 +170,12 @@ function create_fields_from_conffile($fields_from_file,$exists_in_file = false)
 				}
 			}
 		}
-	}	
+	}
+
+	if (isset($fields['GSM']['gsm']['Radio.Band'][0]["selected"])) {
+		$particle = $fields['GSM']['gsm']['Radio.Band'][0]["selected"];
+		$fields['GSM']['gsm']["Radio.C0"][0]["selected"] = "$particle-".$fields['GSM']['gsm']["Radio.C0"][0]["selected"];
+	}
 	return $fields;
 }
 
@@ -297,7 +302,12 @@ function call_function_from_validity_field($validity, $param_name, $field_param)
 function write_params_conf($fields)
 {
 	global $yate_conf_dir;
-	
+
+	$c0 = $fields[0]['GSM']['gsm']['Radio.C0'][0]['selected'];
+	$c0 = explode("-",$c0);
+	$c0 = $c0[1];
+	$fields[0]['GSM']['gsm']['Radio.C0'][0]['selected'] = $c0;	
+
 	$structure = get_fields_structure_from_menu(); 
 
 	$filename = $yate_conf_dir. "ybts.conf";
