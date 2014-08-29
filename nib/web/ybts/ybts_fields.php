@@ -53,7 +53,7 @@ For non-multiband units, this value is dictated by the hardware and should not b
 				$radio_c0,
 				"display" => "select",
 				"comment" => "The C0 ARFCN. Also the base ARFCN for a multi-ARFCN configuration.Valid values depend on the selected Radio.Band.
-  GSM850: 128..251. 900
+  GSM850: 128..251.
   EGSM900: 0..124 or 975..1023.
   DSC1800: 512..885.
   PCS1900: 512..810.

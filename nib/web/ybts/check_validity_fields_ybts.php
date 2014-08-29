@@ -62,17 +62,31 @@ function check_radio_band($field_name, $field_value, $restricted_value)
 {
 	$permitted_values = array(
 		"850" => array("128","251"),
-		"900" => array("0","124"), 
-		"1800" => array("512","810"),
+		"900" => array("0","124","975","1023"), 
+		"1800" => array("512","885"),
 		"1900" => array("512","810")
 	);
 
 	foreach ($permitted_values as $radio_band_val => $radio_c0_val) {
 		if ($restricted_value == $radio_band_val) {
-			 if ((int)$field_value<$radio_c0_val[0] || (int)$field_value>$radio_c0_val[1])
+			 $int_value = (int)$field_value;
+			 $min = $radio_c0_val[0];
+			 $max = $radio_c0_val[1];
+
+			 if (!isset($radio_c0_val[2])) {
+
+			 	if ($int_value<$min || $int_value>$max)
+					return array(false, "Field $field_name selected, is not in the right range for the Radio.Band chosen.");
+				return array(true);
+
+			 } elseif (isset($radio_c0_val[2])) {
+				$min2 = $radio_c0_val[2];
+				$max2 = $radio_c0_val[3];
+				if (($int_value>=$min && $int_value<=$max) || ($int_value>=$min2 && $int_value<=$max2))
+					return array(true);
 				return array(false, "Field $field_name selected, is not in the right range for the Radio.Band chosen.");
-			 else 
-				 return array(true);
+			 }
+
 		}
 	}
 
