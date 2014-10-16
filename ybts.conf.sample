@@ -789,6 +789,12 @@ Radio.C0=
 [ybts]
 ; This section configures ybts related parameters
 
+; mode: string: YBTS mode of operation. This setting will specify which Javascript script
+;  to load for operation. Possible values are:
+;    - nib: loads script necessary for Network In a Box mode of operation
+;    - roaming: loads script necessary for roaming mode of operation
+;mode=nib
+
 ; heartbeat_ping: integer: Interval, in milliseconds, to send heartbeat (PING)
 ;  to MBTS application. Ping is sent only if idle, e.g. it is not sent if there
 ;  are other signalling packets to be sent

@@ -1789,6 +1789,8 @@ protected:
 	    list = findMtSmsList(connId);
 	    return list != 0;
 	}
+    // Load javascript scripts according to mode of operation
+    bool initOpMode();
     // Remove a pending sms. Remove its queue if empty
     bool removeMtSms(YBTSMtSmsList* list, YBTSMtSms* sms = 0);
     // Handle SS Facility or Release Complete
@@ -1915,6 +1917,7 @@ static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
+static String s_opMode = "";             // YBTS mode of operation (nib/roaming)
 static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_pagingTout = YBTS_PAGING_TIMEOUT_DEF;// Paging timeout to be used on MT services
 static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
@@ -9333,6 +9336,10 @@ void YBTSDriver::initialize()
 	Alarm(this,"config",DebugConf,"Missing radio band or C0 configuration");
 	s_lai.reset();
     }
+    if (!s_opMode) { // this is not reloadable
+	s_opMode = ybts.getValue("mode","nib");
+	s_opMode.trimBlanks();
+    }
     s_askIMEI = ybts.getBoolValue("imei_request",true);
     s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
     s_peerArg = ybts.getValue("peer_arg");
@@ -9449,6 +9456,7 @@ bool YBTSDriver::received(Message& msg, int id)
 		m_engineStart = true;
 		startIdle();
 	    }
+	    initOpMode();
 	    return false;
 	case Stop:
 	    return handleEngineStop(msg);
@@ -9742,6 +9750,22 @@ void YBTSDriver::genUpdate(Message& msg)
     msg.setParam("operational",String::boolText(RadioUp == m_state));
 }
 
+bool YBTSDriver::initOpMode()
+{
+    if (!s_opMode) {
+	Debug(this,DebugConf,"Missing configuration for operation mode");
+	return false;
+    }
+    Message* msg = message("engine.command");
+    static const String s_jsLoad = "javascript load ";
+    msg->setParam(YSTRING("line"),s_jsLoad + s_opMode + (s_opMode.endsWith(".js") ? "" : ".js"));
+    bool ok = Engine::dispatch(msg);
+    if (!ok || msg->retValue())
+	Debug(this,DebugWarn,"Failed to load script='%s', error='%s'",s_opMode.c_str(),
+		msg->retValue().c_str());
+    TelEngine::destruct(msg);
+    return ok;
+}
 
 //
 // YBTSMsgHandler
