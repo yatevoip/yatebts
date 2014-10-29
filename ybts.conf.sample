@@ -960,3 +960,37 @@ Radio.C0=
 ; An empty or boolean false value disables the Reason header
 ; Default: GSM;text="Handover"
 ;reason=GSM;text="Handover"
+
+[roaming]
+; This section configures parameters used by roaming.js when connecting
+; YateBTS to a core network.
+
+; expires: int: Expire time for registrations
+;expires=3600
+
+; reg_sip: string: ip:port where SIP requests are sent
+; It is REQUIRED to set reg_sip or nodes_sip
+; Example: reg_sip=192.168.1.245:5058
+;reg_sip=
+
+; nodes_sip: json object: node => ip:port of each openvolte server
+; node is computed based on the tmsi received from the handset.
+; This ensures that registrations are always sent to the same openvolte server
+; It is REQUIRED to set reg_sip or nodes_sip
+; Example: nodes_sip={"123":"192.168.1.245:5058","101":"192.168.1.176:5059"}
+;nodes_sip=
+
+; nnsf_bits: int: Number of bits to use for
+; Non Access Stratum (NAS) Node Selection Function (NNSF)
+;nnsf_bits=8
+
+; my_sip: string: ip:port for local SIP listener
+; Unless otherwise configured this is the IP of the machine 
+; where yatebts is installed.
+; Example: my_sip=198.168.1.168
+;my_sip=
+
+; gstn_location: string: unique number associated 
+; to each base station by the network operator
+; REQUIRED!
+;gstn_location=

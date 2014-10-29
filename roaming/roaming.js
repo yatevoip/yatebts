@@ -29,8 +29,6 @@
 #require "lib_str_util.js"
 #require "handover.js"
 
-#require "roamingconf.js"
-
 
 /**
  * Handle "auth" message
@@ -808,7 +806,7 @@ function onExecute(msg)
 }
 
 /*
- * Read only necessary configuration from [gsm],[gsm_advanced] sections in ybts.conf
+ * Read only necessary configuration from [gsm],[gsm_advanced],[roaming] sections in ybts.conf
  */
 function readYBTSConf()
 {
@@ -816,6 +814,12 @@ function readYBTSConf()
     var gsm_section = conf.getSection("gsm");
     if (!gsm_section) {
 	Engine.alarm(alarm_conf, "Missing gsm section in ybts.conf. Please set required configurations in this section.");
+	return;
+    }
+
+    var roaming_section = conf.getSection("roaming");
+    if (!roaming_section) {
+	Engine.alarm(alarm_conf, "Missing roaming section in ybts.conf. Please set required configurations in this section.");
 	return;
     }
 
@@ -851,6 +855,55 @@ function readYBTSConf()
 
     if (t3212 == 0)
 	Engine.alarm(alarm_conf, "Incompatible configuration: Timer.T3212=0. When sending requests to SIP/IMS server Timer.T3212 is in 6..60 range.");
+
+    expires = roaming_section.getValue("expires");
+    if (expires=="") 
+	    expires = 3600;
+
+    nodes_sip = JSON.parse(roaming_section.getValue("nodes_sip"));
+
+    reg_sip = roaming_section.getValue("reg_sip");
+
+    if (nodes_sip==undefined || typeof(nodes_sip)!="object") {
+	if (reg_sip=="")
+	    Engine.alarm(alarm_conf,"Please configure reg_sip or nodes_sip parameter in ybts.conf in section [roaming].");
+    } else {
+	ov_nodes = [];
+	var ov_node, ov_server;
+	for (var node in nodes_sip) {
+	    ov_server = nodes_sip[node];
+	    ov_node = {"node":node,"server":ov_server};
+	    ov_nodes.push(ov_node);
+	}
+	if (ov_nodes.length==0)
+	    Engine.alarm(alarm_conf,"Please add SIP nodes in nodes_sip parameter in [roaming] section from ybts.conf.");
+	else {
+	    nnsf_bits = roaming_section.getValue("nnsf_bits"); 	
+	    if (!nnsf_bits)
+		Engine.alarm(alarm_conf,"Please configure nnsf_bits in roaming section from ybts.conf.");
+	    else {
+		nnsf_mask = 0x03ff >> (10-nnsf_bits);
+		Engine.debug(Engine.debugInfo, "Computed nnsf_mask="+nnsf_mask);
+	    }
+        }
+    }
+    my_sip = roaming_section.getValue("my_sip");
+    
+    if (my_sip=="") {
+	var address;
+	if (reg_sip)
+	    address = reg_sip.substr(0,reg_sip.indexOf(":"));
+	else if (ov_server!=undefined)
+	    address = ov_server.substr(0,ov_server.indexOf(":"));
+
+        my_sip = DNS.local(address);
+	if (my_sip=="") 
+	    Engine.alarm(alarm_conf,"Could not automatically detect server IP. Please configure 'my_sip' parameter in the [roaming] section of ybts.conf.");	
+    }
+    
+    gstn_location = roaming_section.getValue("gstn_location");
+    if (!gstn_location)
+	Engine.alarm(alarm_conf,"Please configure gstn_location parameter in section [roaming] from ybts.conf.");
 
     accnet_header = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
 }
@@ -1033,40 +1086,10 @@ function randomNode()
 }
 
 /*
- * Read and check configuration from roamingconf.js and ybts.conf
+ * Read and check configuration from ybts.conf
  */
 function checkConfiguration()
 {
-    if (expires=="")
-	expires = 3600;
-
-    if (nodes_sip==undefined || typeof(nodes_sip)!="object") {
-    	if (!reg_sip)
-	    Engine.alarm(alarm_conf,"Please configure reg_sip or nodes_sip parameter in roamingconf.js located in the configurations directory.");
-    } else {
-	ov_nodes = [];
-	var ov_node, ov_server;
-	for (var node in nodes_sip) {
-	    ov_server = nodes_sip[node];
-	    ov_node = {"node":node,"server":ov_server};
-	    ov_nodes.push(ov_node);
-	}
-	if (ov_nodes.length==0)
-	    Engine.alarm(alarm_conf,"Please add SIP nodes in nodes_sip parameter in roamingconf.js located in the configurations directory.");
-	else {
-	    if (!nnsf_bits)
-		Engine.alarm(alarm_conf,"Please configure nnsf_bits in roamingconf.js located in the configurations directory.");
-	    else {
-		nnsf_mask = 0x03ff >> (10-nnsf_bits);
-		Engine.debug(Engine.debugInfo, "Computed nnsf_mask="+nnsf_mask);
-	    }
-        }
-    }
-    if (!my_sip)
-	Engine.alarm(alarm_conf,"Please configure my_sip parameter in roamingconf.js located in the configurations directory.");
-    if (!gstn_location)
-	Engine.alarm(alarm_conf,"Please configure gstn_location parameter in roamingconf.js located in the configurations directory.");
-
     readYBTSConf();
     readUEs();
 }
