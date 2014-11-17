@@ -891,12 +891,21 @@ function readYBTSConf()
     
     if (my_sip=="") {
 	var address;
-	if (reg_sip)
-	    address = reg_sip.substr(0,reg_sip.indexOf(":"));
-	else if (ov_server!=undefined)
-	    address = ov_server.substr(0,ov_server.indexOf(":"));
-
-        my_sip = DNS.local(address);
+	
+	if (reg_sip) {
+	    var start_port = reg_sip.indexOf(":");
+	    if (start_port === -1)
+		address = reg_sip;
+	    else
+		address = reg_sip.substr(0,start_port);
+	} else if (ov_server!=undefined) {
+	    var start_port = ov_server.indexOf(":");
+	    if (start_port === -1)
+		address = ov_server;
+	    else
+		address = ov_server.substr(0,start_port);
+	}
+	my_sip = DNS.local(address);
 	if (my_sip=="") 
 	    Engine.alarm(alarm_conf,"Could not automatically detect server IP. Please configure 'my_sip' parameter in the [roaming] section of ybts.conf.");	
     }
