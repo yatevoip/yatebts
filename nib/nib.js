@@ -1178,7 +1178,7 @@ function onRegister(msg)
 	} else if (msisdn==false) {
 	    // IMSI is not allowed
 	    addRejected(imsi);
-	    msg.error = "IMSI-unknown-in-HLR";
+	    msg.error = "location-area-not-allowed";
 	    return false;
 	}
     } else {
@@ -1206,7 +1206,7 @@ function onRegister(msg)
 		}
 	    } else {
 		addRejected(imsi);
-		msg.error = "IMSI-unknown-in-HLR";
+		msg.error = "location-area-not-allowed";
 		return false;
 	    }
 	}
