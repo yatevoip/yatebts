@@ -194,6 +194,14 @@ void L3GmmMsg::dump(L3GmmFrame &frame,std::ostream &os)
 		p.dumpOTLV(0x1a,"Additional Mobile Id");
 		p.dumpOTLV(0x1b,"Additional Old RAId");
 		p.dumpOTLV(0x5d,"Voice domain preference");
+		p.dumpOTV(0xd,"Device properties",1);
+		p.dumpOTV(0xe,"P-TMSI type", 1);
+		p.dumpOTV(0xc,"MS network feature support",1);
+		p.dumpOTLV(0x14,"Old LAI");
+		p.dumpOTV(0xf,"Additional update type",1);
+		p.dumpOTLV(0x10,"TMSI based NRI container");
+		p.dumpOTLV(0x6a,"T3324 value");
+		p.dumpOTLV(0x39,"T3312 extended value");
 		p.finish();
 		break;
 	case AttachAccept:
@@ -220,12 +228,18 @@ void L3GmmMsg::dump(L3GmmFrame &frame,std::ostream &os)
 		p.finish();
 		break;
 	case AttachComplete:
-		// nothing interesting
+		// TS 24.008 version 12.7.0
+		p.dumpOTLV(0x27,"Inter-RAT HO information");
+		p.dumpOTLV(0x2b,"E-UTRAN inter-RAT HO information");
+		p.finish();
 		break;
 	case AttachReject:
 		p.dumpV("GMM cause",1);
 		p.dumpOTLV(0x2a,"T3302 value");
+		// TS 24.008 version 12.7.0
+		p.dumpOTLV(0x3a,"T3346 value");
 		p.finish();
+		break;
 	case PTMSIReallocationCommand:
 		p.dumpLV("Allocated P-TMSI");
 		p.dumpV("RA Id",6);
@@ -239,10 +253,45 @@ void L3GmmMsg::dump(L3GmmFrame &frame,std::ostream &os)
 		p.finish();
 		break;
 	case RoutingAreaUpdateRequest:
-		// todo
+		p.dumpNibble("UpdateType",0);
+		p.dumpNibble("GPRSCipheringKeySeq",1);
+		p.dumpV("OldRAId",6);
+		p.dumpLV("MS RadioAccessCap");
+		p.dumpOTV(0x19,"Old P-TMSI signature",4);
+		p.dumpOTV(0x17,"Requested READY timer value",2);
+		p.dumpOTV(0x27,"DRXParameter",3);
+		p.dumpOTV(0x9,"TMSI status",1);
+		p.dumpOTLV(0x18,"P-TMSI");
+		p.dumpOTLV(0x31,"MS Network Capability");
+		p.dumpOTLV(0x32,"PDP Context Status");
+		p.dumpOTLV(0x33,"PS LCS Capability");
+		p.dumpOTLV(0x35,"MBMS Context Status");
+		p.dumpOTLV(0x58,"UE Network Capability");
+		p.dumpOTLV(0x1a,"Additional Mobile Id");
+		p.dumpOTLV(0x1b,"Additional Old RAId");
+		p.dumpOTLV(0x11,"MS classmark2");
+		p.dumpOTLV(0x20,"MS classmark3");
+		p.dumpOTLV(0x40,"Supported Codecs");
+		p.dumpOTLV(0x5d,"Voice domain preference");
+		p.dumpOTV(0xe,"P-TMSI type", 1);
+		p.dumpOTV(0xd,"Device properties",1);
+		p.dumpOTV(0xc,"MS network feature support",1);
+		p.dumpOTLV(0x14,"Old LAI");
+		p.dumpOTV(0xf,"Additional update type",1);
+		p.dumpOTLV(0x10,"TMSI based NRI container");
+		p.dumpOTLV(0x6a,"T3324 value");
+		p.dumpOTLV(0x39,"T3312 extended value");
+		p.finish();
 		break;
 	case RoutingAreaUpdateAccept:
 		// todo
+		break;
+	case RoutingAreaUpdateComplete:
+		// TS 24.008 version 12.7.0
+		p.dumpOTLV(0x26,"List of Receive N-PDU Numbers");
+		p.dumpOTLV(0x27,"Inter-RAT HO information");
+		p.dumpOTLV(0x2b,"E-UTRAN inter-RAT HO information");
+		p.finish();
 		break;
 	}
   } catch (ByteVectorError) {
@@ -368,6 +417,28 @@ void GMMAttach::gmParseIEs(L3GmmFrame &src, size_t &rp, const char *culprit)
 			mTmsiStatus = iei & 1;
 			continue;
 		}
+		// handle 1 byte TV IEs
+		switch (iei & 0xf0) {
+		case 0x90:
+			// 10.5.5.4 TMSI status: high nibble is 9, low bit is TMSI status.
+			mTmsiStatus = iei & 1;
+			continue;
+		// 3GPP TS 24.008 version 12.7.0 Release 12 IEs
+		case 0xD0:
+			// section 10.5.7.8 Device properties
+			// fall through
+		case 0xE0:
+			// section 10.5.5.29 P-TMSI type
+			// fall through
+		case 0xC0:
+			// section 10.5.1.15 MS network feature support
+			// fall through
+		case 0xF0:
+			// section 10.5.5.0 Additional update type
+			continue;
+		default:
+			break;
+		}
 		switch (iei) {
 		case 0x19:	// TV Old P-TMSI signature.
 			// Dont have a 3 byte 'read' function so use getField then advance rp by 3.
@@ -412,7 +483,7 @@ void GMMAttach::gmParseIEs(L3GmmFrame &src, size_t &rp, const char *culprit)
 			src.skipLV(rp,1,1,"PS LCS Capability");
 			break;
 		case 0x35:	// MBMS context status in RAUpdateRequest
-			src.skipLV(rp,3,3,"MBMS context status");
+			src.skipLV(rp,0,16,"MBMS context status");
 		case 0x11:
 			src.skipLV(rp,3,3,"Mobile station classmark 2");
 			break;
@@ -434,6 +505,18 @@ void GMMAttach::gmParseIEs(L3GmmFrame &src, size_t &rp, const char *culprit)
 		case 0x5D:
 			src.skipLV(rp,1,1,"Voice domain preference");
 			break;
+		// IEs from TS 24.008 version 12.7.0
+		case 0x14:
+			src.skipLV(rp,5,5,"Old LAI");
+			break;
+		case 0x10:
+			src.skipLV(rp,2,2,"TMSI based NRI container");
+			break;
+		case 0x6a:
+			src.skipLV(rp,1,1,"T3324 value");
+			break;
+		case 0x39:
+			src.skipLV(rp,1,1,"T3312 extended value");
 		}
 		assert(rp == nextrp);
 	}
@@ -955,13 +1038,29 @@ void L3GmmMsgServiceRequest::gmmParseBody(L3GmmFrame &src, size_t &rp)
 	mServiceType = src.getNibble(rp,0);
 	mCypheringKeySequenceNumber = src.getNibble(rp,1);
 	rp++;
-        mMobileId.parseLV(src,rp);
-        if (rp < src.size()) {
-                unsigned iei = src.readIEI(rp);
-		if (iei == 0x32) {
-                        rp++;   // skip length
-                        mPdpContextStatus.mStatus[0] = src.readByte(rp);
-                        mPdpContextStatus.mStatus[1] = src.readByte(rp);
+	mMobileId.parseLV(src,rp);
+	while (rp < src.size()) {
+		unsigned iei = src.readIEI(rp);
+		if ((iei & 0xf0) == 0xd0) {
+			// TS 24.008 version 12.7.0, section 9.4.20
+			// skip over Device Properties
+			continue;
+		}
+		switch (iei) {
+		case 0x32: // PDP context status
+			rp++;   // skip length
+			mPdpContextStatus.mStatus[0] = src.readByte(rp);
+			mPdpContextStatus.mStatus[1] = src.readByte(rp);
+			break;
+		case 0x35:
+			src.skipLV(rp,0,16,"MBMS context status");
+			break;
+		case 0x36:
+			src.skipLV(rp,2,2,"Uplink data status");
+			break;
+		default:
+			// unknown IEI, ignore it
+			return;
 		}
 	}
 }
@@ -1234,10 +1333,16 @@ void L3SmMsgActivatePdpContextRequest::smParseBody(L3SmFrame &src, size_t &rp)
 	// optional ieis:
 	while (rp < src.size()) {
 		unsigned iei = src.readIEI(rp);
-		if ((iei & 0xf0) == 0xa0) {
+		switch (iei & 0xf0) {
+		case 0xa0:
 			mRequestType = iei & 0xf;	// 10.5.6.17 Request type
 			// 1 is initial request, 2 is handover, 4 is emergency.
 			continue;
+		case 0xc0:
+			// TS 12.7.0 IEs, Device properties 10.5.7.8
+			continue;
+		default:
+			break;
 		}
 		int len = src.getByte(rp);
 		size_t nextrp = rp + len + 1;
