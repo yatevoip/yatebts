@@ -1,6 +1,7 @@
 #ifndef _GSMTAP_H
 #define _GSMTAP_H
 
+
 /* gsmtap header, pseudo-header in front of the actua GSM payload */
 
 /* GSMTAP is a generic header format for GSM protocol captures,
@@ -41,6 +42,9 @@
 #define GSMTAP_TYPE_GB_LLC	0x08 /* GPRS Gb interface: LLC */
 #define GSMTAP_TYPE_GB_SNDCP	0x09 /* GPRS Gb interface: SNDCP */
 #define GSMTAP_TYPE_GMR1_UM	0x0a	/* GMR-1 L2 packets */
+#define GSMTAP_TYPE_UMTS_RLC_MAC	0x0b
+#define GSMTAP_TYPE_UMTS_RRC	0x0c
+#define GSMTAP_TYPE_LTE_RRC	0x0d	/* LTE interface */
 
 /* ====== DO NOT MAKE UNAPPROVED MODIFICATIONS HERE ===== */
 
@@ -77,11 +81,19 @@
 #define GSMTAP_CHANNEL_SDCCH8	0x08
 #define GSMTAP_CHANNEL_TCH_F	0x09
 #define GSMTAP_CHANNEL_TCH_H	0x0a
-#define GSMTAP_CHANNEL_CBCH51	0x0b
+#define GSMTAP_CHANNEL_PACCH	0x0b		// pats note: This is the one that is implemented.
 #define GSMTAP_CHANNEL_CBCH52	0x0c
 #define GSMTAP_CHANNEL_PDCH	0x0d		// pats note: This one is not implemented in wireshark.
 #define GSMTAP_CHANNEL_PTCCH	0x0e		// pats note: and neither is this one.
-#define GSMTAP_CHANNEL_PACCH	0x0f		// pats note: This is the one that is implemented.
+#define GSMTAP_CHANNEL_CBCH51	0x0f
+
+/* GPRS Coding Scheme CS1..4 */
+#define GSMTAP_GPRS_CS_BASE	0x20
+#define GSMTAP_GPRS_CS(N)	(GSMTAP_GPRS_CS_BASE + N)
+/* (E) GPRS Coding Scheme MCS0..9 */
+#define GSMTAP_GPRS_MCS_BASE	0x30
+#define GSMTAP_GPRS_MCS(N)	(GSMTAP_GPRS_MCS_BASE + N)
+
 #define GSMTAP_CHANNEL_ACCH	0x80
 
 /* ====== DO NOT MAKE UNAPPROVED MODIFICATIONS HERE ===== */
@@ -120,6 +132,19 @@
 
 /* ====== DO NOT MAKE UNAPPROVED MODIFICATIONS HERE ===== */
 
+#define GSMTAP_UMTS_CH_PCCH	0x01
+#define GSMTAP_UMTS_CH_CCCH	0x02
+#define GSMTAP_UMTS_CH_DCCH	0x03
+
+/* sub-types for TYPE_LTE_RRC */
+#define GSMTAP_LTE_CH_BCCH	0x01
+#define GSMTAP_LTE_CH_CCCH	0x02
+#define GSMTAP_LTE_CH_DCCH	0x03
+#define GSMTAP_LTE_CH_MCCH	0x04
+#define GSMTAP_LTE_CH_PCCH	0x05
+#define GSMTAP_LTE_CH_DTCH	0x06
+#define GSMTAP_LTE_CH_MTCH	0x07
+
 /* flags for the ARFCN */
 #define GSMTAP_ARFCN_F_PCS	0x8000
 #define GSMTAP_ARFCN_F_UPLINK	0x4000
@@ -127,6 +152,74 @@
 
 /* IANA-assigned well-known UDP port for GSMTAP messages */
 #define GSMTAP_UDP_PORT			4729
+
+/* UMTS RRC message types */
+enum {
+	GSMTAP_RRC_SUB_DL_DCCH_Message = 0,
+	GSMTAP_RRC_SUB_UL_DCCH_Message,
+	GSMTAP_RRC_SUB_DL_CCCH_Message,
+	GSMTAP_RRC_SUB_UL_CCCH_Message,
+	GSMTAP_RRC_SUB_PCCH_Message,
+	GSMTAP_RRC_SUB_DL_SHCCH_Message,
+	GSMTAP_RRC_SUB_UL_SHCCH_Message,
+	GSMTAP_RRC_SUB_BCCH_FACH_Message,
+	GSMTAP_RRC_SUB_BCCH_BCH_Message,
+	GSMTAP_RRC_SUB_MCCH_Message,
+	GSMTAP_RRC_SUB_MSCH_Message,
+	GSMTAP_RRC_SUB_HandoverToUTRANCommand,
+	GSMTAP_RRC_SUB_InterRATHandoverInfo,
+	GSMTAP_RRC_SUB_SystemInformation_BCH,
+	GSMTAP_RRC_SUB_System_Information_Container,
+	GSMTAP_RRC_SUB_UE_RadioAccessCapabilityInfo,
+	GSMTAP_RRC_SUB_MasterInformationBlock,
+	GSMTAP_RRC_SUB_SysInfoType1,
+	GSMTAP_RRC_SUB_SysInfoType2,
+	GSMTAP_RRC_SUB_SysInfoType3,
+	GSMTAP_RRC_SUB_SysInfoType4,
+	GSMTAP_RRC_SUB_SysInfoType5,
+	GSMTAP_RRC_SUB_SysInfoType5bis,
+	GSMTAP_RRC_SUB_SysInfoType6,
+	GSMTAP_RRC_SUB_SysInfoType7,
+	GSMTAP_RRC_SUB_SysInfoType8,
+	GSMTAP_RRC_SUB_SysInfoType9,
+	GSMTAP_RRC_SUB_SysInfoType10,
+	GSMTAP_RRC_SUB_SysInfoType11,
+	GSMTAP_RRC_SUB_SysInfoType11bis,
+	GSMTAP_RRC_SUB_SysInfoType12,
+	GSMTAP_RRC_SUB_SysInfoType13,
+	GSMTAP_RRC_SUB_SysInfoType13_1,
+	GSMTAP_RRC_SUB_SysInfoType13_2,
+	GSMTAP_RRC_SUB_SysInfoType13_3,
+	GSMTAP_RRC_SUB_SysInfoType13_4,
+	GSMTAP_RRC_SUB_SysInfoType14,
+	GSMTAP_RRC_SUB_SysInfoType15,
+	GSMTAP_RRC_SUB_SysInfoType15bis,
+	GSMTAP_RRC_SUB_SysInfoType15_1,
+	GSMTAP_RRC_SUB_SysInfoType15_1bis,
+	GSMTAP_RRC_SUB_SysInfoType15_2,
+	GSMTAP_RRC_SUB_SysInfoType15_2bis,
+	GSMTAP_RRC_SUB_SysInfoType15_2ter,
+	GSMTAP_RRC_SUB_SysInfoType15_3,
+	GSMTAP_RRC_SUB_SysInfoType15_3bis,
+	GSMTAP_RRC_SUB_SysInfoType15_4,
+	GSMTAP_RRC_SUB_SysInfoType15_5,
+	GSMTAP_RRC_SUB_SysInfoType15_6,
+	GSMTAP_RRC_SUB_SysInfoType15_7,
+	GSMTAP_RRC_SUB_SysInfoType15_8,
+	GSMTAP_RRC_SUB_SysInfoType16,
+	GSMTAP_RRC_SUB_SysInfoType17,
+	GSMTAP_RRC_SUB_SysInfoType18,
+	GSMTAP_RRC_SUB_SysInfoType19,
+	GSMTAP_RRC_SUB_SysInfoType20,
+	GSMTAP_RRC_SUB_SysInfoType21,
+	GSMTAP_RRC_SUB_SysInfoType22,
+	GSMTAP_RRC_SUB_SysInfoTypeSB1,
+	GSMTAP_RRC_SUB_SysInfoTypeSB2,
+	GSMTAP_RRC_SUB_ToTargetRNC_Container,
+	GSMTAP_RRC_SUB_TargetRNC_ToSourceRNC_Container,
+
+	GSMTAP_RRC_SUB_MAX
+};
 
 /* ====== DO NOT MAKE UNAPPROVED MODIFICATIONS HERE ===== */
 struct gsmtap_hdr {
