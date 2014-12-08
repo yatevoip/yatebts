@@ -405,11 +405,6 @@ void L2MAC::macConfigInit()
 	// database number specified in percent:
 	macChCongestionThreshold = gConfig.getNum("GPRS.Channels.Congestion.Threshold") / 100.0;
 	macDownlinkPersist = gConfig.getNum("GPRS.Downlink.Persist");
-	static bool thisMessageHasBeenPrinted = false;
-	if (macDownlinkPersist && !thisMessageHasBeenPrinted) {
-		thisMessageHasBeenPrinted = true;
-		LOG(ALERT) << "GPRS.Downlink.Persist is not implemented and config value should be 0!";
-	}
 	macDownlinkKeepAlive = gConfig.getNum("GPRS.Downlink.KeepAlive");
 	macUplinkPersist = gConfig.getNum("GPRS.Uplink.Persist");
 	macUplinkKeepAlive = gConfig.getNum("GPRS.Uplink.KeepAlive");

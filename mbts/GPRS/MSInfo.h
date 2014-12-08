@@ -573,8 +573,6 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 	void msDumpChannels(std::ostream&os) const;
 	RROperatingMode::type getRROperatingMode();
 	std::string id() const;
-	void msAliasTlli(uint32_t newTlli);
-	void msChangeTlli(uint32_t newTlli);
 
 	//void msSetUplinkRequest(RLCMsgChannelRequestDescriptionIE &wCRD) {
 	//	msUplinkRequest = true;
@@ -583,6 +581,8 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 
 	// These are the functions required by the MSUEAdapter:
 	uint32_t msGetHandle() { return msTlli; }
+	void msChangeTlli(uint32_t newTlli);
+	void msAliasTlli(uint32_t newTlli);
 	std::string msid() const { return id(); }
 	//void msWriteHighSide(ByteVector &dlpdu, uint32_t tlli, const char *descr) {
 		//msDownlinkQueue.write(new GprsSgsnDownlinkPdu(dlpdu,tlli,descr));

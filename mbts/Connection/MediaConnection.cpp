@@ -22,23 +22,30 @@
 
 #include "MediaConnection.h"
 #include "ConnectionMap.h"
+#include "GprsConnMap.h"
 
 #include <Logger.h>
 #include <Globals.h>
 #include <GSMLogicalChannel.h>
+#include <SgsnConn.h>
 
 using namespace Connection;
 using namespace GSM;
+using namespace SGSN;
 
-bool MediaConnection::send(unsigned int id, const void* data, size_t len)
+bool MediaConnection::send(unsigned int id, const void* data, size_t len, const void* data2, size_t len2)
 {
     if (!valid())
 	return false;
-    unsigned char buf[len + 2];
+    if (!data2)
+	len2 = 0;
+    unsigned char buf[len + len2 + 2];
     buf[0] = (unsigned char)(id >> 8);
     buf[1] = (unsigned char)id;
     ::memcpy(buf + 2,data,len);
-    return GenConnection::send(buf,len + 2);
+    if (len2)
+	::memcpy(buf + len + 2,data2,len2);
+    return GenConnection::send(buf,len + len2 + 2);
 }
 
 void MediaConnection::process(const unsigned char* data, size_t len)
@@ -54,11 +61,17 @@ void MediaConnection::process(const unsigned char* data, size_t len)
 void MediaConnection::process(unsigned int id, const unsigned char* data, size_t len)
 {
     TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
-    if (tch)
+    if (tch) {
 	// TODO: check frame size and blocking operation
 	tch->sendTCH(data);
-    else
-	LOG(ERR) << "received media frame for unmapped id " << id;
+	return;
+    }
+    SgsnInfo* si = gGprsMap.find(id);
+    if (si) {
+	SgsnConn::userData(si,data,len);
+	return;
+    }
+    LOG(ERR) << "received media frame for unmapped id " << id;
 }
 
 /* vi: set ts=8 sw=4 sts=4 noet: */

@@ -132,7 +132,8 @@ class PdpContext
 	// we received in the response messages anyway.
 	int mLlcSapi;
 	mg_con_t *mgp;	// Contains the IP address.
-	int mTransactionId;	// From the L3 message that created this PdpContext, needed during deactivation??
+	int mTransactionId;	// From the L3 message that created this PdpContext, needed during deactivation
+	L3GprsDlMsg::MsgSense mSense;	// From the L3 message that created this PdpContext, needed during deactivation
 #if SNDCP_IN_PDP
 	Sndcp *mSndcp1;		// Not used in UMTS.
 #endif
@@ -166,6 +167,7 @@ class PdpContext
 	// at which time we send the PDP ActivateRequestAccept.  These messages are sent
 	// in acknowledged mode, but we are not currently using that acknowledgement.
 	// If the UE asks for it again, we will send it again.
+	bool mWaitUpstream;
 	bool mUmtsStatePending;
 	L3SmMsgActivatePdpContextRequest mPendingPdpr; // the request upon which we are pending, since the pending has to be cleared by the Rab setup response handler
 
@@ -192,6 +194,7 @@ class PdpContext
 	PdpContext(GmmInfo *wgmm, mg_con_t *wmgp, int nsapi, int llcsapi);
 	~PdpContext();
 	void update(L3SmMsgActivatePdpContextRequest &pdpr);
+	void setSense(L3GprsDlMsg::MsgSense wSense);
 };
 #if GGSN_IMPLEMENTATION
 	// For GPRS the Sndcp deletes us when it is deleted; there is no other way.
@@ -214,6 +217,7 @@ class PdpContext
 		mQoSReq = pdpr.mQoS;
 		mTransactionId = pdpr.mTransactionId;
 	}
+	void PdpContext::setSense(L3GprsDlMsg::MsgSense wSense) { mSense = wSense; }
 
 	PdpContext::PdpContext(GmmInfo *wgmm, mg_con_t *wmgp, int nsapi, int llcsapi) :
 		mpcGmm(wgmm),
@@ -223,13 +227,15 @@ class PdpContext
 		//mLlcSapi(pdpr.mLlcSapi),
 		mgp(wmgp),
 		//mTransactionId(pdpr.mTransactionId),
+		mSense(L3GprsDlMsg::senseReply),
 		mSndcp1(NULL),
 		//mPcoReq(pdpr.mPco),
 		//mQoSReq(pdpr.mQoS),
 		//mPdpAddr(pdpr.mPdpAddress),
 		//mApName(pdpr.mApName),
 		//mTransactionId(pdpr.mTransactionId)
-		mUmtsStatePending(0)
+		mWaitUpstream(true),
+		mUmtsStatePending(false)
 	{
 		//mT3385.configure(gConfig.getNum("UMTS.Timers.T3385",8));
 		//mT3395.configure(gConfig.getNum("UMTS.Timers.T3395",8));

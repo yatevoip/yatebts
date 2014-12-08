@@ -171,7 +171,8 @@ void CCCHLogicalChannel::serviceLoop()
 			mWaitingToSend = true;	// Waiting to send this block at mNextWriteTime.
 			LogicalChannel::send(*frame);
 			mWaitingToSend = false;
-			OBJLOG(DEBUG) << "CCCHLogicalChannel::serviceLoop sending " << *frame;
+			OBJLOG(DEBUG) << "CCCHLogicalChannel::serviceLoop sending " << *frame
+				<< " load: " << load() << " time: " << getNextWriteTime();
 			delete frame;
 		}
 		if (mQ.size()==0) {

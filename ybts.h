@@ -36,6 +36,7 @@ enum BtsFileDesc
 
 // Signalling interface protocol
 enum BtsPrimitive {
+    // CS primitives with connection ID
     SigL3Message        =   0,           // Connection related L3 message
     SigConnLost         =   1,           // Connection to UE lost
     SigConnRelease      =   2,           // Request to release a connection
@@ -48,6 +49,18 @@ enum BtsPrimitive {
     SigPhysicalInfo     =   9,           // Physical channel information
     SigHandoverRequired =  10,           // Outbound handover required
     SigHandoverAck      =  11,           // Inbound handover acknowledge
+    // PS primitives with connection ID
+    SigGprsAttachReq    =  64,           // Attach Request
+    SigGprsAttachLBO    =  65,           // Attach Local Breakout
+    SigGprsAttachOk     =  66,           // Attach Accept
+    SigGprsAttachRej    =  67,           // Attach Reject
+    SigGprsIdentityReq  =  68,           // Identification Request
+    SigGprsAuthRequest  =  69,           // Authentication Request
+    SigGprsDetach       =  70,           // Detach Request
+    SigPdpActivate      =  71,           // Activate PDP context
+    SigPdpModify        =  72,           // Modify PDP context
+    SigPdpDeactivate    =  73,           // Deactivate PDP context
+    // Primitives without connection ID
     SigHandshake        = 128,           // Handshake
     SigRadioReady       = 129,           // Radio side is functioning
     SigStartPaging      = 130,           // Start paging an UE

@@ -77,6 +77,7 @@ class GmmInfo
 	uint32_t mPTmsi;	// The unique P-TMSI we create for this Gmm context.
 	uint32_t getPTmsi() const { return mPTmsi; }
 	uint32_t getTlli() const { return mPTmsi | sLocalTlliMask; }
+	void setPTmsi(uint32_t ptmsi) { mPTmsi = ptmsi; }
 	static const unsigned sNumPdps = 16;
 	time_t mAttachTime;
 	time_t mActivityTime;
@@ -106,6 +107,7 @@ class GmmInfo
 	// which case is handled by the TLLI change procecure in L2.
 	SgsnInfo *msi;
 	SgsnInfo *getSI() { return msi; }
+	int mConnId;
 
 	bool isRegistered() {
 		return mState == GmmState::GmmRegisteredNormal ||
@@ -125,7 +127,7 @@ class GmmInfo
 	unsigned freePdpAll(bool freeRabsToo);
 	PdpContext *getPdp(unsigned nsapi);
 
-	GmmInfo(ByteVector &imsi);
+	GmmInfo(ByteVector &imsi, uint32_t ptmsi);
 	~GmmInfo();
 };
 
@@ -263,7 +265,14 @@ class SgsnInfo
 	//uint32_t getTmsi() { return mMsHandle; }	// NOT RIGHT!
 	//uint32_t getPTmsi() { return mMsHandle; }	// NOT RIGHT!
 
+	// The connection ID to ybts
+	int mConnId;
+
+	// Authentication and ciphering information
 	ByteVector mRAND;
+	ByteVector mSRES;
+	ByteVector mKc;
+
 	// The information in the L3 AttachRequest is rightly part of the GmmInfo context,
 	// but when we receive the message, that does not exist yet, so we save the
 	// AttachRequest info in the SgsnInfo here.
@@ -304,10 +313,14 @@ class SgsnInfo
 	SgsnInfo(uint32_t wTlli);	// May be a URNTI instead of TLLI.
 	~SgsnInfo();
 	void sirm();	// Remove si from list and delete it.
+	// Clear connection and send a BTS primitive
+	void clearConn(int state, int btsPrim, unsigned char info = 0);
+	int getConnId() const { return mGmmp ? mGmmp->mConnId : mConnId; }
+	void setConnId(int id) { mConnId = id; if (mGmmp) mGmmp->mConnId = id; }
 
 	MSUEAdapter *getMS() const;
 
-	void sgsnReset();
+	void sgsnReset(uint8_t wType = 0);
 
 	// Downlink L3 Messages come here.
 	void sgsnWriteHighSideMsg(L3GprsDlMsg &msg);
@@ -323,7 +336,7 @@ void gmmDump(std::ostream&os);
 void sgsnInfoDump(SgsnInfo *si,std::ostream&os);
 void gmmInfoDump(GmmInfo *si,std::ostream&os,int options);
 SgsnInfo *findSgsnInfoByHandle(uint32_t handle,bool create);
-GmmInfo *findGmmByImsi(ByteVector&imsi,SgsnInfo *si);
+GmmInfo *findGmmByImsi(ByteVector&imsi,SgsnInfo *si,uint32_t ptmsi = 0);
 bool cliSgsnInfoDelete(SgsnInfo *si);
 void cliGmmDelete(GmmInfo *gmm);
 

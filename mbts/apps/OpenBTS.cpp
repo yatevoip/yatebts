@@ -114,6 +114,7 @@ Connection::CmdConnection gCmdConn(STDERR_FILENO + 3);
 Connection::SigConnection gSigConn(STDERR_FILENO + 4);
 Connection::MediaConnection gMediaConn(STDERR_FILENO + 5);
 Connection::ConnectionMap gConnMap;
+Connection::GprsConnMap gGprsMap;
 
 
 const char* transceiverPath = "./transceiver";

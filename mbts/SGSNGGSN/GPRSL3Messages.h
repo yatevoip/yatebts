@@ -756,7 +756,8 @@ struct L3GmmMsgAttachAccept : public L3GmmDlMsg
 		os <<LOGVAR(mAttachResult) <<LOGHEX(mPTmsi)
 			<<LOGVAR(mForceToStandby)
 			<<LOGVAR2("RAUpdateTimer",mPeriodicRAUpdateTimer.getSeconds()) <<LOGHEX(RAUpdateIE)
-			<<LOGVAR2("mobileId",mMobileId.str());
+			<<LOGVAR2("mobileId",mMobileId.str())
+			<<" ";
 		GMMRoutingAreaIdIE mRaId;
 		mRaId.raLoad();
 		mRaId.text(os);
@@ -842,6 +843,18 @@ struct L3GmmMsgAttachComplete : L3GmmUlMsg
 		// The fact that it arrived is the message.
 	}
 	void textBody(std::ostream &/*os*/) const {/*nothing*/}
+};
+
+struct L3GmmMsgAttachReject : L3GmmDlMsg
+{
+	uint8_t mGmmCause;	// GMM cause 10.5.5.14
+	L3GmmMsgAttachReject(unsigned cause) :
+		L3GmmDlMsg(senseReply),
+		mGmmCause(cause)
+		{}
+	int MTI() const {return AttachReject;}
+	void gmmWriteBody(ByteVector &msg);
+	void textBody(std::ostream &os) const;
 };
 
 // 3GPP 24.008 9.4.5.1 Detach Request Network Originated
@@ -1017,8 +1030,8 @@ struct L3SmMsgDeactivatePdpContextRequest : L3SmUlMsg, L3SmDlMsg
 	void smParseBody(L3SmFrame &src,size_t &rp);
 
 	// This message is bidirectional.  This constructor is for making one to send downstream:
-	L3SmMsgDeactivatePdpContextRequest(unsigned ti, SmCause::Cause cause, bool wTearDownIndicator) :
-		L3SmDlMsg(ti,senseCmd), mCause(cause), mTearDownIndicator(wTearDownIndicator) {}
+	L3SmMsgDeactivatePdpContextRequest(unsigned ti, SmCause::Cause cause, bool wTearDownIndicator, MsgSense wSense = senseCmd) :
+		L3SmDlMsg(ti,wSense), mCause(cause), mTearDownIndicator(wTearDownIndicator) {}
 	int MTI() const {return DeactivatePDPContextRequest;}
 	void smWriteBody(ByteVector &msg);
 	void textBody(std::ostream &os) const;

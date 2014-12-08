@@ -875,7 +875,7 @@ void MSInfo::msChangeTlli(uint32_t newTlli)
 		// identified by either msTlli or msOldTlli.
 		devassert(tlliEq(newTlli,msOldTlli));
 		MSInfo *ms2 = gL2MAC.macFindMSByTlli(newTlli,false);
-		if (ms2 != this) {
+		if (ms2 && (ms2 != this)) {
 			// This is kind of a serious problem.
 			// It would only happen if the MS just happens to use a TLLI that is assigned by the SGSN.
 			LOG(ERR) << "Changing TLLI of"<<this<<" from"<<LOGHEX(msTlli)<< " to"<<LOGHEX(newTlli)<<" MS already exists:"<<ms2;

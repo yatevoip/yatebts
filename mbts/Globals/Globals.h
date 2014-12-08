@@ -39,6 +39,7 @@
 #include <SigConnection.h>
 #include <MediaConnection.h>
 #include <ConnectionMap.h>
+#include <GprsConnMap.h>
 
 
 /** Date-and-time string, defined in OpenBTS.cpp. */
@@ -77,6 +78,7 @@ extern Connection::CmdConnection gCmdConn;
 extern Connection::SigConnection gSigConn;
 extern Connection::MediaConnection gMediaConn;
 extern Connection::ConnectionMap gConnMap;
+extern Connection::GprsConnMap gGprsMap;
 
 extern ReportingTable gReports;
 #endif

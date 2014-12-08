@@ -117,7 +117,7 @@ TBF *TBF::newUpTBF(MSInfo *ms,RLCMsgChannelRequestDescriptionIE &mCRD,
 				if (tlli != ms->msTlli && tlli != ms->msOldTlli) {
 					// Should not happen because the internal SGSN provides
 					// the newTlli as an alias with the AttachAccept message.
-					GLOG(ERR) << "uplink TBF request"<<LOGVAR(tlli)<<"does not match MS:"<<ms;
+					GLOG(ERR) << "uplink TBF request"<<LOGVAR(tlli)<<" does not match MS:"<<ms;
 					// But go ahead and do it anyway.
 				}
 				GPRSLOG(1) << "Changing uplink TBF tlli to"<<LOGVAR(tlli)<<ms;

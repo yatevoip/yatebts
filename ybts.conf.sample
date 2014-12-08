@@ -899,6 +899,12 @@ Radio.C0=
 ; Defaults to 600000 (10 minutes)
 ;ussd.session_timeout=600000
 
+; gprs.timeout: integer: Timeout, in milliseconds, for GPRS attach to complete
+; This parameter is applied on reload
+; Interval allowed: 5000..120000
+; Defaults to 20000 (20 seconds)
+;gprs.timeout=20000
+
 ; export_xml_as: string: Specify in which way the XML will be passed along into
 ;  Yate messages
 ; Allowed values are:

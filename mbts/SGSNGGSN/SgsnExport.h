@@ -111,6 +111,8 @@ class MSUEAdapter {
 	//MSUEAdapter() {}
 	//virtual ~MSUEAdapter() {}
 	virtual std::string msid() const = 0;	// A human readable name for the MS or UE.
+	virtual void msChangeTlli(uint32_t newTlli) = 0;	// Make TLLI primary.
+	virtual void msAliasTlli(uint32_t newTlli) = 0;	// Add an alias for the TLLI.
 
 #if RN_UMTS
 	// This is the old interface to GPRS/UMTS; see saWriteHighSide()

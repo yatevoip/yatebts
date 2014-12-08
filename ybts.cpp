@@ -74,6 +74,13 @@ namespace { // anonymous
 #define YBTS_PAGING_TIMEOUT_DEF 10000
 #define YBTS_PAGING_TIMEOUT_MIN 5000
 #define YBTS_PAGING_TIMEOUT_MAX 150000
+// GPRS
+#define YBTS_GPRS_TIMEOUT_DEF 20000
+#define YBTS_GPRS_TIMEOUT_MIN 5000
+#define YBTS_GPRS_TIMEOUT_MAX 120000
+
+// Maximum GPRS authentication attempts
+#define YBTS_GPRS_MAX_AUTHS 2
 
 #define YBTS_SET_REASON_BREAK(s) { reason = s; break; }
 
@@ -131,10 +138,13 @@ static const String s_mapUssdText = "ussd-Text";
 static const String s_error = "error";
 static const String s_reason = "reason";
 static const String s_noAuth = "noauth";
+static const String s_noRoute = "noroute";
+static const String s_incomplete = "incomplete";
 
 class YBTSConnIdHolder;                  // A connection id holder
 class YBTSConnAuth;                      // Interface for connection authenticator
 class YBTSConnAuthMt;                    // MT authenticator
+class YBTSConnChan;                      // Channel associated with a connection
 class YBTSThread;
 class YBTSThreadOwner;
 class YBTSMessage;                       // YBTS <-> BTS PDU
@@ -162,6 +172,7 @@ class YBTSChan;
 class YBTSChanThread;                    // Channel utility thread (authentication)
 class YBTSDriver;
 class YBTSMsgHandler;
+class YBTSGprsAttach;
 
 // ETSI TS 100 940
 // Section 8.5 / Section 10.5.3.6 / Annex G
@@ -344,7 +355,7 @@ protected:
 class YBTSDataSource : public DataSource, public YBTSConnIdHolder
 {
 public:
-    inline YBTSDataSource(const String& format, unsigned int connId, YBTSMedia* media)
+    inline YBTSDataSource(const char* format, unsigned int connId, YBTSMedia* media)
         : DataSource(format), YBTSConnIdHolder(connId), m_media(media)
 	{}
 protected:
@@ -355,7 +366,7 @@ protected:
 class YBTSDataConsumer : public DataConsumer, public YBTSConnIdHolder
 {
 public:
-    inline YBTSDataConsumer(const String& format, unsigned int connId, YBTSMedia* media)
+    inline YBTSDataConsumer(const char* format, unsigned int connId, YBTSMedia* media)
         : DataConsumer(format), YBTSConnIdHolder(connId), m_media(media)
 	{}
     virtual unsigned long Consume(const DataBlock& data, unsigned long tStamp,
@@ -743,6 +754,25 @@ protected:
     int m_authOrigin;                    // Authentication sent at least once (flags)
 };
 
+// A GPRS logical connection
+class YBTSGprsConn : public RefObject, public Mutex, public YBTSConnIdHolder
+{
+    friend class YBTSSignalling;
+    friend class YBTSDriver;
+public:
+    inline YBTSSignalling* owner()
+	{ return m_owner; }
+    bool send(YBTSMessage& msg) const;
+    bool send(BtsPrimitive prim, unsigned char info = 0) const;
+    void sendReject(unsigned char cause, BtsPrimitive prim = SigGprsAttachRej);
+protected:
+    inline YBTSGprsConn(YBTSSignalling* owner, uint16_t connId)
+	: Mutex(false,"YBTSGprsConn"), YBTSConnIdHolder(connId),
+          m_owner(owner)
+    { }
+    YBTSSignalling* m_owner;
+};
+
 class YBTSLog : public GenObject, public DebugEnabler, public Mutex,
     public YBTSThreadOwner
 {
@@ -950,7 +980,17 @@ public:
 	}
     // Find a connection containing a given SS transaction
     bool findConnSSTid(RefPointer<YBTSConn>& conn, const String& ssId);
-
+    // Find (and eventually create) a GPRS connection
+    inline bool findConn(RefPointer<YBTSGprsConn>& conn, uint16_t connId, bool create) {
+	    Lock lck(m_connsMutex);
+	    return findConnInternal(conn,connId,create);
+	}
+    // Drop a GPRS connection
+    void dropGprsConn(uint16_t connId, bool notifyPeer);
+    inline void dropGprsConn(YBTSGprsConn* conn, bool notifyPeer) {
+	    if (conn)
+		dropConn(conn->connId(),notifyPeer);
+	}
 protected:
     inline bool findConnDrop(YBTSMessage& msg, RefPointer<YBTSConn>& conn,
 	uint16_t connId) {
@@ -983,6 +1023,7 @@ protected:
     bool findConnInternal(RefPointer<YBTSConn>& conn, uint16_t connId, bool create,
 	bool removed = false);
     bool findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* ue);
+    bool findConnInternal(RefPointer<YBTSGprsConn>& conn, uint16_t connId, bool create);
     void changeState(int newStat);
     int handlePDU(YBTSMessage& msg);
     void handleRRM(YBTSMessage& msg);
@@ -1017,6 +1058,7 @@ protected:
     YBTSLAI m_lai;
     Mutex m_connsMutex;
     ObjList m_conns;
+    ObjList m_gprsConns;
     uint64_t m_timeout;
     uint64_t m_hbTime;
     unsigned int m_hkIntervalMs;         // Time (in miliseconds) to wait for handshake
@@ -1037,8 +1079,8 @@ public:
     YBTSMedia();
     inline YBTSTransport& transport()
 	{ return m_transport; }
-    void setSource(YBTSChan* chan);
-    void setConsumer(YBTSChan* chan);
+    void setSource(YBTSConnChan* chan, const char* format, const String& type = CallEndpoint::audioType());
+    void setConsumer(YBTSConnChan* chan, const char* format, const String& type = CallEndpoint::audioType());
     void addSource(YBTSDataSource* src);
     void removeSource(YBTSDataSource* src);
     void cleanup(bool final);
@@ -1436,10 +1478,20 @@ public:
     String m_calledType;
 };
 
-class YBTSChan : public Channel, public YBTSConnIdHolder
+class YBTSConnChan : public Channel, public YBTSConnIdHolder
+{
+    YCLASS(YBTSConnChan,Channel)
+public:
+    virtual void stop() = 0;
+protected:
+    YBTSConnChan(YBTSConnIdHolder* conn, bool outgoing = false);
+};
+
+class YBTSChan : public YBTSConnChan
 {
     friend class YBTSChanThread;
     friend class YBTSDriver;
+    YCLASS(YBTSChan,YBTSConnChan)
 public:
     // Incoming
     YBTSChan(YBTSConn* conn);
@@ -1478,7 +1530,7 @@ public:
     // Start a MT call after UE connected
     void startMT(YBTSConn* conn = 0, bool pagingRsp = false);
     // BTS stopping notification
-    inline void stop()
+    virtual void stop()
 	{ hangup("interworking"); }
     Message* message(const char* name, bool minimal = false, bool data = false);
     // Serialize into a String
@@ -1593,6 +1645,43 @@ protected:
     Message* m_route;
 };
 
+class YBTSGprsChan : public YBTSConnChan
+{
+    friend class YBTSDriver;
+    YCLASS(YBTSGprsChan,YBTSConnChan)
+public:
+    virtual ~YBTSGprsChan();
+    virtual void destroyed();
+    virtual bool callRouted(Message& msg);
+    virtual void callAccept(Message& msg);
+    virtual void callRejected(const char* error, const char* reason, const Message* msg);
+    virtual bool msgDrop(Message& msg, const char* reason);
+    virtual bool msgControl(Message& msg);
+    virtual void stop()
+	{ handleDisconnect(); }
+    void handleDisconnect();
+    void handleGprsAttach(YBTSMessage& m);
+    void handleGprsAttachOk(YBTSMessage& m);
+    void handleGprsDetach(YBTSMessage& m);
+    void handleGprsPdp(YBTSMessage& m);
+    void sendReject(unsigned char cause, BtsPrimitive prim = SigGprsAttachRej);
+protected:
+    static const TokenDict s_pdpOps[];
+    static const TokenDict s_pdpFilter[];
+    YBTSGprsChan(YBTSGprsConn* conn);
+    virtual void disconnected(bool final, const char* reason);
+    virtual void statusParams(String& str);
+    void pickParams(const NamedList& msg);
+    RefPointer<YBTSGprsConn> m_conn;
+    String m_imsi;
+    String m_msisdn;
+    String m_newPtmsi;
+    unsigned char m_cause;
+    unsigned char m_auth;
+    bool m_started;
+    bool m_pwrOff;
+};
+
 class YBTSHoCommand : public String
 {
 public:
@@ -1609,6 +1698,7 @@ static YBTSLAI s_lai;
 
 class YBTSDriver : public Driver
 {
+    friend class YBTSGprsAttach;
 public:
     enum Relay {
 	Stop = Private,
@@ -1691,6 +1781,8 @@ public:
     bool handshakeDone();
     // Conn release notification
     void connReleased(uint16_t connId, YBTSConn* conn = 0);
+    // GPRS release notification
+    void gprsReleased(uint16_t connId);
     // Handle USSD update/finalize messages
     bool handleUssd(Message& msg, bool update);
     // Handle USSD execute messages
@@ -1707,6 +1799,14 @@ public:
     void handleHoFailure(YBTSMessage& m, YBTSConn* conn);
     // Handle Handover Complete
     void handleHoComplete(YBTSMessage& m, YBTSConn* conn);
+    // Handle GPRS Attach
+    void handleGprsAttach(YBTSMessage& m, YBTSGprsConn* conn);
+    // Handle GPRS Attach Complete
+    void handleGprsAttachOk(YBTSMessage& m, YBTSGprsConn* conn);
+    // Handle GPRS Detach
+    void handleGprsDetach(YBTSMessage& m, YBTSGprsConn* conn);
+    // Handle GPRS PDP Contexts
+    void handleGprsPdp(YBTSMessage& m, YBTSGprsConn* conn);
     void restart(unsigned int restartMs = 1, unsigned int stopIntervalMs = 0);
     void stopNoRestart();
     inline bool haveChan(const String& chanId) {
@@ -1819,6 +1919,7 @@ protected:
     bool handleEngineStop(Message& msg);
     YBTSChan* findChanConnId(uint16_t connId);
     YBTSChan* findChanUE(const YBTSUE* ue);
+    YBTSGprsChan* findGprsConnId(uint16_t connId);
     void changeState(int newStat);
     void setRestart(int resFlag, bool on = true, unsigned int interval = 0);
     void checkStop(const Time& time);
@@ -1907,6 +2008,17 @@ protected:
     int m_type;
 };
 
+class YBTSGprsAttach : public Message
+{
+public:
+    inline explicit YBTSGprsAttach(const char* name, YBTSGprsConn* conn)
+	: Message(name), m_conn(conn)
+	{ }
+protected:
+    void dispatched(bool accepted);
+    RefPointer<YBTSGprsConn> m_conn;
+};
+
 INIT_PLUGIN(YBTSDriver);
 static Mutex s_globalMutex(false,"YBTSGlobal");
 static Mutex s_callStartMutex(false,"YBTSCallStart"); // Serialize channel creation to avoid duplicates for the same UE
@@ -1922,6 +2034,7 @@ static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_pagingTout = YBTS_PAGING_TIMEOUT_DEF;// Paging timeout to be used on MT services
 static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
 static unsigned int s_ussdTimeout = YBTS_USSD_TIMEOUT_DEF;    // USSD session timeout interval
+static unsigned int s_gprsTimeout = YBTS_GPRS_TIMEOUT_DEF;    // GPRS attach timeout interval
 static unsigned int s_bufLenLog = 16384; // Read buffer length for log interface
 static unsigned int s_bufLenSign = 1024; // Read buffer length for signalling interface
 static unsigned int s_bufLenMedia = 1024;// Read buffer length for media interface
@@ -1951,6 +2064,9 @@ static const String s_all = "all";
 static const String s_statusUeImsi = "imsi";
 static const String s_statusUeTmsi = "tmsi";
 static const String s_statusUeImei = "imei";
+
+static const String s_pdpFormat = "pdp";
+static const String s_pdpMedia = "data";
 
 ObjList YBTSGlobalThread::s_threads;
 Mutex YBTSGlobalThread::s_threadsMutex(false,"YBTSGlobal");
@@ -1987,6 +2103,16 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(PhysicalInfo),
     MAKE_SIG(HandoverRequired),
     MAKE_SIG(HandoverAck),
+    MAKE_SIG(GprsAttachReq),
+    MAKE_SIG(GprsAttachLBO),
+    MAKE_SIG(GprsAttachOk),
+    MAKE_SIG(GprsAttachRej),
+    MAKE_SIG(GprsIdentityReq),
+    MAKE_SIG(GprsAuthRequest),
+    MAKE_SIG(GprsDetach),
+    MAKE_SIG(PdpActivate),
+    MAKE_SIG(PdpModify),
+    MAKE_SIG(PdpDeactivate),
     MAKE_SIG(Handshake),
     MAKE_SIG(RadioReady),
     MAKE_SIG(StartPaging),
@@ -2020,6 +2146,31 @@ const TokenDict YBTSCallDesc::s_stateName[] =
     YBTS_MAKENAME(Disconnect),
     YBTS_MAKENAME(Release),
     YBTS_MAKENAME(Connect),
+    {0,0}
+};
+
+const TokenDict YBTSGprsChan::s_pdpOps[] =
+{
+    { "pdp-activate",   SigPdpActivate },
+    { "pdp-modify",     SigPdpModify },
+    { "pdp-deactivate", SigPdpDeactivate },
+    {0,0}
+};
+
+const TokenDict YBTSGprsChan::s_pdpFilter[] =
+{
+    { "module",     1 },
+    { "id",         1 },
+    { "peerid",     1 },
+    { "lastpeerid", 1 },
+    { "targetid",   1 },
+    { "billid",     1 },
+    { "status",     1 },
+    { "address",    1 },
+    { "answered",   1 },
+    { "direction",  1 },
+    { "operation",  1 },
+    { "handlers",   1 },
     {0,0}
 };
 
@@ -2935,6 +3086,22 @@ static inline void decodeMsg(GSML3Codec& codec, uint8_t* data, unsigned int len,
 	reason << "Codec error " << e << " (" << lookup(e,GSML3Codec::s_errorsDict,"unknown") << ")";
 }
 
+// Utility used in YBTSMessage::parse() to decode generic tag=value strings
+static XmlElement* decodeTagged(const char* name, const String& str)
+{
+    XmlElement* xml = new XmlElement(name);
+    ObjList* l = str.split(' ',false);
+    String* s;
+    while ((s = static_cast<String*>(l->remove(false)))) {
+	int sep = s->find('=');
+	if (sep > 0)
+	    xml->addChildSafe(new XmlElement(s->substr(0,sep),s->substr(sep + 1)));
+	TelEngine::destruct(s);
+    }
+    TelEngine::destruct(l);
+    return xml;
+}
+
 // Parse message. Return 0 on failure
 YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned int len)
 {
@@ -2987,6 +3154,14 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 		m->m_xml = new XmlElement("HandoverAck",tmp);
 	    }
 	    break;
+	case SigGprsAttachReq:
+	    m->m_xml = decodeTagged("GprsAttach",String((const char*)data,len));
+	    break;
+	case SigPdpActivate:
+	case SigPdpModify:
+	case SigPdpDeactivate:
+	    m->m_xml = decodeTagged("PdpContext",String((const char*)data,len));
+	    break;
 	case SigEstablishSAPI:
 	case SigHandshake:
 	case SigRadioReady:
@@ -2995,6 +3170,8 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	case SigMediaError:
 	case SigMediaStarted:
 	case SigHandoverReject:
+	case SigGprsAttachOk:
+	case SigGprsDetach:
 	    break;
 	default:
 	    reason = "No decoder";
@@ -3032,6 +3209,17 @@ static inline bool encodeMsg(GSML3Codec& codec, const YBTSMessage& msg, DataBloc
     return false;
 }
 
+// Utility used in YBTSMessage::build() to encode generic tag=value strings
+static void encodeTagged(String& str, const XmlElement* xml)
+{
+    if (!xml)
+	return;
+    for (XmlElement* el = xml->findFirstChild(); el; el = xml->findNextChild(el)) {
+	if (el->getText())
+	    str.append(el->getTag() + "=" + el->getText()," ");
+    }
+}
+
 // Build a message
 bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg)
 {
@@ -3067,6 +3255,21 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    }
 	    buf.append(msg.xml()->getText());
 	    return true;
+	case SigGprsAuthRequest:
+	case SigGprsAttachOk:
+	case SigPdpActivate:
+	case SigPdpModify:
+	case SigPdpDeactivate:
+	    if (!msg.xml()) {
+		reason = "Missing XML";
+		break;
+	    }
+	    else {
+		String tmp;
+		encodeTagged(tmp,msg.xml());
+		buf.append(tmp);
+	    }
+	    return true;
 	case SigHeartbeat:
 	case SigHandshake:
 	case SigHandoverRequest:
@@ -3075,6 +3278,10 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	case SigStopMedia:
 	case SigAllocMedia:
 	case SigEstablishSAPI:
+	case SigGprsIdentityReq:
+	case SigGprsAttachLBO:
+	case SigGprsAttachRej:
+	case SigGprsDetach:
 	    return true;
 	default:
 	    reason = "No encoder";
@@ -3102,8 +3309,11 @@ void YBTSDataSource::destroyed()
 unsigned long YBTSDataConsumer::Consume(const DataBlock& data, unsigned long tStamp,
     unsigned long flags)
 {
-    if (m_media)
+    if (m_media) {
+	XDebug(m_media,DebugAll,"Sending %u octets of '%s' data over connection %u",
+	    data.length(),getFormat().c_str(),connId());
 	m_media->consume(data,connId());
+    }
     return invalidStamp();
 }
 
@@ -3477,6 +3687,30 @@ bool YBTSConn::setUE(YBTSUE* ue)
 	connId(),(YBTSUE*)m_ue,m_ue->tmsi().c_str(),m_ue->imsi().c_str(),
 	ue,ue->tmsi().c_str(),ue->imsi().c_str(),this);
     return false;
+}
+
+
+//
+// YBTSGprsConn
+//
+bool YBTSGprsConn::send(YBTSMessage& msg) const
+{
+    return m_owner && m_owner->send(msg);
+}
+
+bool YBTSGprsConn::send(BtsPrimitive prim, unsigned char info) const
+{
+    YBTSMessage m(prim,info,connId());
+    return send(m);
+}
+
+void YBTSGprsConn::sendReject(unsigned char cause, BtsPrimitive prim)
+{
+    YBTSMessage m(prim,cause,connId());
+    if (m_owner) {
+	m_owner->send(m);
+	m_owner->dropGprsConn(connId(),false);
+    }
 }
 
 
@@ -4302,6 +4536,49 @@ bool YBTSSignalling::findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* 
     return false;
 }
 
+bool YBTSSignalling::findConnInternal(RefPointer<YBTSGprsConn>& conn, uint16_t connId, bool create)
+{
+    conn = 0;
+    for (ObjList* o = m_gprsConns.skipNull(); o; o = o->skipNext()) {
+	YBTSGprsConn* c = static_cast<YBTSGprsConn*>(o->get());
+	if (c->connId() == connId) {
+	    conn = c;
+	    return true;
+	}
+    }
+    if (!create)
+	return 0;
+    conn = new YBTSGprsConn(this,connId);
+    m_gprsConns.append(conn);
+    Debug(this,DebugAll,"Added GPRS connection (%p,%u) [%p]",
+	(YBTSGprsConn*)conn,conn->connId(),this);
+    return true;
+}
+
+// Drop a GPRS connection
+void YBTSSignalling::dropGprsConn(uint16_t connId, bool notifyPeer)
+{
+    RefPointer<YBTSGprsConn> conn;
+    m_connsMutex.lock();
+    for (ObjList* o = m_gprsConns.skipNull(); o; o = o->skipNext()) {
+	YBTSGprsConn* c = static_cast<YBTSGprsConn*>(o->get());
+	if (c->connId() != connId)
+	    continue;
+	conn = c;
+	m_gprsConns.remove(c);
+	break;
+    }
+    m_connsMutex.unlock();
+    if (!conn)
+	return;
+    if (notifyPeer) {
+	YBTSMessage m(SigConnRelease,0,connId);
+	send(m);
+    }
+    __plugin.gprsReleased(connId);
+    conn = 0;
+}
+
 void YBTSSignalling::changeState(int newStat)
 {
     if (m_state == newStat)
@@ -4439,6 +4716,38 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	case SigHandoverReject:
 	    __plugin.handoverCmd(msg.info());
 	    return Ok;
+	case SigGprsAttachReq:
+	    if (msg.hasConnId()) {
+		RefPointer<YBTSGprsConn> conn;
+		if (findConn(conn,msg.connId(),true))
+		    __plugin.handleGprsAttach(msg,conn);
+	    }
+	    return Ok;
+	case SigGprsAttachOk:
+	    if (msg.hasConnId()) {
+		RefPointer<YBTSGprsConn> conn;
+		if (findConn(conn,msg.connId(),false))
+		    __plugin.handleGprsAttachOk(msg,conn);
+	    }
+	    return Ok;
+	case SigGprsDetach:
+	    if (msg.hasConnId()) {
+		RefPointer<YBTSGprsConn> conn;
+		if (findConn(conn,msg.connId(),false)) {
+		    dropGprsConn(msg.connId(),false);
+		    __plugin.handleGprsDetach(msg,conn);
+		}
+	    }
+	    return Ok;
+	case SigPdpActivate:
+	case SigPdpModify:
+	case SigPdpDeactivate:
+	    if (msg.hasConnId()) {
+		RefPointer<YBTSGprsConn> conn;
+		if (findConn(conn,msg.connId(),false))
+		    __plugin.handleGprsPdp(msg,conn);
+	    }
+	    return Ok;
 	case SigHandshake:
 	    return handleHandshake(msg);
 	case SigRadioReady:
@@ -4446,6 +4755,7 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    return Ok;
 	case SigConnLost:
 	    dropConn(msg.connId(),false);
+	    dropGprsConn(msg.connId(),false);
 	    return Ok;
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
@@ -4569,26 +4879,22 @@ YBTSMedia::YBTSMedia()
     m_transport.setDebugPtr(this,this);
 }
 
-void YBTSMedia::setSource(YBTSChan* chan)
+void YBTSMedia::setSource(YBTSConnChan* chan, const char* format, const String& type)
 {
     if (!chan)
 	return;
-    String format;
-    getGlobalStr(format,s_format);
     YBTSDataSource* src = new YBTSDataSource(format,chan->connId(),this);
     addSource(src);
-    chan->setSource(src);
+    chan->setSource(src,type);
     TelEngine::destruct(src);
 }
 
-void YBTSMedia::setConsumer(YBTSChan* chan)
+void YBTSMedia::setConsumer(YBTSConnChan* chan, const char* format, const String& type)
 {
     if (!chan)
 	return;
-    String format;
-    getGlobalStr(format,s_format);
     YBTSDataConsumer* cons = new YBTSDataConsumer(format,chan->connId(),this);
-    chan->setConsumer(cons);
+    chan->setConsumer(cons,type);
     TelEngine::destruct(cons);
 }
 
@@ -4676,6 +4982,8 @@ void YBTSMedia::processLoop()
 	    if (!src)
 		continue;
 	    DataBlock tmp(d + 1,rd - 2,false);
+	    XDebug(this,DebugAll,"Received %u octets of '%s' data from connection %u",
+		tmp.length(),src->getFormat().c_str(),src->connId());
 	    src->Forward(tmp);
 	    tmp.clear(false);
 	    TelEngine::destruct(src);
@@ -6120,13 +6428,22 @@ void YBTSCallDesc::serialize(String& str)
     str << (m_regular ? "|r:" : "|e:")  << c_str() << ":" << m_state << ":" << m_called;
 }
 
+
+//
+// YBTSConnChan
+//
+YBTSConnChan::YBTSConnChan(YBTSConnIdHolder* conn, bool outgoing)
+    : Channel(__plugin,0,outgoing), YBTSConnIdHolder(conn ? conn->connId() : 0xffff)
+{
+}
+
+
 //
 // YBTSChan
 //
 // Incoming
 YBTSChan::YBTSChan(YBTSConn* conn)
-    : Channel(__plugin),
-    YBTSConnIdHolder(conn->connId()),
+    : YBTSConnChan(conn),
     m_mutex(true,"YBTSChan"),
     m_conn(conn),
     m_waitForTraffic(false),
@@ -6156,8 +6473,7 @@ YBTSChan::YBTSChan(YBTSConn* conn)
 
 // Outgoing
 YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
-    : Channel(__plugin,0,true),
-    YBTSConnIdHolder(conn ? conn->connId() : 0),
+    : YBTSConnChan(conn,true),
     m_mutex(true,"YBTSChan"),
     m_conn(conn),
     m_ue(ue),
@@ -6188,8 +6504,7 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn)
 
 // Handover
 YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn, bool outgoing, String& state)
-    : Channel(__plugin,0,outgoing),
-    YBTSConnIdHolder(conn->connId()),
+    : YBTSConnChan(conn,outgoing),
     m_mutex(true,"YBTSChan"),
     m_conn(conn),
     m_ue(ue),
@@ -6782,10 +7097,12 @@ void YBTSChan::setMedia()
 {
     if (!__plugin.media())
 	return;
+    String format;
+    getGlobalStr(format,s_format);
     if (!getSource())
-	__plugin.media()->setSource(this);
+	__plugin.media()->setSource(this,format);
     if (!getConsumer())
-	__plugin.media()->setConsumer(this);
+	__plugin.media()->setConsumer(this,format);
 }
 
 // Handle Handover Required
@@ -7134,6 +7451,302 @@ void YBTSChanThread::notify(const char* error)
 
 
 //
+// YBTSGprsChan
+//
+YBTSGprsChan::YBTSGprsChan(YBTSGprsConn* conn)
+    : YBTSConnChan(conn),
+      m_conn(conn), m_cause(0), m_auth(0),
+      m_started(false), m_pwrOff(false)
+{
+    int sep = id().find('/');
+    if (sep >= 0)
+	setId(id().substr(0,sep + 1) + "ps/" + id().substr(sep + 1));
+    Debug(this,DebugAll,"Created ConnID=%u [%p]",connId(),this);
+    m_address << driver()->name() << "/" << connId();
+}
+
+YBTSGprsChan::~YBTSGprsChan()
+{
+    Debug(this,DebugAll,"Destroyed ConnID=%u [%p]",connId(),this);
+}
+
+void YBTSGprsChan::destroyed()
+{
+    if (m_conn) {
+	BtsPrimitive prim = SigConnRelease;
+	if (m_cause)
+	    prim = isAnswered() ? SigGprsDetach : SigGprsAttachRej;
+	sendReject(m_cause,prim);
+    }
+    const char* cause = 0;
+    if (m_cause)
+	cause = lookup(m_cause,GSML3Codec::s_mmRejectCause,"unknown");
+    if (m_started) {
+	m_started = false;
+	Message* s = message("chan.hangup");
+	s->addParam("cause",cause,false);
+	s->addParam("poweroff",String::boolText(m_pwrOff));
+	s->addParam("cdrtrack",String::boolText(false));
+	Engine::enqueue(s);
+    }
+    if (cause)
+	Debug(this,DebugNote,"Disconnect cause: %s",cause);
+    YBTSConnChan::destroyed();
+}
+
+void YBTSGprsChan::disconnected(bool final, const char* reason)
+{
+    m_cause = lookup(reason,GSML3Codec::s_mmRejectCause);
+    YBTSConnChan::disconnected(final,reason);
+}
+
+void YBTSGprsChan::sendReject(unsigned char cause, BtsPrimitive prim)
+{
+    RefPointer<YBTSGprsConn> conn = m_conn;
+    m_conn = 0;
+    m_address.clear();
+    if (conn)
+	conn->sendReject(cause,prim);
+}
+
+void YBTSGprsChan::statusParams(String& str)
+{
+    YBTSConnChan::statusParams(str);
+    if (m_imsi)
+	str << ",imsi=" << m_imsi;
+    str << ",ref=" << refcount(); // TODO: fix & remove
+}
+
+void YBTSGprsChan::pickParams(const NamedList& msg)
+{
+    if (!m_imsi)
+	m_imsi = msg.getValue(YSTRING("imsi"));
+    if (!m_msisdn)
+	m_msisdn = msg.getValue(YSTRING("msisdn"));
+    if (!m_newPtmsi)
+	m_newPtmsi = msg.getValue(YSTRING("new_ptmsi"));
+}
+
+bool YBTSGprsChan::callRouted(Message& msg)
+{
+    if (getPeer()) {
+	callAccept(msg);
+	ref();
+	return false;
+    }
+    pickParams(msg);
+    return YBTSConnChan::callRouted(msg);
+}
+
+void YBTSGprsChan::callAccept(Message& msg)
+{
+    pickParams(msg);
+    XmlElement* xml = new XmlElement("GprsAttachAccept");
+    if (m_newPtmsi)
+	xml->addChildSafe(new XmlElement("ptmsi",m_newPtmsi));
+    if (m_msisdn)
+	xml->addChildSafe(new XmlElement("msisdn",m_msisdn));
+    YBTSMessage m(SigGprsAttachOk,0,connId(),xml);
+    if (m_conn && m_conn->send(m)) {
+	YBTSConnChan::callAccept(msg);
+	setMaxcall(msg,s_gprsTimeout);
+    }
+    else
+	disconnect("failure",parameters());
+}
+
+void YBTSGprsChan::callRejected(const char* error, const char* reason, const Message* msg)
+{
+    YBTSConnChan::callRejected(error,reason,msg);
+    if (msg) {
+	pickParams(*msg);
+	setMaxcall(msg);
+    }
+    if (!maxcall())
+	maxcall(Time::now() + 1000 * (uint64_t)s_gprsTimeout);
+    if (m_conn && m_imsi.null() && (s_incomplete == error)) {
+	if (m_conn->send(SigGprsIdentityReq)) {
+	    status("identifying");
+	    ref();
+	    return;
+	}
+    }
+    if (m_conn && msg && (s_noAuth == error)) {
+	const char* rand = msg->getValue(YSTRING("auth.rand"));
+	if (rand) {
+	    const char* sres = msg->getValue(YSTRING("auth.sres"));
+	    const char* kc = msg->getValue(YSTRING("auth.kc"));
+	    const char* autn = msg->getValue(YSTRING("auth.autn"));
+	    const char* ik = msg->getValue(YSTRING("auth.ik"));
+	    const char* ck = msg->getValue(YSTRING("auth.ck"));
+	    XmlElement* xml = new XmlElement("AuthenticationRequest");
+	    xml->addChildSafe(new XmlElement("rand",rand));
+	    if (sres)
+		xml->addChildSafe(new XmlElement("sres",sres));
+	    if (kc)
+		xml->addChildSafe(new XmlElement("kc",kc));
+	    if (autn)
+		xml->addChildSafe(new XmlElement("autn",autn));
+	    if (ik)
+		xml->addChildSafe(new XmlElement("ik",ik));
+	    if (ck)
+		xml->addChildSafe(new XmlElement("ck",ck));
+	    if (m_imsi)
+		xml->addChildSafe(new XmlElement("imsi",m_imsi));
+	    YBTSMessage m(SigGprsAuthRequest,0,connId(),xml);
+	    if (m_conn->send(m)) {
+		m_auth++;
+		status("authenticating");
+		ref();
+		return;
+	    }
+	}
+	else
+	    Debug(this,DebugWarn,"Missing auth.rand parameter, cannot authenticate");
+    }
+    if (m_conn && (s_noRoute == error)) {
+	Debug(this,DebugInfo,"Connection continuing locally in mbts");
+	m_cause = 0;
+	sendReject(0,SigGprsAttachLBO);
+	return;
+    }
+    m_cause = lookup(error,GSML3Codec::s_mmRejectCause,0x6f); // Protocol error, unspecified
+}
+
+bool YBTSGprsChan::msgDrop(Message& msg, const char* reason)
+{
+    bool idle = !getPeer();
+    if (!YBTSConnChan::msgDrop(msg,reason))
+	return false;
+    m_cause = lookup(reason,GSML3Codec::s_mmRejectCause,m_cause);
+    if (idle)
+	deref();
+    return true;
+}
+
+bool YBTSGprsChan::msgControl(Message& msg)
+{
+    bool ok = YBTSConnChan::msgControl(msg);
+    if (isAnswered() && m_conn) {
+	int prim = msg.getIntValue(YSTRING("operation"),s_pdpOps,-1);
+	if (prim >= SigPdpActivate && prim <= SigPdpDeactivate) {
+	    XmlElement* xml = new XmlElement("PdpContext");
+	    if (m_imsi)
+		xml->addChildSafe(new XmlElement("imsi",m_imsi));
+	    for (ObjList* l = msg.paramList()->skipNull(); l; l = l->skipNext()) {
+		const NamedString* ns = static_cast<const NamedString*>(l->get());
+		// Copy non-matching message parameters to XML elements
+		if (ns->name().toInteger(s_pdpFilter,-1) < 0)
+		    xml->addChildSafe(new XmlElement(ns->name(),*ns));
+	    }
+	    YBTSMessage m(prim,(msg.getBoolValue(YSTRING("reply")) ? 1 : 0),connId(),xml);
+	    ok = m_conn->send(m) || ok;
+	}
+    }
+    return ok;
+}
+
+void YBTSGprsChan::handleDisconnect()
+{
+    bool idle = m_conn && !getPeer();
+    m_conn = 0;
+    disconnect();
+    m_address.clear();
+    if (idle)
+	deref();
+}
+
+void YBTSGprsChan::handleGprsAttach(YBTSMessage& m)
+{
+    const XmlElement* xml = m.xml();
+    if (!xml)
+	return;
+    XmlElement* auth = xml->findFirstChild(YSTRING("authenticated"));
+    bool unauth = !auth || !auth->getText().toBoolean();
+    if (unauth && (m_auth > YBTS_GPRS_MAX_AUTHS)) {
+	Debug(this,DebugWarn,"Excessive unauthenticated attach requests received");
+	if (getPeer()) {
+	    m_cause = 0x6f; // Message incompatible with protocol state
+	    sendReject(m_cause);
+	    disconnect();
+	}
+	return;
+    }
+
+    XmlElement* tlli = xml->findFirstChild(YSTRING("tlli"));
+    XmlElement* imsi = xml->findFirstChild(YSTRING("imsi"));
+    XmlElement* ptmsi = xml->findFirstChild(YSTRING("ptmsi"));
+    Message* msg = message("call.route");
+    if (tlli)
+	msg->addParam("caller","tlli/" + tlli->getText());
+    msg->addParam("called","sgsn");
+    msg->addParam("route_type","gprs");
+    msg->addParam("cdrtrack",String::boolText(false));
+    msg->addParam("initial",String::boolText(!m_started));
+    if (imsi && m_imsi.null())
+	m_imsi = imsi->getText();
+    if (m_imsi)
+	msg->addParam(imsi->getTag(),imsi->getText());
+    if (ptmsi)
+	msg->addParam(ptmsi->getTag(),ptmsi->getText());
+    if (auth)
+	msg->addParam(auth->getTag(),auth->getText());
+    if (!m_started) {
+	m_started = true;
+	Message* s = message("chan.startup");
+	s->copyParams(*msg,YSTRING("caller,called,cdrtrack"));
+	Engine::enqueue(s);
+    }
+    startRouter(msg);
+}
+
+void YBTSGprsChan::handleGprsAttachOk(YBTSMessage& m)
+{
+    timeout(0);
+    m_auth = 0;
+    Message* msg = message("chan.control");
+    msg->addParam("operation","attached");
+    if (m_imsi)
+	msg->addParam("imsi",m_imsi);
+    Engine::enqueue(msg);
+}
+
+void YBTSGprsChan::handleGprsDetach(YBTSMessage& m)
+{
+    bool idle = !getPeer();
+    m_conn = 0;
+    if (m.info() & 0x08)
+	m_pwrOff = true;
+    disconnect(m_pwrOff ? "poweroff" : "detached");
+    m_address.clear();
+    if (idle)
+	deref();
+}
+
+void YBTSGprsChan::handleGprsPdp(YBTSMessage& m)
+{
+    if (m.primitive() != SigPdpDeactivate) {
+	if (!getSource(s_pdpMedia))
+	    __plugin.media()->setSource(this,s_pdpFormat,s_pdpMedia);
+	if (!getConsumer(s_pdpMedia))
+	    __plugin.media()->setConsumer(this,s_pdpFormat,s_pdpMedia);
+    }
+    bool reply = !!m.info();
+    Message* msg = message("chan.control");
+    msg->addParam("operation",lookup(m.primitive(),s_pdpOps),false);
+    msg->addParam("reply",String::boolText(reply));
+    if (m_imsi && !reply)
+	msg->addParam("imsi",m_imsi);
+    if (m.xml()) {
+	// Copy XML elements to message parameters
+	for (XmlElement* el = m.xml()->findFirstChild(); el; el = m.xml()->findNextChild(el))
+	    msg->setParam(el->getTag(),el->getText());
+    }
+    Engine::enqueue(msg);
+}
+
+
+//
 // YBTSDriver
 //
 YBTSDriver::YBTSDriver()
@@ -7175,6 +7788,7 @@ YBTSDriver::YBTSDriver()
     m_statusOverCmd = "status overview " + name();
     m_statusUeCmd = m_statusCmd + " ue";
     m_statusConnCmd = m_statusCmd + " conn";
+    FormatRepository::addFormat(s_pdpFormat,0,0,s_pdpMedia,0);
 }
 
 YBTSDriver::~YBTSDriver()
@@ -7510,7 +8124,7 @@ void YBTSDriver::removeTerminatedCall(uint16_t connId)
 void YBTSDriver::handleHoFailure(YBTSMessage& m, YBTSConn* conn)
 {
     RefPointer<YBTSChan> chan;
-    if (__plugin.findChan(conn->connId(),chan))
+    if (findChan(conn->connId(),chan))
 	chan->handleHoFailure(*m.xml());
 }
 
@@ -7518,8 +8132,54 @@ void YBTSDriver::handleHoFailure(YBTSMessage& m, YBTSConn* conn)
 void YBTSDriver::handleHoComplete(YBTSMessage& m, YBTSConn* conn)
 {
     RefPointer<YBTSChan> chan;
-    if (!__plugin.findChan(conn->connId(),chan))
+    if (!findChan(conn->connId(),chan))
 	conn->loadGsmState(chan,false);
+}
+
+// Handle GPRS Attach
+void YBTSDriver::handleGprsAttach(YBTSMessage& m, YBTSGprsConn* conn)
+{
+    RefPointer<YBTSGprsChan> chan = findGprsConnId(conn->connId());
+    if (!chan && canAccept()) {
+	chan = new YBTSGprsChan(conn);
+	chan->initChan();
+    }
+    if (chan) {
+	chan->handleGprsAttach(m);
+	return;
+    }
+    Debug(this,DebugNote,"Refusing new GPRS connection, full or exiting");
+    conn->sendReject(0x16); // Congestion
+    signalling()->dropGprsConn(conn,false);
+}
+
+// Handle GPRS Attach Complete
+void YBTSDriver::handleGprsAttachOk(YBTSMessage& m, YBTSGprsConn* conn)
+{
+    RefPointer<YBTSGprsChan> chan = findGprsConnId(conn->connId());
+    if (chan)
+	chan->handleGprsAttachOk(m);
+    else {
+	Debug(this,DebugMild,"GPRS Attach Complete but no channel for conn=%u",conn->connId());
+	signalling()->dropGprsConn(conn,true);
+    }
+}
+
+// Handle GPRS Detach
+void YBTSDriver::handleGprsDetach(YBTSMessage& m, YBTSGprsConn* conn)
+{
+    RefPointer<YBTSGprsChan> chan = findGprsConnId(conn->connId());
+    if (chan)
+	chan->handleGprsDetach(m);
+}
+
+// Handle GPRS PDP Contexts
+void YBTSDriver::handleGprsPdp(YBTSMessage& m, YBTSGprsConn* conn)
+{
+    // TODO
+    RefPointer<YBTSGprsChan> chan = findGprsConnId(conn->connId());
+    if (chan)
+	chan->handleGprsPdp(m);
 }
 
 // Handshake done notification. Return false if state is invalid
@@ -7599,6 +8259,13 @@ void YBTSDriver::connReleased(uint16_t connId, YBTSConn* conn)
 	    enqueueSS(ss->ssMessage(false),0,false,"failure");
 	}
     }
+}
+
+void YBTSDriver::gprsReleased(uint16_t connId)
+{
+    RefPointer<YBTSGprsChan> chan = findGprsConnId(connId);
+    if (chan)
+	chan->handleDisconnect();
 }
 
 // Handle USSD update/finalize messages
@@ -8623,7 +9290,7 @@ void YBTSDriver::stop()
 	GenObject* gen = iter.get();
 	if (!gen)
 	    break;
-	RefPointer<YBTSChan> chan = static_cast<YBTSChan*>(gen);
+	RefPointer<YBTSConnChan> chan = YOBJECT(YBTSConnChan,gen);
 	if (!chan)
 	    continue;
 	unlock();
@@ -9040,9 +9707,19 @@ bool YBTSDriver::handleEngineStop(Message& msg)
 YBTSChan* YBTSDriver::findChanConnId(uint16_t connId)
 {
     for (ObjList* o = channels().skipNull(); o ; o = o->skipNext()) {
-	YBTSChan* ch = static_cast<YBTSChan*>(o->get());
+	YBTSConnChan* ch = static_cast<YBTSConnChan*>(o->get());
 	if (ch->connId() == connId)
-	    return ch;
+	    return YOBJECT(YBTSChan,ch);
+    }
+    return 0;
+}
+
+YBTSGprsChan* YBTSDriver::findGprsConnId(uint16_t connId)
+{
+    for (ObjList* o = channels().skipNull(); o ; o = o->skipNext()) {
+	YBTSConnChan* ch = static_cast<YBTSConnChan*>(o->get());
+	if (ch->connId() == connId)
+	    return YOBJECT(YBTSGprsChan,ch);
     }
     return 0;
 }
@@ -9050,8 +9727,8 @@ YBTSChan* YBTSDriver::findChanConnId(uint16_t connId)
 YBTSChan* YBTSDriver::findChanUE(const YBTSUE* ue)
 {
     for (ObjList* o = channels().skipNull(); o ; o = o->skipNext()) {
-	YBTSChan* ch = static_cast<YBTSChan*>(o->get());
-	if (ch->ue() == ue)
+	YBTSChan* ch = YOBJECT(YBTSChan,o->get());
+	if (ch && (ch->ue() == ue))
 	    return ch;
     }
     return 0;
@@ -9308,6 +9985,8 @@ void YBTSDriver::initialize()
 	YBTS_MT_SMS_TIMEOUT_DEF,YBTS_MT_SMS_TIMEOUT_MIN,YBTS_MT_SMS_TIMEOUT_MAX);
     s_ussdTimeout = ybts.getIntValue(YSTRING("ussd.session_timeout"),
 	YBTS_USSD_TIMEOUT_DEF,YBTS_USSD_TIMEOUT_MIN);
+    s_gprsTimeout = ybts.getIntValue(YSTRING("gprs.timeout"),
+	YBTS_GPRS_TIMEOUT_DEF,YBTS_GPRS_TIMEOUT_MIN,YBTS_GPRS_TIMEOUT_MAX);
     const String& expXml = ybts[YSTRING("export_xml_as")];
     if (expXml == YSTRING("string"))
 	m_exportXml = -1;

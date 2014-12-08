@@ -262,6 +262,7 @@ class ByteVector //: public Vector<ByteType>
 	// See setField/appendField for bit-aligned fields.
 	unsigned grow(unsigned amt);
 	unsigned growBits(unsigned amt);
+	unsigned shrinkBits(unsigned amt);
 	void setByte(size_t ind, ByteType byte) { BVASSERT(ind < size()); mStart[ind] = byte; }
 	void setUInt16(size_t writeIndex,unsigned value);	// 2 byte value
 	void setUInt32(size_t writeIndex, unsigned value);	// 4 byte value

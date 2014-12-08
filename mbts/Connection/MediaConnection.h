@@ -31,9 +31,9 @@ class MediaConnection : public GenConnection
 {
 public:
     inline MediaConnection(int fileDesc = -1)
-	: GenConnection(fileDesc)
+	: GenConnection(fileDesc,1508)
 	{ }
-    bool send(unsigned int id, const void* data, size_t len);
+    bool send(unsigned int id, const void* data, size_t len, const void* data2 = 0, size_t len2 = 0);
 private:
     virtual void process(const unsigned char* data, size_t len);
     void process(unsigned int id, const unsigned char* data, size_t len);

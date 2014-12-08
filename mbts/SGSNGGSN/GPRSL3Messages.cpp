@@ -1079,6 +1079,12 @@ void L3GmmMsgAttachAccept::gmmWriteBody(ByteVector &msg)
 	// These are all MM timers in Table 11.3a page 545, and not too interesting.
 }
 
+void L3GmmMsgAttachReject::gmmWriteBody(ByteVector &msg)
+{
+	//msg.appendByte(AttachReject);
+	msg.appendByte(mGmmCause);
+}
+
 void L3GmmMsgAttachRequest::gmmParseBody(L3GmmFrame &src, size_t &rp)
 {
 	mMsNetworkCapability = src.readLVasBV(rp);
@@ -1096,7 +1102,6 @@ void L3GmmMsgAttachRequest::gmmParseBody(L3GmmFrame &src, size_t &rp)
 void L3GmmMsgDetachRequest::gmmParseBody(L3GmmFrame &src, size_t &rp)
 {
 	mDetachType = 0xf & src.readByte(rp);		// Low nibble is detach type, high nibble is unused.
-	mMobileId.parseLV(src,rp);
 	while (rp < src.size()) {
 		unsigned iei = src.readIEI(rp);
 		switch (iei) {
@@ -1346,6 +1351,11 @@ void L3SmMsgSmStatus::smWriteBody(ByteVector &msg)
 	msg.appendByte(mCause);
 }
 
+void L3GmmMsgAttachReject::textBody(std::ostream &os) const
+{
+	os <<LOGVAR2("GmmCause",(int)mGmmCause)<<"="<<GmmCause::name(mGmmCause);
+}
+
 void L3GmmMsgRAUpdateReject::textBody(std::ostream &os) const
 {
 	os <<LOGVAR2("GmmCause",(int)mGmmCause)<<"="<<GmmCause::name(mGmmCause);
@@ -1359,7 +1369,7 @@ void L3SmMsgActivatePdpContextReject::smWriteBody(ByteVector &msg)
 
 void L3SmMsgActivatePdpContextReject::textBody(std::ostream &os) const
 {
-	os <<LOGVAR(mCause)<<"="<<GmmCause::name(mCause);
+	os <<LOGVAR(mCause)<<"="<<SmCause::name(mCause);
 }
 
 void L3GmmMsgGmmStatus::textBody(std::ostream &os) const

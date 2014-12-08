@@ -1158,7 +1158,7 @@ bool RLCDownEngine::engineService(PDCHL1Downlink *down)
 		// If so, it should be done only if no other TBFs have something more
 		// important to do.
 
-		assert(mDownFinished);
+		//assert(mDownFinished);
 		// Back up one to get the final block to resend.
 		assert(mSt.VS == mSt.TxQNum);
 		block = getBlock(addSN(mSt.VS,-1),down->TN());
@@ -1168,7 +1168,8 @@ bool RLCDownEngine::engineService(PDCHL1Downlink *down)
 
 	if (block->mIdle) {
 		assert(dlPersistentMode());
-		if (!mDownFinished && mtDownPersistTimer.expired()) {
+		if (!mDownFinished && (mtDownPersistTimer.elapsed() > (int)gL2MAC.macDownlinkPersist)) {
+			GLOG(INFO) << "downlink expired" << getTBF();
 			// Time to kill the tbf.
 			block->mFBI = true;
 			mDownFinished = true;

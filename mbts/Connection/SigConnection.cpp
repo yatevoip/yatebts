@@ -31,12 +31,14 @@
 #include <GSMTransfer.h>
 #include <GSMConfig.h>
 #include <NeighborTable.h>
+#include <SgsnConn.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 
 using namespace Connection;
 using namespace GSM;
+using namespace SGSN;
 
 #define PROTO_VER 1
 #define HB_MAXTIME 30000
@@ -223,7 +225,11 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 	    {
 		LogicalChannel* ch = gConnMap.unmap(id);
 		if (!ch) {
-		    LOG(ERR) << "received SigConnRelease for unmapped id " << id;
+		    SgsnInfo* sgsn = gGprsMap.unmap(id);
+		    if (sgsn)
+			SgsnConn::detach(sgsn, "");
+		    else
+			LOG(INFO) << "received SigConnRelease for unmapped id " << id;
 		}
 		else if (info)
 		    ch->send(HARDRELEASE);
@@ -314,6 +320,46 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		    LOG(ERR) << "received Establish SAPI for unmapped id " << id;
 	    }
 	    break;
+	case SigGprsAttachOk:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn)
+		    SgsnConn::attachAccept(sgsn,"");
+		else
+		    LOG(ERR) << "received GPRS Attach Complete for unmapped id " << id;
+	    }
+	    break;
+	case SigGprsAttachLBO:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    gGprsMap.unmap(sgsn);
+		    SgsnConn::attachLBO(sgsn);
+		}
+		else
+		    LOG(ERR) << "received GPRS Local Breakout for unmapped id " << id;
+	    }
+	    break;
+	case SigGprsAttachRej:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    gGprsMap.unmap(sgsn);
+		    SgsnConn::attachRej(sgsn,info);
+		}
+		else
+		    LOG(INFO) << "received GPRS Attach Reject for unmapped id " << id;
+	    }
+	    break;
+	case SigGprsIdentityReq:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn)
+		    SgsnConn::identityReq(sgsn);
+		else
+		    LOG(ERR) << "received GPRS Identity Request for unmapped id " << id;
+	    }
+	    break;
 	default:
 	    LOG(ERR) << "unexpected primitive " << prim << " with id " << id;
     }
@@ -343,6 +389,82 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		}
 		else
 		    LOG(ERR) << "received L3 frame for unmapped id " << id;
+	    }
+	    break;
+	case SigGprsAttachOk:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn)
+		    SgsnConn::attachAccept(sgsn, (const char*)data);
+		else
+		    LOG(ERR) << "received GPRS Attach Complete for unmapped id " << id;
+	    }
+	    break;
+	case SigGprsAuthRequest:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    if (len >= 12)
+			SgsnConn::authRequest(sgsn, (const char*)data);
+		    else
+			LOG(ERR) << "received short GPRS Auth Request of length " << len;
+		}
+		else
+		    LOG(ERR) << "received GPRS Auth Request for unmapped id " << id;
+	    }
+	    break;
+	case SigGprsDetach:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    if (len >= 3) {
+			gGprsMap.unmap(sgsn);
+			SgsnConn::detach(sgsn, (const char*)data);
+		    }
+		    else
+			LOG(ERR) << "received short GPRS Detach of length " << len;
+		}
+		else
+		    LOG(INFO) << "received GPRS Detach for unmapped id " << id;
+	    }
+	    break;
+	case SigPdpActivate:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    if (len >= 7)
+			SgsnConn::pdpActivate(sgsn, !!info, (const char*)data);
+		    else
+			LOG(ERR) << "received short GPRS PDP Activate of length " << len;
+		}
+		else
+		    LOG(ERR) << "received GPRS PDP Activate for unmapped id " << id;
+	    }
+	    break;
+	case SigPdpModify:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    if (len >= 7)
+			SgsnConn::pdpModify(sgsn, !!info, (const char*)data);
+		    else
+			LOG(ERR) << "received short GPRS PDP Modify of length " << len;
+		}
+		else
+		    LOG(ERR) << "received GPRS PDP Modify for unmapped id " << id;
+	    }
+	    break;
+	case SigPdpDeactivate:
+	    {
+		SgsnInfo* sgsn = gGprsMap.find(id);
+		if (sgsn) {
+		    if (len >= 7)
+			SgsnConn::pdpDeactivate(sgsn, (const char*)data);
+		    else
+			LOG(ERR) << "received short GPRS PDP Deactivate of length " << len;
+		}
+		else
+		    LOG(INFO) << "received GPRS PDP Deactivate for unmapped id " << id;
 	    }
 	    break;
 	default:

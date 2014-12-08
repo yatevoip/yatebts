@@ -314,6 +314,15 @@ unsigned ByteVector::growBits(unsigned amt)
 	return oldsizebits;
 }
 
+// Shrink the vector by amt in bits; return the old size in bits.
+unsigned ByteVector::shrinkBits(unsigned amt)
+{
+	unsigned oldsizebits = sizeBits();
+	//BVASSERT(amt < oldsizebits);
+	setSizeBits(oldsizebits - amt);
+	return oldsizebits;
+}
+
 
 // GSM04.60 10.0b.3.1: Note that fields in RLC blocks use network order,
 // meaning most significant byte first (cause they started on Sun workstations.)
