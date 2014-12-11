@@ -204,7 +204,26 @@ function buildRegister(imsi,tmsi,exp,imei,warning,msg,unresponsive_server)
 	sr["sip_Warning"] = '399 ' + Engine.runParams("nodename") + ' "' + warning + '"';
     sr.used_server = sip_server;
 
+    if (imsi) {
+	if (subscribers[imsi]["callid"]!="")
+	    sr["sip_Call-ID"] = subscribers[imsi]["callid"];
+    }
+    if (sr["sip_Call-ID"]=="") {
+	if (msg.callid!="")
+	    sr["sip_Call-ID"] = msg.callid;
+	else 
+	    sr["sip_Call-ID"] = buildCallID();
+    }    
+    msg["callid"] = sr["sip_Call-ID"];
+
     return sr;
+}
+
+
+function buildCallID()
+{
+    var callid = "yatebts-"+Date.now()+"-"+Math.random()+"@"+my_sip;
+    return callid;
 }
 
 /*
@@ -949,7 +968,8 @@ function readUEsFromConf()
 	var msisdn = subscriber_info[2];
 	var expires = subscriber_info[3];
 	var expires = parseInt(expires);
-	subscribers[imsi] = {"tmsi":tmsi,"imei":imei,"msisdn":msisdn,"expires":expires};
+	var callid = subscriber_info[4];
+	subscribers[imsi] = {"tmsi":tmsi,"imei":imei,"msisdn":msisdn,"expires":expires,"callid":callid};
 	count_ues = count_ues+1;
     }
 
@@ -966,7 +986,6 @@ function saveUE(imsi,subscriber)
 {
     if (subscriber!=undefined) {
 	if (subscriber[imsi]!=undefined) {
-	    Engine.print_r(subscribers);	   
 	    if (subscriber == subscribers[imsi]) {
 		Engine.Debug(Engine.DebugInfo, "No change when updating subscriber info for IMSI "+imsi);
 		return;
@@ -986,7 +1005,7 @@ function saveUE(imsi,subscriber)
 function saveUEinConf(imsi,subscriber)
 {
     if (subscriber!=undefined) {
-	var fields = subscriber["tmsi"]+","+subscriber["imei"]+","+subscriber["msisdn"]+","+subscriber["expires"];
+	var fields = subscriber["tmsi"]+","+subscriber["imei"]+","+subscriber["msisdn"]+","+subscriber["expires"]+","+subscriber["callid"];
 	conf.setValue(ues,imsi,fields);
     } else
 	conf.clearKey(ues,imsi);
@@ -1004,7 +1023,7 @@ function updateSubscribers(msg)
     var imsi = msg.imsi;
     if (imsi=="") {
 	// this should not happen. If it does => BUG
-	Engine.debug(Engine.debugWarn, "ERROR: got updateSubscribers with msg without imsi. tmsi='"+msg.tmsi+"'");
+	Engine.debug(Engine.DebugWarn, "ERROR: got updateSubscribers with msg without imsi. tmsi='"+msg.tmsi+"'");
 	return;
     }
 
@@ -1013,7 +1032,15 @@ function updateSubscribers(msg)
 	imei = subscribers[imsi]["imei"];
 
     var expire_subscriber = Date.now()/1000 + imsi_cleanup;
+    
     subscriber = {"tmsi":msg.tmsi, "msisdn":msg.msisdn, "imei":imei, "expires":expire_subscriber};
+    if (msg["callid"]) 
+	subscriber["callid"] = msg["callid"];
+    else {
+	Engine.debug(Engine.DebugWarn, "ERROR: got updateSubscribers with msg without callid");
+	subscriber["callid"] = "";
+    }
+
     subscribers[imsi] = subscriber;
     saveUE(imsi,subscriber);
 }
@@ -1081,7 +1108,7 @@ function getSIPRegistrar(tmsi)
     if (reg_sip!="" || reg_sip!=null)
 	return reg_sip;
 
-    Engine.debug(Engine.DebugWarn, "Please configure reg_sip or nodes_sip parameter in roamingconf.js located in the configurations directory.");
+    Engine.debug(Engine.DebugWarn, "Please configure reg_sip or nodes_sip parameter in [roaming] section from ybts.conf.");
     return false;
 }
 
