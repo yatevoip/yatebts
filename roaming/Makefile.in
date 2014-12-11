@@ -6,7 +6,7 @@ DESTDIR :=
 
 SCRIPTS := roaming.js handover.js lib_str_util.js
 SOUNDS	:=
-CONFIG  := @srcdir@/roamingconf.js
+CONFIG  := 
 
 prefix = @prefix@
 exec_prefix = @exec_prefix@
