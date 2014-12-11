@@ -1728,6 +1728,7 @@ public:
 	{ return m_state >= WaitHandshake && m_peerPid; }
     inline void setPeerAlive()
 	{ m_peerAlive = true; }
+    void stopPeer();
     inline YBTSMedia* media()
 	{ return m_media; }
     inline YBTSSignalling* signalling()
@@ -1914,7 +1915,6 @@ protected:
 	}
     void stop();
     bool startPeer();
-    void stopPeer();
     bool handleMsgExecute(Message& msg, const String& dest);
     bool handleEngineStop(Message& msg);
     YBTSChan* findChanConnId(uint16_t connId);
@@ -4590,6 +4590,8 @@ void YBTSSignalling::changeState(int newStat)
 	case Closing:
 	    setTimer(m_timeout,"Timeout",0,0);
 	    resetHeartbeatTime();
+	    if (Closing == newStat)
+		__plugin.stopPeer();
 	    break;
 	case WaitHandshake:
 	    setToutHandshake();
@@ -10182,6 +10184,7 @@ bool YBTSDriver::received(Message& msg, int id)
 		    lck.acquire(m_stateMutex);
 		    if (pid == m_peerPid) {
 			Debug(this,DebugNote,"Peer pid %d vanished",m_peerPid);
+			m_peerPid = 0;
 			m_restartTime = 0;
 			lck.drop();
 			restart();
