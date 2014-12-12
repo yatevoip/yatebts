@@ -1243,6 +1243,19 @@ function onUnregister(msg)
     return true;
 }
 
+// Make sure only NIB mode is enabled
+function verifyYBTSMode()
+{
+    var m = new Message("engine.help");
+    m.line = "roaming";
+    m.dispatch();
+
+    if (m.dispatch())
+	Engine.alarm(alarm_conf, "NIB mode and Roaming mode are enabled at the same time. Please edit javascript.conf and disable one of them. It is recommened to set mode=nib/roaming in [ybts] section in ybts.conf.");
+    else
+	Engine.debug(Engine.DebugInfo,"Checked that only NIB is enabled.");
+}
+
 // Perform one command line completion
 function oneCompletion(msg,str,part)
 {
@@ -1254,10 +1267,21 @@ function oneCompletion(msg,str,part)
 	msg.retValue(ret + str);
 }
 
+
+nibHelp =  "  nib [list|reload]\r\n";
+
+// Provide help for rmanager command line
 function onHelp(msg)
 {
-    var ret = msg.retValue();
-    msg.retValue(ret+"  nib {list|reload}\r\n");
+    if (msg.line) {
+	if (msg.line == "nib") {
+	    msg.retValue(nibHelp + "Control the NIB mode\r\n");
+	    return true;
+	}
+	return false;
+    }
+    msg.retValue(msg.retValue() + nibHelp);
+    return false;
 }
 
 function onComplete(msg, line, partial, part)
@@ -1367,3 +1391,4 @@ Message.install(onReload,"engine.init",110);
 Engine.setInterval(onInterval,1000);
 readConfiguration();
 readUEs();
+verifyYBTSMode();
