@@ -1128,6 +1128,21 @@ function checkConfiguration()
 {
     readYBTSConf();
     readUEs();
+    verifyYBTSMode();
+}
+
+/*
+ *  Make sure only Roaming mode is enabled
+ */ 
+function verifyYBTSMode()
+{
+    var m = new Message("engine.help");
+    m.line = "nib";
+
+    if (m.dispatch())
+	Engine.alarm(alarm_conf, "NIB mode and Roaming mode are enabled at the same time. Please edit javascript.conf and disable one of them. It is recommened to ony set mode=nib/roaming in [ybts] section in ybts.conf.");
+    else
+	Engine.debug(Engine.DebugInfo,"Checked that only Roaming mode is enabled.");
 }
 
 /*
@@ -1142,13 +1157,14 @@ function completeCommand(msg,line,part)
 	case undefined:
 	case "":
 	case "help":
-	    if (neighbors)
-		oneCompletion(msg,"neighbors",part);
-	    break;
-	case "debug":
 	case "reload":
+	case "debug":
 	    oneCompletion(msg,"roaming",part);
 	    break;
+	case "roaming":
+	   if (neighbors)
+		oneCompletion(msg,"neighbors",part);
+	   break;
     }
 }
 
@@ -1163,7 +1179,7 @@ function onCommand(msg)
 	return false;
     }
     switch (msg.line) {
-	case "neighbors":
+	case "roaming neighbors":
 	    var tmp = "Band ARFCN BSIC Cell ID        Address               Status\r\n";
 	    tmp += "---- ----- ---- -------------- --------------------- -------\r\n";
 	    if (neighbors) {
@@ -1217,13 +1233,14 @@ function onDebug(msg)
 function onHelp(msg)
 {
     if (msg.line) {
-	if (msg.line == "neighbors") {
-	    msg.retValue(neighHelp + "Show the neighboring cells\r\n");
+	if (msg.line == "roaming") {
+	    msg.retValue(roamingHelp + "Control the Roaming mode.\r\n");
 	    return true;
 	}
 	return false;
     }
-    msg.retValue(msg.retValue() + neighHelp);
+
+    msg.retValue(msg.retValue() + roamingHelp);
     return false;
 }
 
@@ -1269,6 +1286,7 @@ mosms_translations = {
 	"480":"41"	// Temporarily Unavailable => Temporary failure
 };
 
+roamingHelp = "  roaming [neighbors]\r\n";
 
 Engine.debugName("roaming");
 Message.trackName(Engine.debugName());
@@ -1288,7 +1306,7 @@ Message.install(addPhyInfo,"call.ringing",50,"module","ybts");
 Message.install(addPhyInfo,"call.answered",50,"module","ybts");
 Message.install(addPhyInfo,"chan.dtmf",50,"module","ybts");
 Message.install(onCommand,"engine.command",120);
-Message.install(onHelp,"engine.help",150);
+Message.install(onHelp,"engine.help",120);
 Message.install(onDebug,"engine.debug",150,"module","roaming");
 Message.install(onReload,"engine.init",110);
 Engine.setInterval(onClearInterval,2000);

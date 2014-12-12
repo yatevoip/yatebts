@@ -669,8 +669,6 @@ ho_holdoff = 10;
 // handover reason to set in messages
 ho_reason = 'GSM;text="Handover"';
 
-neighHelp = "  neighbors\r\n";
-
 loadNeighbors();
 Message.install(onChanUpdate,"call.update",90);
 Message.install(onSipOptions,"sip.options",90);
