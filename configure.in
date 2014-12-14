@@ -9,9 +9,10 @@ if echo "$ac_confdir/$ac_pwd" | grep -q '[[[:space:]\\\$\"'\'']]'; then
 fi
 
 PACKAGE_RELEASE="1"
+PACKAGE_STATUS=""
 
 PACKAGE_REVISION=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`
-test -z "$PACKAGE_REVISION" && PACKAGE_REVISION=`cat "$srcdir/tarballs/revision.txt" 2>/dev/null`
+test -z "$PACKAGE_REVISION" && PACKAGE_REVISION=`cat "$srcdir/revision.txt" 2>/dev/null`
 
 PACKAGE_VERSION_MAJOR="${PACKAGE_VERSION%%.*}"
 PACKAGE_VERSION_MINOR="${PACKAGE_VERSION#*.}"
@@ -23,6 +24,7 @@ AC_SUBST(PACKAGE_VERSION_MINOR)
 AC_SUBST(PACKAGE_VERSION_BUILD)
 AC_SUBST(PACKAGE_VERSION_RELEASE)
 AC_SUBST(PACKAGE_RELEASE)
+AC_SUBST(PACKAGE_STATUS)
 AC_SUBST(PACKAGE_REVISION)
 
 # We may need the host OS type but avoid the overhead of AC_CANONICAL_SYSTEM

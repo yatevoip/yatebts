@@ -55,10 +55,10 @@
 Summary:	GSM BTS based on Yet Another Telephony Engine
 Name:     	@PACKAGE_TARNAME@
 Version: 	@PACKAGE_VERSION@
-Release:	%{revision}@PACKAGE_RELEASE@%{dist}
+Release:	@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{dist}
 License:	GPL
 Packager:	Paul Chitescu <paulc@null.ro>
-Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_RELEASE@.tar.gz
+Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
 Group:		Applications/Communications
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
 URL:		http://yatebts.com/

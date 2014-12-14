@@ -139,9 +139,9 @@ uninstall:
 	fi
 	@rm -rf "$(DESTDIR)$(docdir)/"
 
-.PHONY: snapshot tarball rpm srpm
+.PHONY: snapshot tarball rpm srpm revision
 snapshot tarball: check-topdir clean
-	@if [ $@ = snapshot ]; then ver="`date '+SVN-%Y%m%d'`"; else ver="@PACKAGE_VERSION@-@PACKAGE_RELEASE@"; fi ; \
+	@if [ $@ = snapshot ]; then ver="`date '+SVN-%Y%m%d'`"; else ver="@PACKAGE_VERSION@-@PACKAGE_STATUS@@PACKAGE_RELEASE@"; fi ; \
 	wd=`pwd|sed 's,^.*/,,'`; \
 	mkdir -p tarballs; cd ..; \
 	echo $$wd/tar-exclude >$$wd/tar-exclude; \
@@ -168,10 +168,14 @@ snapshot tarball: check-topdir clean
 	rm $$wd/tar-exclude
 
 rpm: tarball
-	rpmbuild -tb $(RPMOPT) tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_RELEASE@.tar.gz
+	rpmbuild -tb $(RPMOPT) tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
 
 srpm: tarball
-	rpmbuild -ta $(RPMOPT) tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_RELEASE@.tar.gz
+	rpmbuild -ta $(RPMOPT) tarballs/@PACKAGE_TARNAME@-@PACKAGE_VERSION@-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
+
+revision: check-topdir
+	@-rev=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`; \
+	test -z "$$rev" || echo "$$rev" > revision.txt
 
 %.o: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
 	$(CCOMPILE) -c $<
@@ -200,4 +204,4 @@ help:
 	'    all install uninstall\n'\
 	'    clean distclean cvsclean (avoid this one!)\n'\
 	'    debug ddebug xdebug (carefull!)\n'\
-	'    snapshot tarball rpm'
+	'    revision snapshot tarball rpm srpm'
