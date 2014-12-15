@@ -137,6 +137,7 @@ Scripts and support executables that implement a GSM Network In a Box.
 %config(noreplace) %{_sysconfdir}/yate/subscribers.conf
 
 %post nib
+sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{_sysconfdir}/yate/javascript.conf
 if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
     if grep -q '^ *\[general\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
@@ -154,21 +155,16 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2
 
 	EOF
     fi
-    if grep -q '^ *\[scripts\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+fi
+if ! grep -q '; Installed by yate-bts' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+    if grep -q '^ *\[ybts\]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
-	/^ *\[scripts\]/{sect=1}
-	/^ *nib *=/{if(sect==2)sect=3}
+	/^ *\[ybts\]/{sect=1}
+	/^ *mode *=/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
-	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nnib=nib.js\n";sect=2}
-	}' <%{_sysconfdir}/yate/javascript.conf >%{_sysconfdir}/yate/javascript.conf.tmp
-	mv -f %{_sysconfdir}/yate/javascript.conf.tmp %{_sysconfdir}/yate/javascript.conf
-    else
-	cat <<-EOF >>%{_sysconfdir}/yate/javascript.conf
-	[scripts]
-	; Installed by yate-bts-nib, do not remove this comment line
-	nib=nib.js
-
-	EOF
+	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nmode=nib\n";sect=2}
+	}' <%{_sysconfdir}/yate/ybts.conf >%{_sysconfdir}/yate/ybts.conf.tmp
+	mv -f %{_sysconfdir}/yate/ybts.conf.tmp %{_sysconfdir}/yate/ybts.conf
     fi
 fi
 if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/extmodule.conf 2>/dev/null; then
@@ -209,6 +205,18 @@ Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE serve
 %{_datadir}/yate/scripts/lib_str_util.js
 
 %post roaming
+sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{_sysconfdir}/yate/javascript.conf
+if ! grep -q '; Installed by yate-bts' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+    if grep -q '^ *\[ybts\]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+	awk '/^ *\[/{sect=0}
+	/^ *\[ybts\]/{sect=1}
+	/^ *mode *=/{if(sect==2)sect=3}
+	{if(sect==3){print ";; " $0;sect=2} else print;
+	 if(sect==1){print "; Installed by yate-bts-roaming, do not remove this comment line\nmode=roaming\n";sect=2}
+	}' <%{_sysconfdir}/yate/ybts.conf >%{_sysconfdir}/yate/ybts.conf.tmp
+	mv -f %{_sysconfdir}/yate/ybts.conf.tmp %{_sysconfdir}/yate/ybts.conf
+    fi
+fi
 if ! grep -q '; Installed by yate-bts-roaming +handover' %{_sysconfdir}/yate/ysipchan.conf 2>/dev/null; then
     mv -f -n %{_sysconfdir}/yate/ysipchan.conf %{_sysconfdir}/yate/ysipchan.conf.rpmold
     cat <<-EOF >%{_sysconfdir}/yate/ysipchan.conf
@@ -244,24 +252,6 @@ if ! grep -q '; Installed by yate-bts-roaming +handover' %{_sysconfdir}/yate/ysi
 	info=no
 
 	EOF
-fi
-if ! grep -q '; Installed by yate-bts-roaming' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
-    if grep -q '^ *\[scripts\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
-	awk '/^ *\[/{sect=0}
-	/^ *\[scripts\]/{sect=1}
-	/^ *roaming *=/{if(sect==2)sect=3}
-	{if(sect==3){print ";; " $0;sect=2} else print;
-	 if(sect==1){print "; Installed by yate-bts-roaming, do not remove this comment line\nroaming=roaming.js\n";sect=2}
-	}' <%{_sysconfdir}/yate/javascript.conf >%{_sysconfdir}/yate/javascript.conf.tmp
-	mv -f %{_sysconfdir}/yate/javascript.conf.tmp %{_sysconfdir}/yate/javascript.conf
-    else
-	cat <<-EOF >>%{_sysconfdir}/yate/javascript.conf
-	[scripts]
-	; Installed by yate-bts-roaming, do not remove this comment line
-	roaming=roaming.js
-
-	EOF
-    fi
 fi
 
 
