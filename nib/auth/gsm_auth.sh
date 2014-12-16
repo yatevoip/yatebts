@@ -15,7 +15,7 @@ cd `dirname $0`
 echo "%%>setlocal:trackparam:gsm_auth"
 echo "%%>install:95:gsm.auth"
 echo "%%>setlocal:restart:true"
-while read REPLY; do
+while read -r REPLY; do
     case "$REPLY" in
 	%%\>message:*)
 	    # gsm.auth handling
