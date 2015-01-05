@@ -127,17 +127,6 @@ bool bladeRFDevice::open(const std::string &args, bool)
         LOG(INFO) << "bladeRF FPGA " << fpgaName << " is loaded with version " << ver.major << "." << ver.minor
             << "." << ver.patch << " (" << ver.describe << ")";
 
-    uint32_t val = 0;
-    bladerf_config_gpio_read(bdev, &val);
-    val |= 0x10000; //enable timestamps, clears and resets everything on write
-    bladerf_config_gpio_write(bdev, val);
-    bladerf_config_gpio_read(bdev, &val);
-    if (!(val & 0x10000)) {
-        LOG(ALERT) << "Could not enable timestamps";
-        return false;
-    }
-    LOG(INFO) << "bladeRF timestamping enabled";
-
     switch (bladerf_device_speed(bdev)) {
         case BLADERF_DEVICE_SPEED_HIGH:
             break;
@@ -212,6 +201,17 @@ bool bladeRFDevice::open(const std::string &args, bool)
         LOG(CRIT) << "Failed to intialize TX sync handle: " << bladerf_strerror(status);
         checkHealth(mTxHealth, false);
     }
+
+    uint32_t val = 0;
+    bladerf_config_gpio_read(bdev, &val);
+    val |= 0x10000; //enable timestamps, clears and resets everything on write
+    bladerf_config_gpio_write(bdev, val);
+    bladerf_config_gpio_read(bdev, &val);
+    if (!(val & 0x10000)) {
+        LOG(ALERT) << "Could not enable timestamps";
+        return false;
+    }
+    LOG(INFO) << "bladeRF timestamping enabled";
 
     mRxGain1 = BLADERF_RXVGA1_GAIN_MAX;
     mDcCorrect = true;
