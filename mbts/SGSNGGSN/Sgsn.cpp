@@ -615,10 +615,18 @@ static bool sendConnAttachReq(SgsnInfo *si, bool authenticated = false)
 	GmmInfo *gmm = si->getGmm();
 	std::ostringstream buf;
 	buf << "tlli=" << hex << std::setw(8) << std::setfill('0') << si->mMsHandle;
-	if (gmm)
+	if (gmm) {
 		buf << " imsi=" << gmm->mImsi.hexstr();
+		if (!gmm->mImei.empty())
+			buf << " imei=" << gmm->mImei;
+	}
 	else
 		buf << " ptmsi=" << hex << std::setw(8) << std::setfill('0') << si->mtAttachInfo.mAttachReqPTmsi;
+	if (si->mAUTS.size()) {
+		buf << " rand=" << si->mRAND.hexstr();
+		buf << " auts=" << si->mAUTS.hexstr();
+		si->mAUTS.clear();
+	}
 	buf << " authenticated=" << (authenticated ? "true" : "false");
 	return gSigConn.send(SigGprsAttachReq,0,id,buf.str());
 }
@@ -636,6 +644,8 @@ static void handleAuthenticationResponse(SgsnInfo *si, L3GmmMsgAuthenticationRes
 		si->clearConn(GprsConnNone,SigConnLost);
 		return;
 	}
+	if (armsg.mMobileId.isImeiSv())
+		gmm->mImei = armsg.mMobileId.getAsBcd();
 
 	switch (si->getConnId()) {
 		case GprsConnNone:
@@ -646,6 +656,22 @@ static void handleAuthenticationResponse(SgsnInfo *si, L3GmmMsgAuthenticationRes
 			return;
 	}
 	sendConnAttachReq(si,true);
+}
+
+static void handleAuthenticationFailure(SgsnInfo *si, L3GmmMsgAuthenticationFailure &afmsg) 
+{
+	GmmInfo *gmm = si->getGmm();
+	if (!gmm) {
+		SGSNERROR("No imsi found for MS during Attach procedure"<<si);
+		return;
+	}
+
+	if ((si->getConnId() < 0) || !afmsg.mAUTS.size() || !si->mRAND.size()) {
+		sendImplicitlyDetached(si);
+		return;
+	}
+	si->mAUTS = afmsg.mAUTS;
+	sendConnAttachReq(si,false);
 }
 
 static void handleIdentityResponse(SgsnInfo *si, L3GmmMsgIdentityResponse &irmsg)
@@ -1273,13 +1299,17 @@ void SgsnConn::authRequest(SgsnInfo* si, const char* text)
 		return;
 	}
 	fromHexa(si->mRAND,getPrefixed("rand=",text));
-	fromHexa(si->mSRES,getPrefixed("sres=",text));
-	fromHexa(si->mKc,getPrefixed("kc=",text));
 	if (!si->mRAND.size()) {
 		SGSNERROR("Missing RAND for" << si);
 		return;
 	}
-	L3GmmMsgAuthentication amsg(si->mRAND);
+	fromHexa(si->mSRES,getPrefixed("sres=",text));
+	fromHexa(si->mKc,getPrefixed("kc=",text));
+	fromHexa(si->mCk,getPrefixed("ck=",text));
+	fromHexa(si->mIk,getPrefixed("ik=",text));
+	GmmInfo *gmm = si->getGmm();
+	L3GmmMsgAuthentication amsg(si->mRAND,(!gmm || gmm->mImei.empty()));
+	fromHexa(amsg.mAutn,getPrefixed("autn=",text));
 	si->sgsnWriteHighSideMsg(amsg);
 }
 
@@ -1559,8 +1589,15 @@ static void handleL3GmmMsg(SgsnInfo *si,ByteVector &frame1)
 	case L3GmmMsg::AuthenticationAndCipheringResp: {
 		L3GmmMsgAuthenticationResponse armsg;
 		armsg.gmmParse(frame);
-		SGSNLOG("Received AuthenticationAndCipheringResp message "<<si);
+		SGSNLOG("Received AuthenticationAndCipheringResp message "<<armsg.str()<<si);
 		handleAuthenticationResponse(si,armsg);
+		break;
+	}
+	case L3GmmMsg::AuthenticationAndCipheringFailure: {
+		L3GmmMsgAuthenticationFailure afmsg;
+		afmsg.gmmParse(frame);
+		SGSNLOG("Received AuthenticationAndCipheringFailure message "<<afmsg.str()<<si);
+		handleAuthenticationFailure(si,afmsg);
 		break;
 	}
 	case L3GmmMsg::ServiceRequest: {
@@ -1914,6 +1951,8 @@ void gmmInfoDump(GmmInfo *gmm,std::ostream&os,int options)
 	os << LOGVAR2("imsi",gmm->mImsi.hexstr());
 	os << LOGHEX2("ptmsi",gmm->mPTmsi);
 	os << LOGHEX2("tlli",gmm->getTlli());
+	if (!gmm->mImei.empty())
+	    os << LOGVAR2("imei",gmm->mImei);
 	os << LOGVAR2("state",GmmState::GmmState2Name(gmm->getGmmState()));
 	time_t now; time(&now);
 	os << LOGVAR2("age",(gmm->mAttachTime ? now - gmm->mAttachTime : 0));

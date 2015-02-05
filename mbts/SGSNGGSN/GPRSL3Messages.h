@@ -377,12 +377,14 @@ struct GmmMobileIdentityIE : Text2Str
 	Field_z<3> mTypeOfId;	// From the first byte.
 	// Either mTmsi or mIdData+mLen is valid.
 	uint32_t mTmsi;			// tmsi or ptmsi
-	unsigned char mIdData[8];	// Original data from the IEI.
+	unsigned char mIdData[9];	// Original data from the IEI.
 	unsigned mLen;		// Length of mIdData = length of IE.
 	bool mPresent;
 	GmmMobileIdentityIE() : mPresent(false) {}
 
 	bool isImsi() const { return mTypeOfId == 1; }
+	bool isImei() const { return mTypeOfId == 2; }
+	bool isImeiSv() const { return mTypeOfId == 3; }
 	bool isTmsi() const { return mTypeOfId == 4; }	// TMSI or P-TMSI
 
 	// Parse out an IMSI from the data, and return it in the ByteVector, which must have room to hold it,
@@ -928,37 +930,53 @@ struct L3GmmMsgIdentityRequest : L3GmmDlMsg
 	void textBody(std::ostream &os) const;
 };
 
-// 24.008 9.4.9 Authenticaion and ciphering request.
+// 24.008 9.4.9 Authentication and ciphering request.
 struct L3GmmMsgAuthentication : L3GmmDlMsg
 {
 	int MTI() const {return AuthenticationAndCipheringReq;}
 	// We wont use any of the IEs:
 	// Ciphering algorithm - always 0
-	// IMEISV request - request IMEI in response, nope.
+	// IMEISV request - request IMEI in response.
+	bool mImeiReq;
 	// Force to standyby - nope
 	// A&C reference number - just used to match up Authentication Response to this message.
 	ByteVector mRand; // 128 bit random number.
 	// GPRS ciphering key sequence - nope
-	// AUTN - if specified, it is a UMTS type challenge. nope.
+	// AUTN - if specified, it is a UMTS type challenge.
+	ByteVector mAutn; // 128 bit network authentication.
 	void gmmWriteBody(ByteVector &msg);
-	L3GmmMsgAuthentication(ByteVector &rand) : L3GmmDlMsg(senseCmd), mRand(rand)
+	L3GmmMsgAuthentication(ByteVector &rand, bool wImeiReq = false) :
+		L3GmmDlMsg(senseCmd), mImeiReq(wImeiReq), mRand(rand)
 	{
 		assert(rand.size() == 16);
 	}
 	void textBody(std::ostream &os) const {
-		os <<LOGVAR(mRand);
+		os <<LOGVAR(mRand) <<LOGVAR(mAutn) <<LOGVAR2("IMEI",mImeiReq);
 	}
 };
 
-// 24.008 9.4.9 Authenticaion and ciphering request.
+// 24.008 9.4.10 Authentication and ciphering response.
 struct L3GmmMsgAuthenticationResponse : L3GmmUlMsg
 {
         int MTI() const {return AuthenticationAndCipheringResp;}
         ByteVector mSRES; // 32 bit authentication result.
+        GmmMobileIdentityIE mMobileId; // Should be IMEI - if returned
         void gmmParseBody(L3GmmFrame &src, size_t &rp);
         void textBody(std::ostream &os) const {
-                os <<LOGVAR(mSRES);
+                os <<LOGVAR(mSRES) <<mMobileId.str();
         }
+};
+
+// 24.008 9.4.10a Authentication and ciphering failure.
+struct L3GmmMsgAuthenticationFailure : L3GmmUlMsg
+{
+	int MTI() const {return AuthenticationAndCipheringFailure;}
+	uint8_t mGmmCause;	// GMM cause 10.5.5.14
+	ByteVector mAUTS; // 14 byte resynchronization info.
+	void gmmParseBody(L3GmmFrame &src, size_t &rp);
+	void textBody(std::ostream &os) const {
+		os <<LOGVAR2("GmmCause",mGmmCause) <<LOGVAR(mAUTS);
+	}
 };
 
 

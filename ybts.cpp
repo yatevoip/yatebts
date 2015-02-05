@@ -4736,8 +4736,8 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    if (msg.hasConnId()) {
 		RefPointer<YBTSGprsConn> conn;
 		if (findConn(conn,msg.connId(),false)) {
-		    dropGprsConn(msg.connId(),false);
 		    __plugin.handleGprsDetach(msg,conn);
+		    dropGprsConn(msg.connId(),false);
 		}
 	    }
 	    return Ok;
@@ -7678,9 +7678,16 @@ void YBTSGprsChan::handleGprsAttach(YBTSMessage& m)
     XmlElement* tlli = xml->findFirstChild(YSTRING("tlli"));
     XmlElement* imsi = xml->findFirstChild(YSTRING("imsi"));
     XmlElement* ptmsi = xml->findFirstChild(YSTRING("ptmsi"));
+    XmlElement* imei = xml->findFirstChild(YSTRING("imei"));
+    XmlElement* rand = xml->findFirstChild(YSTRING("rand"));
+    XmlElement* auts = xml->findFirstChild(YSTRING("auts"));
     Message* msg = message("call.route");
     if (tlli)
 	msg->addParam("caller","tlli/" + tlli->getText());
+    if (rand && auts) {
+	msg->addParam(rand->getTag(),rand->getText());
+	msg->addParam(auts->getTag(),auts->getText());
+    }
     msg->addParam("called","sgsn");
     msg->addParam("route_type","gprs");
     msg->addParam("cdrtrack",String::boolText(false));
@@ -7688,9 +7695,11 @@ void YBTSGprsChan::handleGprsAttach(YBTSMessage& m)
     if (imsi && m_imsi.null())
 	m_imsi = imsi->getText();
     if (m_imsi)
-	msg->addParam(imsi->getTag(),imsi->getText());
+	msg->addParam("imsi",m_imsi);
     if (ptmsi)
 	msg->addParam(ptmsi->getTag(),ptmsi->getText());
+    if (imei)
+	msg->addParam(imei->getTag(),imei->getText());
     if (auth)
 	msg->addParam(auth->getTag(),auth->getText());
     if (!m_started) {

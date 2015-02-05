@@ -578,7 +578,7 @@ void GmmMobileIdentityIE::parseLV(ByteVector &pp, size_t &rp)
 {
 	mPresent = true;
 	mLen = pp.readByte(rp);	// length of value part, should be 5.
-	if (mLen > 8) {
+	if ((mLen < 1) || (mLen > 9)) {
 		LLCWARN( "unexpected Mobile Identity length:"<<mLen);
 	}
 	unsigned typeIdByte = pp.getByte(rp);
@@ -591,9 +591,9 @@ void GmmMobileIdentityIE::parseLV(ByteVector &pp, size_t &rp)
 		mTmsi = pp.getUInt32(rp+1);
 	} else {
 		// We dont care what it is, so just copy the entire thing.
-		if (mLen > 8) {
-			LLCWARN("invalid Mobile Identity TMSI length (must be <=8):"<<mLen);
-			mLen = 8;
+		if (mLen > 9) {
+			LLCWARN("invalid Mobile Identity length (must be <=9):"<<mLen);
+			mLen = 9;
 		}
 		//LLCDEBUG << "mobileid:"<<*(pp.begin()+rp)<<*(pp.begin()+rp+1)<<*(pp.begin()+rp+2)<<"\n";
 		memcpy(mIdData,pp.begin()+rp,mLen);
@@ -626,7 +626,7 @@ void GmmMobileIdentityIE::parseLV(ByteVector &pp, size_t &rp)
 		memcpy(&mIdData[0],datap,datalen);
 		break;
 	default:
-		LLCWARN("unexpecited Mobile Identity type:" << mTypeOfId);
+		LLCWARN("unexpected Mobile Identity type:" << mTypeOfId);
 		break;
 	}
 	// Assume it is p-tmsi and get it.
@@ -1270,8 +1270,8 @@ void L3GmmMsgIdentityResponse::textBody(std::ostream &os) const
 void L3GmmMsgAuthentication::gmmWriteBody(ByteVector &msg)
 {
 	// Ciphering algorithm nibble - all zero = no ciphering
-	// IMEISV request nibble - all zero = not requested.
-	msg.appendByte(0);
+	// IMEISV request nibble - 0000 or 0001.
+	msg.appendByte(mImeiReq ? 0x10 : 0x00);
 	// Force to standby nibble - zero = no.
 	// A&C reference number - zero is a find reference number.
 	msg.appendByte(0);
@@ -1281,6 +1281,12 @@ void L3GmmMsgAuthentication::gmmWriteBody(ByteVector &msg)
 	msg.append(mRand);
 	// CKSN must be included
 	msg.appendByte(0x80 | 0x00); //IE;
+	// AUTN if set
+	if (mAutn.size() == 16) {
+		msg.appendByte(0x28);
+		msg.appendByte(0x10);
+		msg.append(mAutn);
+	}
 }
 
 void L3GmmMsgAuthenticationResponse::gmmParseBody(L3GmmFrame &src, size_t &rp)
@@ -1296,21 +1302,53 @@ void L3GmmMsgAuthenticationResponse::gmmParseBody(L3GmmFrame &src, size_t &rp)
                 case 0x22: // SRES/RES 4 bytes
 			for (int i = 0; i < 4; i++) 
 				SRES.setByte(i,src.readByte(rp));
-			mSRES = SRES;	
+			mSRES = SRES;
                         break;
-                case 0x23: // IMEISV  TLV of 11 bytes
-			// ignore for now;
-		case 0x29: // Authentication Response parameter extension (AUTN) TLV 3-14
-			// ignore for now;
+                case 0x23: // IMEISV TLV of 11 bytes
+			mMobileId.parseLV(src,rp);
+			break;
+		case 0x29: // Authentication Response parameter extension (RES2) TLV 3-14
 			{
 				unsigned int len = src.readByte(rp);
-				for (unsigned int i = 0; i < len; i++) src.readByte(rp);
+				ByteVector tmp(len + 4);
+				tmp.setSegment(0,mSRES);
+				for (unsigned int i = 0; i < len; i++)
+					tmp.setByte(i+4,src.readByte(rp));
+				mSRES = tmp;
 			}
 			break;
-                default:
+                default: // Skip any other TLV
+			for (unsigned int i = src.readByte(rp); i; i--)
+				src.readByte(rp);
                         break;
                 }
         }
+}
+
+void L3GmmMsgAuthenticationFailure::gmmParseBody(L3GmmFrame &src, size_t &rp)
+{
+	// 9.4.10a of 24.008
+	mGmmCause = src.readByte(rp);
+
+	// optional ieis:
+	while (rp < src.size()) {
+		unsigned iei = src.readIEI(rp);
+		switch (iei) {
+		case 0x30: // Authentication Failure parameter (AUTS) TLV 16
+			{
+				unsigned int len = src.readByte(rp);
+				ByteVector tmp(len);
+				for (unsigned int i = 0; i < len; i++)
+					tmp.setByte(i,src.readByte(rp));
+				mAUTS = tmp;
+			}
+			break;
+		default: // Skip any other TLV
+			for (unsigned int i = src.readByte(rp); i; i--)
+				src.readByte(rp);
+			break;
+		}
+	}
 }
 
 // 24.008 9.5.1

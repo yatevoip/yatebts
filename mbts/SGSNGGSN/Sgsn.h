@@ -78,6 +78,7 @@ class GmmInfo
 	uint32_t getPTmsi() const { return mPTmsi; }
 	uint32_t getTlli() const { return mPTmsi | sLocalTlliMask; }
 	void setPTmsi(uint32_t ptmsi) { mPTmsi = ptmsi; }
+	string mImei;		// The IMEI, decoded.
 	static const unsigned sNumPdps = 16;
 	time_t mAttachTime;
 	time_t mActivityTime;
@@ -272,6 +273,9 @@ class SgsnInfo
 	ByteVector mRAND;
 	ByteVector mSRES;
 	ByteVector mKc;
+	ByteVector mCk;
+	ByteVector mIk;
+	ByteVector mAUTS;
 
 	// The information in the L3 AttachRequest is rightly part of the GmmInfo context,
 	// but when we receive the message, that does not exist yet, so we save the
