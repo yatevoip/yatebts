@@ -149,6 +149,12 @@ void SgsnInfo::sirm()
 	sgsnInfoDump(this,ss);
 	SGSNLOG("Removing SgsnInfo:"<<ss);
 	sSgsnInfoList.remove(this);
+	GmmInfo *gmm = getGmm();
+	if (gmm && (gmm->getSI() == this)) {
+		gmm->msi = 0;
+		if (gmm->isRegistered())
+			gmm->setGmmState(GmmState::GmmRegistrationPending);
+	}
 	delete this;
 }
 
@@ -741,6 +747,9 @@ void AttachInfo::copyFrom(AttachInfo &other)
 
 void sendImplicitlyDetached(SgsnInfo *si)
 {
+	GmmInfo* gmm = si->getGmm();
+	if (gmm && gmm->isRegistered() && (gmm->getSI() == si))
+		gmm->setGmmState(GmmState::GmmRegistrationPending);
 	L3GmmMsgGmmStatus statusMsg(GmmCause::Implicitly_detached);
 	si->sgsnWriteHighSideMsg(statusMsg);
 	// The above didn't do it, so try sending one of these too:
@@ -1344,6 +1353,9 @@ void SgsnConn::attachAccept(SgsnInfo* si, const char* text)
 void SgsnConn::detach(SgsnInfo* si, const char* text)
 {
 	si->setConnId(GprsConnNone);
+	GmmInfo *gmm = si->getGmm();
+	if (gmm)
+		gmm->setGmmState(GmmState::GmmDeregistered);
 	L3GmmMsgDetachRequest dtr(toInteger(getPrefixed("type=",text),1),
 		toInteger(getPrefixed("error=",text),0));
 	si->sgsnWriteHighSideMsg(dtr);
