@@ -1048,26 +1048,6 @@ int sysinfo(int argc, char** argv, ostream& os)
 }
 
 
-int neighbors(int argc, char** argv, ostream& os)
-{
-
-	os << "host C0 BSIC" << endl;
-	char cmd[200];
-	sprintf(cmd,"sqlite3 -separator ' ' %s 'select IPADDRESS,C0,BSIC from neighbor_table'",
-		gConfig.getStr("Peering.NeighborTable.Path").c_str());
-	FILE *result = popen(cmd,"r");
-	char *line = (char*)malloc(200);
-	while (!feof(result)) {
-		if (!fgets(line, 200, result)) break;
-		os << line;
-	}
-	free(line);
-	os << endl;
-	pclose(result);
-	return SUCCESS;
-}
-
-
 int crashme(int argc, char** argv, ostream& os)
 {
 	char *nullp = 0x0;
@@ -1088,11 +1068,11 @@ int stats(int argc, char** argv, ostream& os)
 				os << "stats table (gReporting) cleared" << endl;
 				return SUCCESS;
 		}
-		sprintf(cmd,"sqlite3 %s 'select name||\": \"||value||\" events over \"||((%lu-clearedtime)/60)||\" minutes\" from reporting where name like \"%%%s%%\";'",
+		sprintf(cmd,"sqlite3 %s 'select name||\": \"||value||\" events over \"||((%lu-clearedtime)/60)||\" minutes\" from reporting where name like \"%%%s%%\";' </dev/null",
 			gConfig.getStr("Control.Reporting.StatsTable").c_str(), time(NULL), argv[1]);
 	}
 	else if (argc==1)
-		sprintf(cmd,"sqlite3 %s 'select name||\": \"||value||\" events over \"||((%lu-clearedtime)/60)||\" minutes\" from reporting;'",
+		sprintf(cmd,"sqlite3 %s 'select name||\": \"||value||\" events over \"||((%lu-clearedtime)/60)||\" minutes\" from reporting;' </dev/null",
 			gConfig.getStr("Control.Reporting.StatsTable").c_str(), time(NULL));
 	else return BAD_NUM_ARGS;
 	FILE *result = popen(cmd,"r");
@@ -1140,7 +1120,6 @@ void Parser::addCommands()
 	addCommand("unconfig", unconfig, "key -- disable a configuration key by setting an empty value");
 	addCommand("notices", notices, "-- show startup copyright and legal notices");
 	addCommand("sysinfo", sysinfo, "-- print current system information messages");
-	addCommand("neighbors", neighbors, "-- dump the neighbor table");
 	addCommand("gprs", GPRS::gprsCLI,"GPRS mode sub-command.  Type: gprs help for more");
 	addCommand("sgsn", SGSN::sgsnCLI,"SGSN mode sub-command.  Type: sgsn help for more");
 	addCommand("crashme", crashme, "force crash of OpenBTS for testing purposes");
