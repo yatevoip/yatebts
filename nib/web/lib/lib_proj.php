@@ -305,7 +305,7 @@ function warning_note($text)
 	print "</div>";
 }
 
-function generate_table_format_from_socket($socket_response)
+function parse_socket_response($socket_response)
 {
 	//Ex: $socket_response = string(221) "IMSI MSISDN --------------- --------------- 00101000000000 +4381234 00101001100110 +2500001 00101001100120 +8788783 001900000000002 +6669990 00101000000003 +6789723 00101000000002 +2943456 " 
 	$table_array = array();
@@ -333,45 +333,38 @@ function generate_table_format_from_socket($socket_response)
 
 function get_socket_response($command, $marker_end)
 {
-	global $yate_ip;
+	global $yate_ip, $default_ip, $default_port;
 	//check if Yate is running
 	//if yate is not running returns NULL otherwize return process ID 
+
 	if (!shell_exec('pidof yate'))
 		return array(false, "Please start YateBTS before performing this action.", false);
 
 	if (!$yate_ip)
-		$yate_ip = "127.0.0.1";
-	
-	$default_ip = "tcp://".$yate_ip;
-        $default_port = '5038';
-        $socket = new SocketConn($default_ip, $default_port);
-	if (strlen($socket->error))
-	           return array(false, "There was a problem with the socket connection. Error reported is: ".$socket->error);
+		return array(false, "Please set Yate IP in configuration file.");
 
-	$res = $socket->command($command,$marker_end);
-	return $res;
+	$socket = new SocketConn($default_ip, $default_port);
+	if (strlen($socket->error))
+		return array(false, "There was a problem with the socket connection. Error reported is: ".$socket->error);
+
+	return $socket->command($command, $marker_end);
 }
 
 function restart_yate()
 {
-	global $yate_ip;
-
+	$res = get_socket_response("restart now", "\r\n");
 	if (!shell_exec('pidof yate'))
 		return array(true);
 
-	if (!$yate_ip)
-		$yate_ip = "127.0.0.1";
+	if (is_array($res)) {
+		if (isset($res[2]))
+			return array(true);
+		return $res;
+	}
 
-	$default_ip = "tcp://".$yate_ip;
-	$default_port = '5038';
-
-	$socket = new SocketConn($default_ip, $default_port);
-	if (strlen($socket->error))
-		return array(false, "There was a problem with the socket connection. Error reported is: ".$socket->error);	
-
-	$res = $socket->command("restart now");
 	if ($res == "Engine restarting - bye!")
 		return array(true);
+
 	return array(false, $res);
 }
 

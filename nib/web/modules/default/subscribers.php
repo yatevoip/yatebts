@@ -98,7 +98,7 @@ function online_subscribers()
 		errormess($res[1],"no");
 		$online_subscribers = array();
 	} else
-		$online_subscribers = generate_table_format_from_socket($res);
+		$online_subscribers = parse_socket_response($res);
 
 	$formats = array("IMSI","MSISDN");
 	table($online_subscribers, $formats, "online subscriber", "imsi");
@@ -118,7 +118,7 @@ function rejected_imsis()
 		errormess($res[1],"no");
 		$rejected_subscribers = array();
 	} else
-		$rejected_subscribers = generate_table_format_from_socket($res);
+		$rejected_subscribers = parse_socket_response($res);
 
 	$formats = array("IMSI","No attempts register");
 	table($rejected_subscribers, $formats, "rejected IMSIs", "imsi");

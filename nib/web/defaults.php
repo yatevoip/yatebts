@@ -139,6 +139,9 @@ if (!isset($yate_conf_dir))
 
 $yate_ip = "127.0.0.1";
 
+$default_ip = "tcp://".$yate_ip;
+$default_port = '5038';
+
 $proj_title = "Yatebts NIB";
 # the file used by PySim to write the SIM credentials 
 $pysim_csv = $yate_conf_dir . "sim_data.csv";
