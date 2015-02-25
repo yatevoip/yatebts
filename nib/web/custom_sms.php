@@ -1,4 +1,22 @@
 <?php
+/**
+ * custom-sms.php
+ * This file is part of the Yate-BTS Project http://www.yatebts.com
+ *
+ * Copyright (C) 2015 Null Team
+ *
+ * This software is distributed under multiple licenses;
+ * see the COPYING file in the main directory for licensing
+ * information for this specific distribution.
+ *
+ * This use of this software may be subject to additional restrictions.
+ * See the LEGAL file in the main directory for details.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ */
+
 require_once("lib/lib_proj.php");
 set_timezone();
 require_once("ansql/set_debug.php");
@@ -18,7 +36,7 @@ require_once("lib/lib_proj.php");
 </head>
 <body class="mainbody">
 <?php  
-if (getparam("called"))
+if (getparam("method")=="send_message_to_yate")
 	send_message_to_yate();
 else
 	send_sms();
@@ -31,6 +49,7 @@ function send_sms($error = null, $note = null)
 {
 	if (!shell_exec('pidof yate')) 
                 errormess("Please start YateBTS before performing this action.", "no");	
+	
 	if (strlen($error))
 		errormess($error,"no");
 	
@@ -40,12 +59,12 @@ function send_sms($error = null, $note = null)
 	$fields = array(
 		"called"=> array("comment"=>"The IMSI where the SMS will be send.","column_name"=>"IMSI"),
 		"text" => array("column_name"=>"Message", "display"=>"textarea", "comment"=>"The message can be text or RPDU."),
-		"sms_type" => array("column_name"=>"SMS Type", 'display'=>'select', array("selected"=>"text", "text", "binary"))
+		"sms_type" => array("column_name"=>"SMS Type", 'display'=>'select', array("selected"=>"text", "text", "binary"), "comment"=>"The type of the message: text or binary.")
 	);
 	
 	start_form("custom_sms.php", "get");
 	addHidden(null,array("method"=>"send_message_to_yate"));
-	editObject(null,$fields,"Create SMS.",array("Send SMS"),null,true);
+	editObject(null,$fields,"Create SMS.","Send SMS",null,true);
 	end_form();
 }
 
@@ -60,7 +79,16 @@ function send_message_to_yate()
 	if (!$called || !$text)
 		return send_sms("Insufficient data to send the SMS request!");
 
-	//test if called is on line 
+	if ($called == "") 
+		return send_sms("The IMSI cannot be empty. Please insert IMSI.");
+
+	if ($text == "")
+		return send_sms("The Message cannot be empty. Please insert the message.");
+	
+	if (preg_match("/=/", $text))
+		return send_sms("The Message cannot contain '='.");
+
+	//test if called is online 
 	$command = "nib registered ". $called;
 	$marker_end = 'null';
 	$socket = new SocketConn($default_ip, $default_port);
@@ -74,7 +102,6 @@ function send_message_to_yate()
 		return send_sms(null, "The subscriber ". $params["called"]." is not online, try later to send the SMS.");
 	}
 
-	
 	$command = "control custom-sms called=".$called;
 	$type_sms = getparam("sms_type");
 
@@ -86,10 +113,17 @@ function send_message_to_yate()
 
 	$response = $socket->command($command, 'quit');
 	$socket->close();
+	
+	if (preg_match("/Could not control /i", $response)) 
+		return send_sms("The script for sending custom SMS is not set in javascript.conf! Please set in section [scripts] custom-sms=custom_sms.js and then restart YateBTS.");
 
-	if (preg_match("/msg.execute returned false/", $response)) 
+	if (preg_match("/Control 'custom-sms' Got chan.control /i", $response)) 
+		return send_sms("Got chan.control, but IMSI or Message are missing. The SMS will not be sent.");
+	
+	$note = "";
+	if (preg_match("/Control 'custom-sms' FAILED/i", $response))
 		$note = "SMS was not sent.";
-	elseif (preg_match("/msg.execute returned true/", $response)) 
+	elseif (preg_match("/Control 'custom-sms' OK/i", $response)) 
 		$note =  "SMS was sent.";
 	
 	send_sms(null, $note);
