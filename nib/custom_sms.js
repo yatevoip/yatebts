@@ -1,13 +1,36 @@
+/**
+ * custom_sms.js
+ * This file is part of the Yate-BTS Project http://www.yatebts.com
+ *
+ * Copyright (C) 2015 Null Team
+ *
+ * This software is distributed under multiple licenses;
+ * see the COPYING file in the main directory for licensing
+ * information for this specific distribution.
+ *
+ * This use of this software may be subject to additional restrictions.
+ * See the LEGAL file in the main directory for details.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ */
+
+/*
+ * Custom SMS 
+ * To use it put in javascript.conf:
+ *
+ * [scripts]
+ * custom-sms=custom_sms.js
+ */
+
 function onControl(msg)
 {
-	Engine.debug(Engine.DebugInfo,"enter in onControl. Parameters received: called-> " + msg.called + " sms text -> " + msg.text + " sms rpdu -> "+ msg.rpdu );
-
 	if (!msg.called && (!msg.text || !msg.rpdu)) {
-		Engine.debug(Engine.DebugWarn, "ERROR: got chan.control with no caller or message. The SMS will not be send.");
-		return false;
+		msg.retValue("Got chan.control with no IMSI or Message. The SMS will not be sent.");
+		msg["operation-status"] = false;
+		return true;
 	}
-
-	Engine.debug(Engine.DebugInfo,"CREATE msg.execute with data from message to send the SMS to: "+ msg.called+ " and text "+ msg.text + " or RPDU: "+ msg.rpdu);
 
 	var m = new Message("msg.execute");
 	m.caller = "12345";
@@ -19,13 +42,9 @@ function onControl(msg)
 		m.rpdu = msg.rpdu;
 
 	m.callto = "ybts/IMSI"+msg.called;
-	if (m.dispatch()) { 
-		Engine.debug(Engine.DebugInfo, "msg.execute returned true");
-		return true;
-	}
-	Engine.debug(Engine.DebugInfo, "msg.execute returned false");
-	return false;
+	msg["operation-status"] = m.dispatch();
+	return true;
 }
 
 Engine.debugName("custom-sms");
-Message.install(onControl,"chan.control",80);
+Message.install(onControl,"chan.control",80,"component","custom-sms");
