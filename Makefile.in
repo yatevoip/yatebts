@@ -189,7 +189,7 @@ revision: check-topdir
 ybts.yate: ybts.cpp ybts.h
 ybts.yate: LOCALLIBS = -lyategsm
 
-@srcdir@/configure: @srcdir@/configure.in
+@srcdir@/configure: @srcdir@/configure.ac
 	cd @srcdir@ && autoconf
 
 $(MKDEPS): @srcdir@/configure
