@@ -4,7 +4,7 @@
 # override DESTDIR at install time to prefix the install directory
 DESTDIR :=
 
-SCRIPTS := nib.js welcome.js
+SCRIPTS := nib.js welcome.js custom_sms.js
 SOUNDS  := welcome.au echo.au
 
 prefix = @prefix@

@@ -129,6 +129,7 @@ Scripts and support executables that implement a GSM Network In a Box.
 %{_datadir}/yate/scripts/do_*
 %{_datadir}/yate/scripts/nib.js
 %{_datadir}/yate/scripts/welcome.js
+%{_datadir}/yate/scripts/custom_sms.js
 %{_datadir}/yate/sounds/*
 %{_datadir}/yate/nib_web/*
 /var/www/html/nib
