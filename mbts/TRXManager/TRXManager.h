@@ -152,9 +152,10 @@ class ARFCNManager {
 	/**
 		Tune to a given ARFCN.
 		@param wARFCN Target for tuning.
+		@param c0 True if we are C0
 		@return true on success.
 	*/
-	bool tune(int wARFCN);
+	bool tune(int wARFCN, bool c0 = false);
 
 	/**
 		Tune to a given ARFCN, but with rx and tx on the same (downlink) frequency.

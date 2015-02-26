@@ -377,8 +377,11 @@ int ::ARFCNManager::sendCommand(const char*command)
 
 
 
-bool ::ARFCNManager::tune(int wARFCN)
+bool ::ARFCNManager::tune(int wARFCN, bool c0)
 {
+	mARFCN=wARFCN;
+	if (!c0)
+		return true;
 	// convert ARFCN number to a frequency
 	unsigned rxFreq = uplinkFreqKHz(gBTS.band(),wARFCN);
 	unsigned txFreq = downlinkFreqKHz(gBTS.band(),wARFCN);
@@ -395,7 +398,6 @@ bool ::ARFCNManager::tune(int wARFCN)
 		return false;
 	}
 	// done
-	mARFCN=wARFCN;
 	return true;
 }
 
