@@ -395,11 +395,11 @@ public:
 	{ return m_socket.canSelect(); }
 
 protected:
-    bool send(const void* buf, unsigned int len);
-    inline bool send(const DataBlock& data)
-	{ return send(data.data(),data.length()); }
+    bool send(const void* buf, unsigned int len, bool ignoreError = false);
+    inline bool send(const DataBlock& data, bool ignoreError = false)
+	{ return send(data.data(),data.length(),ignoreError); }
     // Read socket data. Return 0: nothing read, >1: read data, negative: fatal error
-    int recv();
+    int recv(bool ignoreError = false);
     bool initTransport(bool stream, unsigned int buflen, bool reserveNull);
     void resetTransport();
     void alarmError(Socket& sock, const char* oper);
@@ -794,8 +794,15 @@ class YBTSCommand : public GenObject, public DebugEnabler
 {
 public:
     YBTSCommand();
-    bool send(const String& str);
-    bool recv(String& str);
+    bool send(const String& str, bool ignoreError = false);
+    bool recv(String& str, bool ignoreError = false);
+    bool sendRecv(String& str, bool ignoreError = false,
+	DebugEnabler* enabler = 0, int level = DebugAll);
+    inline bool sendRecv(const char* str, bool ignoreError = false,
+	DebugEnabler* enabler = 0, int level = DebugAll) {
+	    String tmp(str);
+	    return sendRecv(tmp,ignoreError,enabler,level);
+	}
     inline YBTSTransport& transport()
 	{ return m_transport; }
     bool start();
@@ -1728,6 +1735,8 @@ public:
 	{ return m_state >= WaitHandshake && m_peerPid; }
     inline void setPeerAlive()
 	{ m_peerAlive = true; }
+    inline bool stopping() const
+	{ return m_stopping; }
     void stopPeer();
     inline YBTSMedia* media()
 	{ return m_media; }
@@ -1957,6 +1966,7 @@ protected:
     unsigned int m_peerCheckIntervalMs;
     bool m_error;                        // Error flag, ignore restart
     bool m_stopped;                      // Stopped by command, don't restart 
+    bool m_stopping;                     // Stopping in progress
     bool m_stop;                         // Stop flag
     uint64_t m_stopTime;                 // Stop time
     bool m_restart;                      // Restart flag
@@ -2025,6 +2035,7 @@ static Mutex s_callStartMutex(false,"YBTSCallStart"); // Serialize channel creat
 static uint64_t s_startTime = 0;
 static uint64_t s_idleTime = Time::now();
 static String s_configFile;              // Configuration file path
+static String s_extraYateCmdLine;        // Extra params for cmd line
 static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
@@ -3321,13 +3332,16 @@ unsigned long YBTSDataConsumer::Consume(const DataBlock& data, unsigned long tSt
 //
 // YBTSTransport
 //
-bool YBTSTransport::send(const void* buf, unsigned int len)
+bool YBTSTransport::send(const void* buf, unsigned int len, bool ignoreError)
 {
     if (!len)
 	return true;
     int wr = m_writeSocket.send(buf,len);
     if (wr == (int)len)
 	return true;
+    // Don't warn if requested
+    if (ignoreError)
+	return false;
     if (wr >= 0)
 	Debug(m_enabler,DebugNote,"Sent %d/%u [%p]",wr,len,m_ptr);
     else if (!m_writeSocket.canRetry())
@@ -3336,7 +3350,7 @@ bool YBTSTransport::send(const void* buf, unsigned int len)
 }
 
 // Read socket data. Return 0: nothing read, >1: read data, negative: fatal error
-int YBTSTransport::recv()
+int YBTSTransport::recv(bool ignoreError)
 {
     if (!m_readSocket.valid())
 	return 0;
@@ -3345,7 +3359,8 @@ int YBTSTransport::recv()
 	if (!m_readSocket.select(&ok,0,0,Thread::idleUsec())) {
 	    if (m_readSocket.canRetry())
 		return 0;
-	    alarmError(m_readSocket,"select");
+	    if (!ignoreError)
+		alarmError(m_readSocket,"select");
 	    return -1;
 	}
 	if (!ok)
@@ -3368,7 +3383,8 @@ int YBTSTransport::recv()
     }
     if (m_readSocket.canRetry())
 	return 0;
-    alarmError(m_readSocket,"read");
+    if (!ignoreError)
+	alarmError(m_readSocket,"read");
     return -1;
 }
 
@@ -3754,15 +3770,62 @@ void YBTSLog::stop()
     Debug(this,DebugInfo,"Stopped [%p]",this);
 }
 
+// Utility used in YBTSLog::processLoop()
+// We need 3 NULL chars at end (2 required by relayOutput)
+// Remember: the transport put a NULL char after read data so the buffer ends with a NULL char
+// Return true if the buffer ends with 3 NULL bytes
+static inline bool parseRelayLog(bool alarm, const char* buffer, unsigned int len,
+    const char*& component, const char*& info)
+{
+    for (; *buffer; --len)
+	++buffer;
+    if (len < 2 || buffer[1] || buffer[2])
+	return false;
+    if (!alarm || len == 2)
+	return true;
+    len--;
+    if (!(len && buffer[4]))
+	return true;
+    component = (buffer += 3);
+    for (--len, ++buffer; *buffer && len; --len)
+	++buffer;
+    if (len)
+	info = buffer + 1;
+    return true;
+}
+
 // Read socket
 void YBTSLog::processLoop()
 {
+    bool warnInvalidMsg = true;
+    bool warnInvalidAlarm = true;
+#define BTS_LOG_OUTPUT 0xc0
+#define BTS_LOG_DEBUG 0x80
+#define BTS_LOG_ALARM 0x40
+#define BTS_RELAY_MASK (BTS_LOG_OUTPUT | BTS_LOG_DEBUG | BTS_LOG_ALARM)
     while (!Thread::check(false)) {
 	int rd = m_transport.recv();
-	if (rd > 2) {
-	    int level = -1;
-	    bool alrm = false;
-	    switch (m_transport.readBuf().at(0)) {
+	if (rd <= 2) {
+	    if (rd >= 0) {
+		if (!(rd || m_transport.canSelect()))
+		    Thread::idle();
+		continue;
+	    }
+	    // Socket non retryable error
+	    __plugin.restart();
+	    break;
+	}
+	uint8_t first = m_transport.readBuf().at(0);
+	// 0xff: syslog, output
+	if (first == 0xff)
+	    first = 0x3f;
+	uint8_t what = (first & BTS_RELAY_MASK);
+	bool alrm = false;
+	char* buffer = ((char*)m_transport.readBuf().data()) + 1;
+	int level = -1;
+	// Syslog ?
+	if ((what & BTS_RELAY_MASK) == 0) {
+	    switch (first & 0x3f) {
 		case LOG_EMERG:
 		    level = DebugGoOn;
 		    break;
@@ -3786,7 +3849,7 @@ void YBTSLog::processLoop()
 		    level = DebugAll;
 		    break;
 	    }
-	    String tmp((const char*)m_transport.readBuf().data(1));
+	    String tmp(buffer);
 	    // LF -> CR LF
 	    for (int i = 0; (i = tmp.find('\n',i + 1)) >= 0; ) {
 		if (tmp.at(i - 1) != '\r') {
@@ -3804,14 +3867,32 @@ void YBTSLog::processLoop()
 		Output("%s",tmp.c_str());
 	    continue;
 	}
-	if (!rd) {
-	    if (!m_transport.canSelect())
-		Thread::idle();
-	    continue;
+	// Relay debug
+	alrm = (what == BTS_LOG_ALARM);
+	const char* component = 0;
+	const char* info = 0;
+	if (parseRelayLog(alrm,buffer,rd - 1,component,info)) {
+	    if (alrm && !component && warnInvalidAlarm) {
+		warnInvalidAlarm = false;
+		Debug(this,DebugGoOn,"Log got message with empty alarm component");
+	    }
 	}
-	// Socket non retryable error
-	__plugin.restart();
-	break;
+	else {
+	    if (warnInvalidMsg) {
+		warnInvalidMsg = false;
+		Debug(this,DebugGoOn,"Log got message with missing NULLs at buffer end");
+	    }
+	    // Overwrite last chars in received buffer to leave space for relayOutput
+	    // NOTE: We assume the read buffer is large enough
+	    unsigned int rest = m_transport.readBuf().length() - (unsigned int)rd;
+	    if (rest >= 3)
+		buffer[rd] = buffer[rd + 1] = buffer[rd + 2] = 0;
+	    else
+		buffer[rd] = buffer[rd - 1] = buffer[rd - 2] = 0;
+	}
+	if (what != BTS_LOG_OUTPUT)
+	    level = first & 0x0f;
+	Debugger::relayOutput(level,buffer,component,info);
     }
 }
 
@@ -3847,19 +3928,20 @@ YBTSCommand::YBTSCommand()
     m_transport.setDebugPtr(this,this);
 }
 
-bool YBTSCommand::send(const String& str)
+bool YBTSCommand::send(const String& str, bool ignoreError)
 {
-    if (m_transport.send(str.c_str(),str.length()))
+    if (m_transport.send(str.c_str(),str.length(),ignoreError))
 	return true;
-    __plugin.restart();
+    if (!ignoreError)
+	__plugin.restart();
     return false;
 }
 
-bool YBTSCommand::recv(String& str)
+bool YBTSCommand::recv(String& str, bool ignoreError)
 {
     uint32_t t = Time::secNow() + 10;
     while (!Thread::check(false)) {
-	int rd = m_transport.recv();
+	int rd = m_transport.recv(ignoreError);
 	if (rd > 0) {
 	    str = (const char*)m_transport.readBuf().data();
 	    return true;
@@ -3871,10 +3953,34 @@ bool YBTSCommand::recv(String& str)
 		continue;
 	}
 	// Socket non retryable error
-	__plugin.restart();
+	if (!ignoreError)
+	    __plugin.restart();
 	return false;
     }
     return false;
+}
+
+bool YBTSCommand::sendRecv(String& str, bool ignoreError, DebugEnabler* enabler,
+    int level)
+{
+    if (!str)
+	return true;
+    String c(enabler ? str.c_str() : "");
+    bool ok = send(str,ignoreError) && recv(str,ignoreError);
+    if (!c)
+	return ok;
+    if (str[0] != '\r' && str[0] != '\n')
+	str = "\r\n" + str;
+    if (str.endsWith("\n"))
+	str = str.substr(0,str.length() - 1);
+    else if (str.endsWith("\r\n"))
+	str = str.substr(0,str.length() - 2);
+    if (ok)
+	Debug(enabler,level,
+	    "'%s' command result:\r\n-----%s\r\n-----",c.c_str(),str.safe());
+    else
+	Debug(enabler,DebugNote,"'%s' command failed",c.c_str());
+    return ok;
 }
 
 bool YBTSCommand::start()
@@ -7770,6 +7876,7 @@ YBTSDriver::YBTSDriver()
     m_peerCheckIntervalMs(YBTS_PEERCHECK_DEF),
     m_error(false),
     m_stopped(false),
+    m_stopping(false),
     m_stop(false),
     m_stopTime(0),
     m_restart(false),
@@ -8560,6 +8667,8 @@ bool YBTSDriver::radioReady()
 
 void YBTSDriver::restart(unsigned int restartMs, unsigned int stopIntervalMs)
 {
+    if (stopping())
+	return;
     Lock lck(m_stateMutex);
     if (m_error)
 	return;
@@ -8573,6 +8682,8 @@ void YBTSDriver::restart(unsigned int restartMs, unsigned int stopIntervalMs)
 
 void YBTSDriver::stopNoRestart()
 {
+    if (stopping())
+	return;
     Lock lck(m_stateMutex);
     setStop(0);
     m_restart = false;
@@ -9294,6 +9405,11 @@ void YBTSDriver::start()
 
 void YBTSDriver::stop()
 {
+    Lock lck(m_stateMutex);
+    if (m_stopping)
+	return;
+    m_stopping = true;
+    lck.drop();
     dropAllSS();
     lock();
     ListIterator iter(channels());
@@ -9312,7 +9428,9 @@ void YBTSDriver::stop()
     m_terminatedCalls.clear();
     m_haveCalls = false;
     unlock();
-    Lock lck(m_stateMutex);
+    if (state() != Idle)
+	m_command->sendRecv("shutdown",true,this);
+    lck.acquire(m_stateMutex);
     bool stopped = (state() != Idle);
     if (stopped)
 	Debug(this,DebugAll,"Stopping ...");
@@ -9338,14 +9456,16 @@ void YBTSDriver::stop()
 	m_error = true;
 	m_stopped = true;
     }
+    m_stopping = false;
 }
 
 bool YBTSDriver::startPeer()
 {
-    String cmd,arg,dir;
+    String cmd,arg,dir,yateCmdLine;
     getGlobalStr(cmd,s_peerCmd);
     getGlobalStr(arg,s_peerArg);
     getGlobalStr(dir,s_peerDir);
+    getGlobalStr(yateCmdLine,s_extraYateCmdLine);
     if (!cmd) {
 	Alarm(this,"config",DebugConf,"Empty peer path");
 	return false;
@@ -9400,6 +9520,11 @@ bool YBTSDriver::startPeer()
     // Let MBTS know where to pick the configuration file from
     if (s_configFile)
 	::setenv("MBTSConfigFile",s_configFile,true);
+    // Advertise libyate based apps we may start
+    String params;
+    Engine::buildCmdLine(params);
+    params.append(yateCmdLine," ");
+    ::setenv("LibYateCmdLine",params,true);
     // Change directory if asked
     if (dir && ::chdir(dir))
     ::fprintf(stderr,"Failed to change directory to '%s': %d %s\n",
@@ -10034,6 +10159,7 @@ void YBTSDriver::initialize()
     s_peerCmd = ybts.getValue("peer_cmd","${modulepath}/" BTS_DIR "/" BTS_CMD);
     s_peerArg = ybts.getValue("peer_arg");
     s_peerDir = ybts.getValue("peer_dir","${modulepath}/" BTS_DIR);
+    s_extraYateCmdLine = ybts.getValue(YSTRING("extra_yatepeer_args"));
     Engine::runParams().replaceParams(s_peerCmd);
     Engine::runParams().replaceParams(s_peerArg);
     Engine::runParams().replaceParams(s_peerDir);
@@ -10070,9 +10196,9 @@ void YBTSDriver::initialize()
 	installRelay(Start,"engine.start");
 	YBTSMsgHandler::install();
 	s_configFile = cfg;
-        m_logTrans = new YBTSLog("transceiver");
-        m_logBts = new YBTSLog(BTS_CMD);
-        m_command = new YBTSCommand;
+	m_logTrans = new YBTSLog("transceiver");
+	m_logBts = new YBTSLog(BTS_CMD);
+	m_command = new YBTSCommand;
 	m_media = new YBTSMedia;
 	m_signalling = new YBTSSignalling;
 	m_mm = new YBTSMM;
@@ -10325,9 +10451,7 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
     if (m_command && tmp.startSkip(BTS_CMD)) {
 	if (tmp.trimSpaces().null())
 	    return false;
-	if (!m_command->send(tmp))
-	    return false;
-	if (!m_command->recv(tmp))
+	if (!m_command->sendRecv(tmp))
 	    return false;
 	// LF -> CR LF
 	for (int i = 0; (i = tmp.find('\n',i + 1)) >= 0; ) {

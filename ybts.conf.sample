@@ -838,6 +838,11 @@ Radio.C0=
 ; Defaults to expansion of ${modulepath}/server/bts.
 ;peer_dir=${modulepath}/server/bts
 
+; extra_yatepeer_args: string: Extra parameters to be used to initialize libyate based
+;  applications we may start
+; E.g. extra_yatepeer_args=-Dm
+;extra_yatepeer_args=
+
 ; print_msg: boolean/string: Print sent/received messages to output if debug is at level 9.
 ; Allowed values are boolean values or string.
 ; If a non boolean value is specified, the message buffer will be shown.
