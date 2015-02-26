@@ -21,13 +21,13 @@
  * To use it put in javascript.conf:
  *
  * [scripts]
- * custom-sms=custom_sms.js
+ * custom_sms=custom_sms.js
  */
 
 function onControl(msg)
 {
 	if (!msg.called && (!msg.text || !msg.rpdu)) {
-		msg.retValue("Got chan.control with no IMSI or Message. The SMS will not be sent.");
+		msg.retValue("Missing IMSI or Message. The SMS will not be sent.");
 		msg["operation-status"] = false;
 		return true;
 	}
@@ -46,5 +46,5 @@ function onControl(msg)
 	return true;
 }
 
-Engine.debugName("custom-sms");
-Message.install(onControl,"chan.control",80,"component","custom-sms");
+Engine.debugName("custom_sms");
+Message.install(onControl,"chan.control",80,"component","custom_sms");
