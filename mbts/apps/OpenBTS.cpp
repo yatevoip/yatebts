@@ -151,19 +151,28 @@ void startTransceiver()
 		LOG(EMERG) << "cannot find " << transceiverPath;
 		_exit(1);
 	} else {
+		static int foo = 0;
 		int status;
 		waitpid(gTransceiverPid, &status,0);
+		if (!gTransceiverPid)
+			pthread_exit(&foo);
 		LOG(EMERG) << "Transceiver quit with status " << status << ". Exiting.";
 		// (paul) Added this for debugging without the radio
-		if (gConfig.getBool("TRX.IgnoreDeath")) {
-			static int foo = 0;
+		if (gConfig.getBool("TRX.IgnoreDeath"))
 			pthread_exit(&foo);
-		}
 		exit(2);
 	}
 }
 
-
+static void killTransceiver()
+{
+	pid_t tmp = gTransceiverPid;
+	gTransceiverPid = 0;
+	if (!tmp)
+		return;
+	gLogConn.write(LOG_DEBUG,"Killing transceiver");
+	kill(tmp,SIGKILL);
+}
 
 
 void createStats()
@@ -546,6 +555,8 @@ int main(int argc, char *argv[])
 			if (res < 0)
 				break;
 		}
+		killTransceiver();
+		gLogConn.write("MBTS exiting");
 		return 0;
 	}
 
@@ -557,7 +568,7 @@ int main(int argc, char *argv[])
 		gReports.incr("OpenBTS.Exit.Error.ConfigurationParamterNotFound");
 	}
 
-	//if (gTransceiverPid) kill(gTransceiverPid, SIGKILL);
+	killTransceiver();
 
 }
 
