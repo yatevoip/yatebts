@@ -109,7 +109,7 @@ function send_message_to_yate()
 	$response = $socket->command($command, 'quit');
 
 	if (preg_match("/Failed to load script from file 'custom_sms.js'/i", $response))
-		return send_sms("Failed to load script from file 'custom_sms.js'. Please verify that javascript.conf has section [scripts] custom_sms=custom_sms.js and then restart YateBTS."); 
+		return send_sms("Failed to load script from file 'custom_sms.js'. Please check logs."); 
 
 	$command = "control custom_sms called=".$called;
 	$type_sms = getparam("sms_type");
@@ -134,7 +134,7 @@ function send_message_to_yate()
 			$note = "SMS was not sent.";
 			break;
 		case "OK":
-			$note = "SMS was sent.";
+			$note =  "SMS was sent.";
 			break;
 	}
 	
