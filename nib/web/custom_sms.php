@@ -1,6 +1,6 @@
 <?php
 /**
- * custom-sms.php
+ * custom_sms.php
  * This file is part of the Yate-BTS Project http://www.yatebts.com
  *
  * Copyright (C) 2015 Null Team
@@ -88,21 +88,30 @@ function send_message_to_yate()
 	if (preg_match("/=/", $text))
 		return send_sms("The Message cannot contain '='.");
 
-	//test if called is online 
-	$command = "nib registered ". $called;
-	$marker_end = 'null';
+
 	$socket = new SocketConn($default_ip, $default_port);
 	if (strlen($socket->error))
 		return send_sms($socket->error);
 	
+
+	$response = $socket->command("debug off", "quit");
+	$response = $socket->command("sniffer off", "quit");
+	
+	//test if called is online 
+	$command = "nib registered ". $called;
 	$response = $socket->command($command, "quit");
 	
 	if (!preg_match("/".$called ." is registered./i", $response)) {
 		$socket->close();
 		return send_sms(null, "The subscriber ". $params["called"]." is not online, try later to send the SMS.");
 	}
+	$command = "javascript load custom_sms";
+	$response = $socket->command($command, 'quit');
 
-	$command = "control custom-sms called=".$called;
+	if (preg_match("/Failed to load script from file 'custom_sms.js'/i", $response))
+		return send_sms("Failed to load script from file 'custom_sms.js'. Please verify that javascript.conf has section [scripts] custom_sms=custom_sms.js and then restart YateBTS."); 
+
+	$command = "control custom_sms called=".$called;
 	$type_sms = getparam("sms_type");
 
 	if ($type_sms == "text") 
@@ -115,16 +124,19 @@ function send_message_to_yate()
 	$socket->close();
 	
 	if (preg_match("/Could not control /i", $response)) 
-		return send_sms("The script for sending custom SMS is not set in javascript.conf! Please set in section [scripts] custom-sms=custom_sms.js and then restart YateBTS.");
+		return send_sms("Internal error, script custom_sms.js didn't handle chan.control.");
 
-	if (preg_match("/Control 'custom-sms' Got chan.control /i", $response)) 
-		return send_sms("Got chan.control, but IMSI or Message are missing. The SMS will not be sent.");
-	
-	$note = "";
-	if (preg_match("/Control 'custom-sms' FAILED/i", $response))
-		$note = "SMS was not sent.";
-	elseif (preg_match("/Control 'custom-sms' OK/i", $response)) 
-		$note =  "SMS was sent.";
+	$note = "Problems encounted while sending custom SMS.";
+	if (preg_match("/Control 'custom_sms' ([[:print:]]+)\r/i", $response, $match)) 
+		$note = $match[1];
+	switch ($note) {
+		case "FAILED":
+			$note = "SMS was not sent.";
+			break;
+		case "OK":
+			$note = "SMS was sent.";
+			break;
+	}
 	
 	send_sms(null, $note);
 }
