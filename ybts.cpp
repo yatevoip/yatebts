@@ -3234,7 +3234,7 @@ static void encodeTagged(String& str, const XmlElement* xml)
 // Build a message
 bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg)
 {
-    uint8_t b[4] = {msg.primitive(),msg.info()};
+    uint8_t b[4] = {(uint8_t)msg.primitive(),msg.info()};
     if (msg.hasConnId()) {
 	uint8_t* p = b;
 	*(uint16_t*)(p + 2) = htons(msg.connId());
@@ -9712,7 +9712,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    Debug(this,DebugNote,"MT SMS: RP-User-Data too long %u (max 233)",l);
 	    break;
 	}
-	uint8_t rpUserHdr[2] = {l,0x04};
+	uint8_t rpUserHdr[2] = {(uint8_t)l,0x04};
 	rp.append(rpUserHdr,2);
 	rp += tpdu;
 	tmpRpdu.hexify(rp.data(),rp.length());
