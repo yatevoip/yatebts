@@ -67,6 +67,15 @@ bool resolveAddress(struct sockaddr_in *address, const char *host, unsigned shor
 	// FIXME -- Need to ignore leading/trailing spaces in hostname.
 	struct hostent *hp;
 	int h_errno_local;
+
+	in_addr_t a = inet_addr(host);
+	if (a != INADDR_NONE) {
+		address->sin_addr.s_addr = a;
+		address->sin_port = htons(port);
+		address->sin_family = AF_INET;
+		return true;
+	}
+	int addrType = 0, addrLen = 0;
 #ifdef HAVE_GETHOSTBYNAME2_R
 	struct hostent hostData;
 	char tmpBuffer[2048];
@@ -77,6 +86,11 @@ bool resolveAddress(struct sockaddr_in *address, const char *host, unsigned shor
 		CERR("WARNING -- gethostbyname2_r() failed for " << host << ", " << hstrerror(h_errno_local));
 		return false;
 	}
+	if (hp) {
+		addrType = hp->h_addrtype;
+		addrLen = hp->h_length;
+		a = *((in_addr_t*)(hp->h_addr_list[0]));
+	}
 #else
 	static Mutex sGethostbynameMutex;
 	// gethostbyname() is NOT thread-safe, so we should use a mutex here.
@@ -86,19 +100,24 @@ bool resolveAddress(struct sockaddr_in *address, const char *host, unsigned shor
 	sGethostbynameMutex.lock();
 	hp = gethostbyname(host);
 	h_errno_local = h_errno;
+	if (hp) {
+		addrType = hp->h_addrtype;
+		addrLen = hp->h_length;
+		a = *((in_addr_t*)(hp->h_addr_list[0]));
+	}
 	sGethostbynameMutex.unlock();
 #endif
- 	if (hp==NULL) {
+	if (hp==NULL) {
 		CERR("WARNING -- gethostbyname() failed for " << host << ", " << hstrerror(h_errno_local));
 		return false;
 	}
-	if (hp->h_addrtype != AF_INET) {
+	if (addrType != AF_INET) {
 		CERR("WARNING -- gethostbyname() resolved " << host << " to something other then AF_INET");
- 		return false;
- 	}
-	address->sin_family = hp->h_addrtype;
-	assert(sizeof(address->sin_addr) == hp->h_length);
-	memcpy(&(address->sin_addr), hp->h_addr_list[0], hp->h_length);
+		return false;
+	}
+	address->sin_family = addrType;
+	assert(sizeof(address->sin_addr) == addrLen);
+	address->sin_addr.s_addr = a;
 	address->sin_port = htons(port);
 	return true;
 }
