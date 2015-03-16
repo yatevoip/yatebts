@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <signal.h>
+#include <iomanip>
 
 #include "Threads.h"
 #include "bladeRFDevice.h"
@@ -820,6 +821,71 @@ bool bladeRFDevice::runCustom(const std::string &command)
             LOG(ERR) << "Error setting RX gain1: " << bladerf_strerror(status);
         }
         writeLock.unlock();
+    }
+    else if (command.substr(0,8) == "tx gain1") {
+        int gain = -1;
+        if (::sscanf(command.c_str(),"%*s %*s %d",&gain) != 1)
+            return false;
+        if (BLADERF_TXVGA1_GAIN_MIN > gain || gain > BLADERF_TXVGA1_GAIN_MAX)
+            return false;
+        writeLock.lock();
+        int status = bladerf_set_txvga1(bdev, gain);
+        if (status < 0) {
+            LOG(ERR) << "Error setting TX gain1: " << bladerf_strerror(status);
+        }
+        writeLock.unlock();
+    }
+    else if (command.substr(0,8) == "tx gain2") {
+        int gain = -1;
+        if (::sscanf(command.c_str(),"%*s %*s %d",&gain) != 1)
+            return false;
+        if (BLADERF_TXVGA2_GAIN_MIN > gain || gain > BLADERF_TXVGA2_GAIN_MAX)
+            return false;
+        writeLock.lock();
+        int status = bladerf_set_txvga2(bdev, gain);
+        if (status < 0) {
+            LOG(ERR) << "Error setting TX gain2: " << bladerf_strerror(status);
+        }
+        writeLock.unlock();
+    }
+    else if (command == "gpio read") {
+	uint32_t val = 0;
+	int status = bladerf_config_gpio_read(bdev,&val);
+	if (status >= 0) {
+	    LOG(NOTICE) << "Config GPIO = 0x" << hex << std::setw(8) << std::setfill('0') << val;
+	}
+	else {
+            LOG(ERR) << "Error reading config GPIO: " << bladerf_strerror(status);
+	}
+    }
+    else if (command.substr(0,8) == "lms read") {
+	int reg = -1;
+        if (::sscanf(command.c_str(),"%*s %*s %i",&reg) != 1)
+            return false;
+	if (reg < 0 || reg > 255)
+	    return false;
+	uint8_t val = 0;
+	int status = bladerf_lms_read(bdev,reg,&val);
+	if (status >= 0) {
+	    LOG(NOTICE) << "LMS register 0x" << hex << std::setw(2) << std::setfill('0') << reg
+		<< " = 0x" << hex << std::setw(2) << std::setfill('0') << (int)val;
+	}
+	else {
+            LOG(ERR) << "Error reading LMS register " << hex << std::setw(2) << std::setfill('0')
+		<< reg << ": " << bladerf_strerror(status);
+	}
+    }
+    else if (command.substr(0,9) == "lms write") {
+	int reg = -1;
+	int val = -1;
+        if (::sscanf(command.c_str(),"%*s %*s %i %i",&reg,&val) != 2)
+            return false;
+	if (reg < 0 || reg > 255 || val < 0 || val > 255)
+	    return false;
+	int status = bladerf_lms_write(bdev,reg,val);
+	if (status < 0) {
+            LOG(ERR) << "Error writing " << val << " to LMS register " << reg << ": " << bladerf_strerror(status);
+	}
     }
     else if (command == "rx show on")
         rxShowInfo = -1;
