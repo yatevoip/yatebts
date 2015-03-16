@@ -85,6 +85,9 @@ bladeRFDevice::bladeRFDevice(int oversampling, bool skipRx)
 
 bool bladeRFDevice::open(const std::string &args, bool)
 {
+    // Global libbladeRF log level, order is reversed so 0 = silent, 6 = verbose
+    bladerf_log_set_verbosity((bladerf_log_level)(BLADERF_LOG_LEVEL_SILENT - gConfig.getNum("TRX.BladeRF.Debug")));
+
     ScopedLock myLock(writeLock);
 
     struct bladerf_version ver;
@@ -916,6 +919,17 @@ void RadioDevice::staticInit()
 	"-" STRING(MAX_TX_DC_OFFSET) ":" STRING(MAX_TX_DC_OFFSET),
 	true,
 	"Correction DC offset for TX DAC component Q."
+    );
+    map[tmp->getName()] = *tmp;
+    delete tmp;
+
+    tmp = new ConfigurationKey("TRX.BladeRF.Debug","4",
+	"",
+	ConfigurationKey::DEVELOPER,
+	ConfigurationKey::VALRANGE,
+	"0:6",
+	true,
+	"Logging level for libbladeRF, 0=silent, 6=verbose."
     );
     map[tmp->getName()] = *tmp;
     delete tmp;
