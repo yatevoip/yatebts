@@ -81,12 +81,12 @@ LlcMsg *LlcFrame::switchFrame()
 			//return result;
 			}
 		case LLCFormat::ISack:
-			LLCDEBUG("LLC ISack frame");
+			SGSNLOGF(DEBUG,GPRS_MSG,"LLC","LLC ISack frame");
 			return new LlcFrameSack(*this);
 		case LLCFormat::I:
 			return new LlcFrameI(*this);
 		case LLCFormat::SSack:
-			LLCDEBUG("LLC SSack frame");
+			SGSNLOGF(DEBUG,GPRS_MSG,"LLC","LLC SSack frame");
 			return new LlcFrameSack(*this);
 		case LLCFormat::S:
 			return new LlcFrameS(*this);
@@ -105,14 +105,14 @@ void LlcFrame::llcProcess1(LlcEntity *lle)
 			break;
 			}
 		case LLCFormat::ISack:
-			LLCDEBUG("LLC ISack frame");
+			SGSNLOGF(DEBUG,GPRS_MSG,"LLC","LLC ISack frame");
 			LlcFrameSack(*this).llcProcess(lle);
 			break;
 		case LLCFormat::I:
 			LlcFrameI(*this).llcProcess(lle);
 			break;
 		case LLCFormat::SSack:
-			LLCDEBUG("LLC SSack frame");
+			SGSNLOGF(DEBUG,GPRS_MSG,"LLC","LLC SSack frame");
 			LlcFrameSack(*this).llcProcess(lle);
 			break;
 		case LLCFormat::S:
@@ -155,10 +155,10 @@ static void handleXid(LlcEntity *lle, ByteVector &xids)
 			if (xidlen <= 4) {
 				value = xids.getField2(n,0,8*xidlen);
 				uframe.appendXidItem(xidtype, xidlen,value);
-				LLCWARN("LLC XID"<<LOGVAR(xidtype)<<LOGVAR(xidlen)<<LOGVAR(value));
+				SGSNLOGF(INFO,GPRS_MSG,"LLC","LLC XID"<<LOGVAR(xidtype)<<LOGVAR(xidlen)<<LOGVAR(value));
 			} else {
 				// The only xid item with length > 4 is the L3 params, just hope we dont get those.
-				LLCWARN("LLC ignoring over-length XID parameter:"
+				SGSNLOGF(DEBUG,GPRS_ERR,"LLC","ignoring over-length XID parameter:"
 					<<LOGVAR(xidtype)<<LOGVAR(xidlen)
 					<<LOGVAR2("bytes",xids.segment(n,xidlen).hexstr()));
 			}
@@ -166,10 +166,10 @@ static void handleXid(LlcEntity *lle, ByteVector &xids)
 		}
 	}
 	// Send it.
-	LLCWARN("LLC Sending XID command:"<<uframe.hexstr());
+	SGSNLOGF(INFO,GPRS_MSG|GPRS_OK,"LLC","Sending XID command:"<<uframe.hexstr());
 	lle->lleWriteRaw(uframe,"xid cmd");
   } catch (ByteVectorError) {
-	LLCWARN("over-run error parsing LLC XID command");
+	SGSNLOGF(WARNING,GPRS_ERR,"LLC","over-run error parsing LLC XID command");
   }
 }
 
@@ -185,7 +185,7 @@ void LlcFrameU::llcProcess(LlcEntity *lle)
 	if (cmd == UCMD_XID) {
 		ByteVector xids = ByteVector(*this);
 		xids.trimLeft(2);	// Chop off the U frame header.
-		LLCWARN("LLC XID frame received"<<LOGVAR2("size",xids.size())<<LOGVAR2("llcsapi",lle->getLlcSapi()));
+		SGSNLOGF(INFO,GPRS_MSG|GPRS_OK,"LLC","XID frame received"<<LOGVAR2("size",xids.size())<<LOGVAR2("llcsapi",lle->getLlcSapi()));
 		handleXid(lle,xids);
 	} else {
 		const char *cmdname = "?";
@@ -198,7 +198,7 @@ void LlcFrameU::llcProcess(LlcEntity *lle)
 		case UCMD_FRMR: cmdname = "FRMR"; break;
 		case UCMD_NULL: cmdname = "null"; break;
 		}
-		LLCWARN("LLC U frame ignored"<<LOGVAR(cmdname)<<LOGVAR2("PF",getUPF())<<LOGVAR2("M",getUM())<<LOGVAR2("llcsapi",lle->getLlcSapi()));
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","LLC U frame ignored"<<LOGVAR(cmdname)<<LOGVAR2("PF",getUPF())<<LOGVAR2("M",getUM())<<LOGVAR2("llcsapi",lle->getLlcSapi()));
 	}
 }
 
@@ -207,7 +207,7 @@ void LlcFrameU::llcProcess(LlcEntity *lle)
 void LlcFrameUI::llcProcess(LlcEntity *lle)
 {
 	// This is a data frame.
-	LLCDEBUG("UI::llcProcess");
+	SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"LLC","UI::llcProcess");
 	ByteVector payload(tail(UIHeaderLength));
 	lle->lleUplinkData(payload);
 }
@@ -249,7 +249,7 @@ void LlcEngine::llcWriteHighSide(ByteVector &sdu,int nsapi)
 #if SNDCP_IN_PDP
 	PdpContext *pdp = mLleGmm.mSI->getPdp(nsapi);
 	if (!pdp) {
-		LLCWARN("llcWriteHighSide to unconfigured nsapi:"<<nsapi);	// cant happen?
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","llcWriteHighSide to unconfigured nsapi:"<<nsapi);	// cant happen?
 		return;
 	}
 	Sndcp *sndcp = pdp->mSndcp1;
@@ -268,10 +268,10 @@ void LlcEngine::llcWriteLowSide(ByteVector &bv,SgsnInfo *si)
 	if (bv.size() < 2) { return; }
 	LlcFrame lframe(bv);
 	int llcsapi = lframe.getSapi();
-	LLCDEBUG("llcWriteLowSide sapi="<<llcsapi);
+	SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"LLC","llcWriteLowSide sapi="<<llcsapi);
 	LlcEntity *lle = getLlcEntity(llcsapi);
 	if (lle == 0) {
-		LLCWARN("LLC received PDU with unexpected SAPI="<<llcsapi);
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","LLC received PDU with unexpected SAPI="<<llcsapi);
 		// This is an "invalid frame" and shall be ignored without indication.
 		return;
 	}
@@ -329,7 +329,7 @@ void LlcEntity::lleWriteHighSide(LlcDlFrame &frame, bool isCmd, const char *desc
 
 void LlcEntityGmm::lleUplinkData(ByteVector &payload)
 {
-	LLCDEBUG("LlcEntityGmm lleUplinkData");
+	SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"LLC","LlcEntityGmm lleUplinkData");
 	// This is an l3 message.
 	handleL3Msg(mSI,payload);
 }
@@ -354,7 +354,7 @@ void LlcEntityUserData::lleUplinkData(ByteVector &payload)
 			// to the subscription dose (sic) not exist in the SGSN e.g.
 			// because of a SGSN restart."
 			// Update: This does not appear to do the job on the Blackberry.
-			LLCINFO("received packet to detached MS on nsapi="<<nsapi<<" Sending Implicitly_Detached message "<<mSI);
+			SGSNLOGF(INFO,GPRS_MSG|GPRS_OK,"LLC","received packet to detached MS on nsapi="<<nsapi<<" Sending Implicitly_Detached message "<<mSI);
 			sendImplicitlyDetached(mSI);
 		} else {
 			// This is a serious problem.
@@ -363,7 +363,7 @@ void LlcEntityUserData::lleUplinkData(ByteVector &payload)
 			// Not sure what to do.
 			//Tried this anyway, did nothing:
 			//		sendPdpDeactivate(getSgsnInfo(),nsapi,SmCause::Unknown_PDP_context);
-			LLCWARN("received packet to unconfigured nsapi="<<nsapi<<" "<<mSI);
+			SGSNLOGF(WARNING,GPRS_ERR,"LLC","received packet to unconfigured nsapi="<<nsapi<<" "<<mSI);
 		}
 
 		return;	// Thats the end of that.
@@ -519,7 +519,7 @@ void Sndcp::flush(unsigned num, bool force)
 			totsize += size;
 		}
 		if (i == sp->mSegCount) {	// success.
-			SNDCPDEBUG("flush"<<LOGVAR(num)<<LOGVAR(sp->mSegCount));
+			SGSNLOGF(INFO,GPRS_MSG|GPRS_OK,"SNDCP","flush"<<LOGVAR(num)<<LOGVAR(sp->mSegCount));
 			ByteVector result(totsize);
 			result.setAppendP(0);
 			for (i = 0; i < sp->mSegCount; i++) {
@@ -534,12 +534,12 @@ void Sndcp::flush(unsigned num, bool force)
 			//pdp->pdpWriteLowSide(result);
 			return;
 		}
-		SNDCPDEBUG("flush still pending"<<LOGVAR(num)<<LOGVAR(sp->mSegCount));
+		SGSNLOGF(INFO,GPRS_MSG|GPRS_LOOP,"SNDCP","flush still pending"<<LOGVAR(num)<<LOGVAR(sp->mSegCount));
 	} else {
 		// Anything there at all?  This is just for a message.
 		for (i = 0; i < 16; i++) {
 			if (sp->segs[i].size()) {
-				SNDCPDEBUG("flush still pending"<<LOGVAR(num)<<LOGVAR2("segment",i));
+				SGSNLOGF(INFO,GPRS_MSG|GPRS_LOOP,"SNDCP","flush still pending"<<LOGVAR(num)<<LOGVAR2("segment",i));
 				break;
 			}
 		}
@@ -569,7 +569,7 @@ void Sndcp::sndcpWriteLowSide(SndcpFrame &frame)
 	unsigned segnum = frame.getSegmentNumber();
 	unsigned pdunum = frame.getPduNumber();
 	ByteVector payload(frame.getPayload());
-	SNDCPDEBUG("uplink packet"<<LOGVAR(pdunum)<<LOGVAR(segnum)<<LOGVAR2("size",payload.size())
+	SGSNLOGF(DEBUG,GPRS_MSG,"SNDCP","uplink packet"<<LOGVAR(pdunum)<<LOGVAR(segnum)<<LOGVAR2("size",payload.size())
 		<<" header="<<frame.head(MIN(20,frame.size())));
 
 	int diff = diffSNS(pdunum,mRecvNPdu);
@@ -584,14 +584,14 @@ void Sndcp::sndcpWriteLowSide(SndcpFrame &frame)
 		}
 	} else if (-diff >= (int)sMemory) {
 		// Too old to be in our window.
-		LLCWARN("SNDCP packet too old, discarded (number="<<pdunum<<",current="<<mRecvNPdu<<")");
+		SGSNLOGF(INFO,GPRS_MSG|GPRS_LOOP,"SNDCP","SNDCP packet too old, discarded (number="<<pdunum<<",current="<<mRecvNPdu<<")");
 		return;	// discard incoming frame.
 	}
 
 	// Save the pdu.
 	if (frame.getF()) {	// first segment; flag marks that PCOMP/DCOMP byte is present.
 		if (segnum != 0) {
-			LOG(ERR) <<"invalid Sndcp pdu with F and seg number != 0";
+			SGSNLOGF(ERR,GPRS_ERR,"SNDCP","invalid Sndcp pdu with F and seg number != 0");
 			segnum = 0;	// Lets pretend.
 		}
 	}

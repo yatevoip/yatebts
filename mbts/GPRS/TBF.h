@@ -292,21 +292,21 @@ class MsgTransaction
 		devassert(mtExpectedAckBSN[mttype].valid());
 		mtMsgAckBits.clearBit(mttype);
 		mtMsgExpectedBits.setBit(mttype);
-		GPRSLOG(4) << "mtMsgSetWait"<<LOGVAR(mttype)<<LOGVAR(mtMsgExpectedBits);
+		GPRSLOG(DEBUG,GPRS_CHECK_OK|GPRS_MSG) << "mtMsgSetWait"<<LOGVAR(mttype)<<LOGVAR(mtMsgExpectedBits);
 	}
 	void text(std::ostream &os) const;
 
 	// Set the BSN when the TBF is expecting a message, but note that the
 	// MS may send uplink data blocks before this time.
 	void mtSetAckExpected(RLCBSN_t when, MsgTransactionType mttype) {
-		GPRSLOG(4) << "mtSetAckExpected"<<LOGVAR(when)<<LOGVAR(mttype);
+		GPRSLOG(DEBUG,GPRS_CHECK_OK|GPRS_MSG) << "mtSetAckExpected"<<LOGVAR(when)<<LOGVAR(mttype);
 		mtExpectedAckBSN[mttype] = when;
 		mtMsgSetWait(mttype);
 	}
 
 	// Called to indicate that a message for this TBF arrived.
 	void mtRecvAck(MsgTransactionType mttype) {
-		GPRSLOG(4) << "mtRecvAck"<<LOGVAR(mttype)<<LOGVAR(mtMsgExpectedBits);
+		GPRSLOG(DEBUG,GPRS_CHECK_OK|GPRS_MSG) << "mtRecvAck"<<LOGVAR(mttype)<<LOGVAR(mtMsgExpectedBits);
 		mtMsgAckBits.setBit(mttype);
 		mtMsgExpectedBits.clearBit(mttype);
 		mtN3105 = 0;	// Not all of these are for mtN3105, but doesnt hurt to always reset it.
@@ -314,7 +314,7 @@ class MsgTransaction
 
 	bool mtGotAck(MsgTransactionType mttype, bool clear) {
 		bool result = mtMsgAckBits.isSet(mttype);
-		GPRSLOG(4) << "mtGotAck "<<(result?"yes":"no")<<LOGVAR(mttype)<<LOGVAR(mtMsgExpectedBits);
+		GPRSLOG(DEBUG,GPRS_CHECK_OK|GPRS_MSG) << "mtGotAck "<<(result?"yes":"no")<<LOGVAR(mttype)<<LOGVAR(mtMsgExpectedBits);
 		if (result && clear) {
 			mtMsgExpectedBits.clearBit(mttype);
 			mtExpectedAckBSN[mttype] = -1;

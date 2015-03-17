@@ -218,13 +218,13 @@ EXPORT int runcmd(const char *path, ...)
 		path++;
 		dopipe = 1;
 		if (pipe(pipefd) == -1) {
-			MGERROR("could not create pipe: %s",strerror(errno));
+			MGDEBUG(ERR,"could not create pipe: %s",strerror(errno));
 			return -1;
 		}
 	}
 	int pid = fork();
 	if (pid == -1) {
-		MGERROR("could not fork: %s",strerror(errno));
+		MGDEBUG(ERR,"could not fork: %s",strerror(errno));
 		return -1;
 	}
 	if (pid) {	// This is the parent; wait for child to exit, then return childs status.
@@ -241,7 +241,7 @@ EXPORT int runcmd(const char *path, ...)
 			}
 			usleep(250*1000);
 		}
-		MGERROR("sub-process did not complete in 5 seconds: %s",path);
+		MGDEBUG(ERR,"sub-process did not complete in 5 seconds: %s",path);
 		return -1;
 	}
 	// This is the child process.
@@ -275,7 +275,7 @@ EXPORT int runcmd(const char *path, ...)
 			*bp = 0;
 		}
 		buf[200] = 0;
-		MGINFO("%s",buf);
+		MGDEBUG(INFO,"%s",buf);
 	}
 
 	// exec them.
@@ -298,7 +298,7 @@ EXPORT int ip_tun_open(const char *tname, const char *addrstr) // int32_t ipaddr
 		sleep(2);
 	}
 	if ((fd = open(clonedev,O_RDWR)) < 0) {
-		MGERROR("error: Could not open: %s\n",clonedev);
+		MGDEBUG(ERR,"error: Could not open: %s\n",clonedev);
 		return -1;
 	}
 
@@ -308,11 +308,11 @@ EXPORT int ip_tun_open(const char *tname, const char *addrstr) // int32_t ipaddr
 	strcpy(ifr.ifr_name,tname);
 	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;	// Disable packet info.
 	if (ioctl(fd,TUNSETIFF,&ifr) < 0) {
-		MGERROR("could not create tunnel %s: ioctl error: %s\n",tname,strerror(errno));
+		MGDEBUG(ERR,"could not create tunnel %s: ioctl error: %s\n",tname,strerror(errno));
 		return -1;
 	}
 	if (ioctl(fd,TUNSETPERSIST,1) < 0) {
-		MGERROR("could not setpersist tunnel %s: ioctl error: %s\n",tname,strerror(errno));
+		MGDEBUG(ERR,"could not setpersist tunnel %s: ioctl error: %s\n",tname,strerror(errno));
 	}
 
 	// This (and only this) magic works:
@@ -360,7 +360,7 @@ static int setprocoption(const char *procfn)
 	int fd;
 	const char *str = "1\n";
 	fd = open(procfn,1);
-	if (fd < 0) { MGERROR("Can not open file %s error: %s\n",procfn,strerror(errno)); return 2;}
+	if (fd < 0) { MGDEBUG(ERR,"Can not open file %s error: %s\n",procfn,strerror(errno)); return 2;}
 	int __attribute__((unused)) foobar=write(fd,str,2);	// the foobar shuts up g++
 	close(fd);
 	return 0;
@@ -379,7 +379,7 @@ static int ip_getDnsDefault(uint32_t *dns)
 	int nfnd = 0;
 	FILE *pf = fopen("/etc/resolv.conf","r");
 	if (pf == NULL) {
-		MGERROR("GGSN: DNS servers: error: could not open /etc/resolv.conf\n");
+		MGDEBUG(ERR,"GGSN: DNS servers: error: could not open /etc/resolv.conf\n");
 		return 0;
 	}
 	char buf[300];
@@ -392,7 +392,7 @@ static int ip_getDnsDefault(uint32_t *dns)
 			while (*cp && isspace(*cp)) cp++;
 			uint32_t addr;
 			if (0 == inet_aton(cp,(struct in_addr*) &addr)) {
-				MGERROR("GGSN: Error: Invalid IP address in /etc/resolv.conf at: %s\n",buf);
+				MGDEBUG(ERR,"GGSN: Error: Invalid IP address in /etc/resolv.conf at: %s\n",buf);
 				continue;
 			}
 			dns[nfnd++] = addr;
@@ -414,13 +414,13 @@ static int ip_getDnsOption(uint32_t *dns)
 	char *copy = strcpy((char*)alloca(len+1),sdns.c_str());	// make a copy of the option string.
 	// Insist on dotted notation to catch stupid errors like setting it to '1' by mistake
 	if (!strchr(copy,'.')) {
-		MGWARN("Invalid GGSN.DNS option ignored: '%s'",copy);
+		MGDEBUG(WARNING,"Invalid GGSN.DNS option ignored: '%s'",copy);
 		return 0;
 	}
 	char *argv[3];
 	int argc = cstrSplit(copy,argv,3);						// split into argv
 	if (argc > 2) {
-		MGWARN("GGSN: invalid GGSN.DNS option, more than 2 servers specified: '%s'\n",sdns.c_str());
+		MGDEBUG(WARNING,"GGSN: invalid GGSN.DNS option, more than 2 servers specified: '%s'\n",sdns.c_str());
 		// But go ahead and use the first two.
 		argc = 2;
 	}
@@ -428,7 +428,7 @@ static int ip_getDnsOption(uint32_t *dns)
 	for (int i = 0; i < argc; i++) {
 		if (0 == inet_aton(argv[i],(struct in_addr*) &dns[i])) {	// is it an invalid IP address?
 			// failed.
-			MGERROR("GGSN: unrecognized GGSN.DNS option: %s\n",sdns.c_str());
+			MGDEBUG(WARNING,"GGSN: unrecognized GGSN.DNS option: %s\n",sdns.c_str());
 			return i;
 		}
 	}
@@ -450,10 +450,10 @@ EXPORT int ip_finddns(uint32_t *dns)
 	static uint32_t prevdns[2] = {0,0};
 	if (dns[0] == 0) {
 		// This is a disaster.
-		MGWARN("GGSN: No DNS servers found; GPRS service will not work");
+		MGDEBUG(WARNING,"GGSN: No DNS servers found; GPRS service will not work");
 	} else if (dns[0] != prevdns[0] || dns[1] != prevdns[1]) {
 		char bf[2][30];
-		MGINFO("GGSN: DNS servers: %s %s",ip_ntoa(dns[0],bf[0]),ip_ntoa(dns[1],bf[1]));
+		MGDEBUG(WARNING,"GGSN: DNS servers: %s %s",ip_ntoa(dns[0],bf[0]),ip_ntoa(dns[1],bf[1]));
 		prevdns[0] = dns[0];
 		prevdns[1] = dns[1];
 	}

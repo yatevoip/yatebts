@@ -283,25 +283,25 @@ unsigned char *miniggsn_rcv_npdu(int *plen, uint32_t *dstaddr)
 			//MGDEBUG(4,"O_NONBLOCK = %d",O_NONBLOCK & flags);
 			flags &= ~O_NONBLOCK;	// Want Blocking!
 			int fcntlstat = fcntl(tun_fd,F_SETFL,flags);
-			MGWARN("ggsn: WARNING: Turning off tun_fd blocking flag, fcntl=%d",fcntlstat);
+			MGDEBUG(WARNING,"ggsn: WARNING: Turning off tun_fd blocking flag, fcntl=%d",fcntlstat);
 		}
 	}
 
 	// We can just read from the tunnel.
 	int ret = read(tun_fd,recvbuf,ggConfig.mgMaxPduSize);
 	if (ret < 0) {
-		MGERROR("ggsn: error: reading from tunnel: %s", strerror(errno));
+		MGDEBUG(ERR,"ggsn: error: reading from tunnel: %s", strerror(errno));
 		//*error = ret;
 		return NULL;
 	} else if (ret == 0) {
-		MGERROR("ggsn: error: zero bytes reading from tunnel: %s", strerror(errno));
+		MGDEBUG(ERR,"ggsn: error: zero bytes reading from tunnel: %s", strerror(errno));
 		//*error = ret;	// huh?
 		return NULL;
 	} else {
 		struct iphdr *iph = (struct iphdr*)recvbuf;
 		{
 			char infobuf[200];
-			MGINFO("ggsn: received %s at %s",packettoa(infobuf,recvbuf,ret), timestr().c_str());
+			MGDEBUG(INFO,"ggsn: received %s at %s",packettoa(infobuf,recvbuf,ret), timestr().c_str());
 			//MGLOGF("ggsn: received proto=%s %d byte npdu from %s for %s at %s",
 				//ip_proto_name(iph->protocol), ret,
 				//ip_ntoa(iph->saddr,nbuf),
@@ -345,7 +345,7 @@ static int mg_toss_dup_packet(mg_con_t*mgp,unsigned char *packet, int packetlen)
 			) {
 				const char *what = ggConfig.mgIpTossDup ? "discarding " : "";
 				char buf1[40],buf2[40];
-				MGINFO("ggsn: %sduplicate %d byte packet seq=%d frag=%d id=%d src=%s:%d dst=%s:%d",what,
+				MGDEBUG(INFO,"ggsn: %sduplicate %d byte packet seq=%d frag=%d id=%d src=%s:%d dst=%s:%d",what,
 					packetlen,tcph->seq,iph->frag_off,iph->id,
 					ip_ntoa(iph->saddr,buf1),tcph->source,
 					ip_ntoa(iph->daddr,buf2),tcph->dest);
@@ -377,7 +377,7 @@ void miniggsn_handle_read()
 	// We need to reassociate the packet with the PdpContext to which it belongs.
 	mg_con_t *mgp = mg_con_find_by_ip(dstaddr);
 	if (mgp == NULL || mgp->mg_pdp == NULL) {
-		MGERROR("ggsn: error: cannot find PDP context for incoming packet for IP dstaddr=%s",
+		MGDEBUG(ERR,"ggsn: error: cannot find PDP context for incoming packet for IP dstaddr=%s",
 			ip_ntoa(dstaddr,NULL));
 		return;	// -1;
 	}
@@ -401,14 +401,14 @@ int miniggsn_snd_npdu_by_mgc(mg_con_t *mgp,unsigned char *npdu, unsigned len)
     uint32_t packet_dest_ip_addr = ipheader->daddr;
 
 	char infobuf[200];
-	MGINFO("ggsn: writing %s at %s",packettoa(infobuf,npdu,len),timestr().c_str());
+	MGDEBUG(INFO,"ggsn: writing %s at %s",packettoa(infobuf,npdu,len),timestr().c_str());
 	//MGLOGF("ggsn: writing proto=%s %d byte npdu to %s from %s at %s",
 		//ip_proto_name(ipheader->protocol),
 		//len,ip_ntoa(packet_dest_ip_addr,NULL),
 		//ip_ntoa(packet_source_ip_addr,nbuf), timestr().c_str());
 
 #define MUST_HAVE(assertion) \
-    if (! (assertion)) { MGERROR("ggsn: Packet failed test, discarded: %s",#assertion); return -1; }
+    if (! (assertion)) { MGDEBUG(ERR,"ggsn: Packet failed test, discarded: %s",#assertion); return -1; }
 
     if (mg_debug_level > 2) ip_hdr_dump(npdu,"npdu");
     MUST_HAVE(ipheader->version == 4);	// 4 as in IPv4
@@ -451,7 +451,7 @@ int miniggsn_snd_npdu_by_mgc(mg_con_t *mgp,unsigned char *npdu, unsigned len)
 
 	int result = write(tun_fd,npdu,len);
 	if (result != (int) len) {
-		MGERROR("ggsn: error: write(tun_fd,%d) result=%d %s",len,result,strerror(errno));
+		MGDEBUG(ERR,"ggsn: error: write(tun_fd,%d) result=%d %s",len,result,strerror(errno));
 	}
     return 0;
 }
@@ -490,21 +490,21 @@ bool miniggsn_init()
 	if (logfile.length()) {
 		mg_log_fp = fopen(logfile.c_str(),"w");
 		if (mg_log_fp == 0) {
-			MGERROR("could not open %s log file:%s","GGSN.Logfile.Name",logfile.c_str());
+			MGDEBUG(ERR,"could not open %s log file:%s","GGSN.Logfile.Name",logfile.c_str());
 		}
 	}
 
 	// This is the first message in the newly opened file.
 	time(&gGgsnInitTime);
-	MGINFO("Initializing Mini GGSN %s",ctime(&gGgsnInitTime));	// ctime includes a newline.
+	MGDEBUG(INFO,"Initializing Mini GGSN %s",ctime(&gGgsnInitTime));	// ctime includes a newline.
 
 	if (mg_log_fp) {
 		mg_debug_level = 1;
-		MGINFO("GGSN logging to file %s",logfile.c_str());
+		MGDEBUG(INFO,"GGSN logging to file %s",logfile.c_str());
 	}
 
 	if (ggConfig.mgMaxConnections > 254) {
-		MGERROR("GGSN.MS.IP.MaxCount specifies too many connections (%d) specifed, using 254",
+		MGDEBUG(ERR,"GGSN.MS.IP.MaxCount specifies too many connections (%d) specifed, using 254",
 			ggConfig.mgMaxConnections);
 		ggConfig.mgMaxConnections = 254;
 	}
@@ -519,12 +519,12 @@ bool miniggsn_init()
 	const char *ip_base_str = gConfig.getStr("GGSN.MS.IP.Base").c_str();
 	uint32_t mgIpBasenl = inet_addr(ip_base_str);
 	if (mgIpBasenl == INADDR_NONE) {
-		MGERROR("miniggn: GGSN.MS.IP.Base address invalid:%s",ip_base_str);
+		MGDEBUG(ERR,"miniggn: GGSN.MS.IP.Base address invalid:%s",ip_base_str);
 		return false;
 	}
 
 	if ((ntohl(mgIpBasenl) & 0xff) == 0) {
-		MGERROR("miniggn: GGSN.MS.IP.Base address should not end in .0 but proceeding anyway: %s",ip_base_str);
+		MGDEBUG(ERR,"miniggn: GGSN.MS.IP.Base address should not end in .0 but proceeding anyway: %s",ip_base_str);
 	}
 
 	const char *route_str = 0;
@@ -538,16 +538,16 @@ bool miniggsn_init()
 	uint32_t route_basenl, route_masknl;
 	if (route_str && *route_str && *route_str != ' ') {
 		if (strlen(route_str) > strlen("aaa.bbb.ccc.ddd/yy") + 2) {	// add some slop.
-			MGWARN("miniggn: GGSN.MS.IP.Route address is too long:%s",route_str);
+			MGDEBUG(WARNING,"miniggn: GGSN.MS.IP.Route address is too long:%s",route_str);
 			// but use it anyway.
 		}
 
 		if (! ip_addr_crack(route_str,&route_basenl,&route_masknl) || route_basenl == INADDR_NONE) {
-			MGWARN("miniggsn: GGSN.MS.IP.Route is not a valid ip address: %s",route_str);
+			MGDEBUG(WARNING,"miniggsn: GGSN.MS.IP.Route is not a valid ip address: %s",route_str);
 			// but use it anyway.
 		}
 		if (route_masknl == 0) {
-			MGWARN("miniggsn: GGSN.MS.IP.Route is not a valid route, /mask part missing or invalid: %sn",
+			MGDEBUG(WARNING,"miniggsn: GGSN.MS.IP.Route is not a valid route, /mask part missing or invalid: %sn",
 				route_str);
 			// but use it anyway.
 		}
@@ -555,7 +555,7 @@ bool miniggsn_init()
 		// We would like to check that the base ip is within the ip route range,
 		// which is tricky, but check the most common case:
 		if ((route_basenl&route_masknl) != (mgIpBasenl&route_masknl)) {
-			MGWARN("miniggsn: GGSN.MS.IP.Base = %s ip address does not appear to be in range of GGSN.MS.IP.Route = %s",
+			MGDEBUG(WARNING,"miniggsn: GGSN.MS.IP.Base = %s ip address does not appear to be in range of GGSN.MS.IP.Route = %s",
 				ip_base_str, route_str);
 			// but use it anyway.
 		}
@@ -600,19 +600,19 @@ bool miniggsn_init()
 		}
 	}
 
-	MGINFO("GGSN Configuration:");
-		MGINFO("  GGSN.MS.IP.Base=%s", ip_ntoa(mgIpBasenl,NULL));
-		MGINFO("  GGSN.MS.IP.MaxCount=%d", ggConfig.mgMaxConnections);
-		MGINFO("  GGSN.MS.IP.Route=%s", route_str);
-		MGINFO("  GGSN.IP.MaxPacketSize=%d", ggConfig.mgMaxPduSize);
-		MGINFO("  GGSN.IP.ReuseTimeout=%d", ggConfig.mgIpTimeout);
-		MGINFO("  GGSN.Firewall.Enable=%d", firewall_enable);
-		MGINFO("  GGSN.IP.TossDuplicatePackets=%d", ggConfig.mgIpTossDup);
+	MGDEBUG(INFO,"GGSN Configuration:");
+		MGDEBUG(INFO,"  GGSN.MS.IP.Base=%s", ip_ntoa(mgIpBasenl,NULL));
+		MGDEBUG(INFO,"  GGSN.MS.IP.MaxCount=%d", ggConfig.mgMaxConnections);
+		MGDEBUG(INFO,"  GGSN.MS.IP.Route=%s", route_str);
+		MGDEBUG(INFO,"  GGSN.IP.MaxPacketSize=%d", ggConfig.mgMaxPduSize);
+		MGDEBUG(INFO,"  GGSN.IP.ReuseTimeout=%d", ggConfig.mgIpTimeout);
+		MGDEBUG(INFO,"  GGSN.Firewall.Enable=%d", firewall_enable);
+		MGDEBUG(INFO,"  GGSN.IP.TossDuplicatePackets=%d", ggConfig.mgIpTossDup);
 	if (firewall_enable) {
-		MGINFO("GGSN Firewall Rules:");
+		MGDEBUG(INFO,"GGSN Firewall Rules:");
 		for (GgsnFirewallRule *rp = gFirewallRules; rp; rp = rp->next) {
 			char buf1[40], buf2[40];
-			MGINFO("  block ip=%s mask=%s",ip_ntoa(rp->ipBasenl,buf1),ip_ntoa(rp->ipMasknl,buf2));
+			MGDEBUG(INFO,"  block ip=%s mask=%s",ip_ntoa(rp->ipBasenl,buf1),ip_ntoa(rp->ipMasknl,buf2));
 		}
 	}
 	uint32_t dns[2];	// We dont use the result, we just want to print out the DNS servers now.
@@ -624,7 +624,7 @@ bool miniggsn_init()
 		ip_init();
 		tun_fd = ip_tun_open(tun_if_name,route_str);
 		if (tun_fd < 0) {
-			MGERROR("ggsn: ERROR: Could not open tun device %s",tun_if_name);
+			MGDEBUG(ERR,"ggsn: ERROR: Could not open tun device %s",tun_if_name);
 			return false;
 		}
 	}
@@ -635,7 +635,7 @@ bool miniggsn_init()
 	if (mg_cons) free(mg_cons);
 	mg_cons = (mg_con_t*)calloc(ggConfig.mgMaxConnections,sizeof(mg_con_t));
 	if (mg_cons == 0) {
-		MGERROR("ggsn: ERROR: out of memory");
+		MGDEBUG(ERR,"ggsn: ERROR: out of memory");
 		return false;
 	}
 	//memset(mg_cons,0,sizeof(mg_cons));

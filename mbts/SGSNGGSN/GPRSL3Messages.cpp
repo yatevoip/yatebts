@@ -80,7 +80,7 @@ void L3GmmUlMsg::gmmParse(L3GmmFrame &frame)
 		size_t rp = frame.getBodyOffset();
 		gmmParseBody(frame,rp);
 	} catch (ByteVectorError) {
-		SGSNERROR("Premature end of GPRS GMM message type "<<MTI()<<" "<<mtname());
+		SGSNLOGF(ERR,GPRS_ERR,"SGSN","Premature end of GPRS GMM message type "<<MTI()<<" "<<mtname());
 		throw(SgsnError());
 	}
 }
@@ -104,7 +104,7 @@ void L3SmUlMsg::smParse(L3SmFrame &frame) {
 		size_t rp = frame.getBodyOffset();
 		smParseBody(frame,rp);
 	} catch (ByteVectorError) {
-		SGSNERROR("Premature end of GPRS SM message type "<<MTI()<<" "<<mtname());
+		SGSNLOGF(ERR,GPRS_ERR,"SGSN","Premature end of GPRS SM message type "<<MTI()<<" "<<mtname());
 		throw(SgsnError());
 	}
 }
@@ -460,7 +460,7 @@ void GMMAttach::gmParseIEs(L3GmmFrame &src, size_t &rp, const char *culprit)
 		int len = src.getByte(rp);
 		size_t nextrp = rp + len + 1;
 		if (nextrp > src.size()) {	// last one will have nextrp == src.size()
-			SGSNERROR("invalid message size in "<<culprit <<" bytes="<<src.hexstr());
+			SGSNLOGF(ERR,GPRS_ERR,"SNDCP","invalid message size in "<<culprit <<" bytes="<<src.hexstr());
 			return;
 		}
 		switch (iei) {
@@ -485,11 +485,19 @@ void GMMAttach::gmParseIEs(L3GmmFrame &src, size_t &rp, const char *culprit)
 		case 0x35:	// MBMS context status in RAUpdateRequest
 			src.skipLV(rp,0,16,"MBMS context status");
 		case 0x11:
-			src.skipLV(rp,3,3,"Mobile station classmark 2");
+		{
+			ByteVector ms2 = src.readLVasBV(rp);
+			SGSNLOGF(ERR,GPRS_ERR,"SGSN","MS Classmark 2 = " << ms2.str() << " hex " << ms2.hexstr());
+			//src.skipLV(rp,3,3,"Mobile station classmark 2");
 			break;
+		}
 		case 0x20:
-			src.skipLV(rp,0,32,"Mobile station classmark 3");
+		{
+			ByteVector ms2 = src.readLVasBV(rp);
+			SGSNLOGF(ERR,GPRS_ERR,"SGSN","MS Classmark 3 = " << ms2.str() << " hex " << ms2.hexstr());
+//			src.skipLV(rp,0,32,"Mobile station classmark 3");
 			break;
+		}
 		case 0x40:
 			src.skipLV(rp,3,127,"Supported codecs");
 			break;
@@ -579,20 +587,20 @@ void GmmMobileIdentityIE::parseLV(ByteVector &pp, size_t &rp)
 	mPresent = true;
 	mLen = pp.readByte(rp);	// length of value part, should be 5.
 	if ((mLen < 1) || (mLen > 9)) {
-		LLCWARN( "unexpected Mobile Identity length:"<<mLen);
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","unexpected Mobile Identity length:"<<mLen);
 	}
 	unsigned typeIdByte = pp.getByte(rp);
 	mTypeOfId = typeIdByte & 7;
 
 	if (isTmsi()) {	// It is a tmsi/ptmsi
 		if (mLen != 5) {	// one byte for type of identity and flags, 4 for tmsi.
-			LLCWARN("unexpected Mobile Identity TMSI length:"<<mLen);
+			SGSNLOGF(WARNING,GPRS_ERR,"LLC","unexpected Mobile Identity TMSI length:"<<mLen);
 		}
 		mTmsi = pp.getUInt32(rp+1);
 	} else {
 		// We dont care what it is, so just copy the entire thing.
 		if (mLen > 9) {
-			LLCWARN("invalid Mobile Identity length (must be <=9):"<<mLen);
+			SGSNLOGF(WARNING,GPRS_ERR,"LLC","invalid Mobile Identity length (must be <=9):"<<mLen);
 			mLen = 9;
 		}
 		//LLCDEBUG << "mobileid:"<<*(pp.begin()+rp)<<*(pp.begin()+rp+1)<<*(pp.begin()+rp+2)<<"\n";
@@ -1385,7 +1393,7 @@ void L3SmMsgActivatePdpContextRequest::smParseBody(L3SmFrame &src, size_t &rp)
 		int len = src.getByte(rp);
 		size_t nextrp = rp + len + 1;
 		if (nextrp > src.size()) {	// last one will have nextrp == src.size()
-			SGSNERROR("invalid message size in ActivatePdpContextRequest");
+			SGSNLOGF(ERR,GPRS_ERR,"SGSN","invalid message size in ActivatePdpContextRequest");
 			return;
 		}
 		switch (iei) {
@@ -1447,7 +1455,7 @@ void L3SmMsgDeactivatePdpContextRequest::smParseBody(L3SmFrame &src, size_t &rp)
 {
 	//size_t rp = parseSmHeader(src);
 	if (rp >= src.size()) {
-		SGSNERROR("DeactivatePdpContextRequest too short according to spec");
+		SGSNLOGF(ERR,GPRS_ERR,"SGSN","DeactivatePdpContextRequest too short according to spec");
 		mCause = 0;
 		return;	// But we dont care.
 	}

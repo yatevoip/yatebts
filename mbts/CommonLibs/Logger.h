@@ -69,6 +69,7 @@
 // Use like this: int descriptive_name; LOG(INFO)<<LOGVAR(descriptive_name);
 #define LOGVAR2(name,val) " " << name << "=" << (val)
 #define LOGVAR(var) (" " #var "=") << var
+#define LOGVALHEX(val) "0x" << hex << hex << ((unsigned)val) << dec
 #define LOGHEX(var) (" " #var "=0x") << hex << ((unsigned)var) << dec
 #define LOGHEX2(name,val) " " << name << "=0x" << hex << ((unsigned)(val)) << dec
 // These are kind of cheesy, but you can use for bitvector

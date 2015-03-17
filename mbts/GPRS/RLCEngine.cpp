@@ -317,7 +317,7 @@ void RLCDownEngine::engineRecvAckNack(const RLCMsgPacketDownlinkAckNack *msg)
 	//if (deltaSN(mSt.VA,mSt.TxQNum) >= 0)		// Did the MS ack all the blocks?
 	if (deltaEQ(mSt.VA,mSt.TxQNum)) {		// Did the MS ack all the blocks?
 		mAllAcked = true;
-		GPRSLOG(1) << getTBF() <<msg->str() <<engineDumpStr();
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) <<"MS acked all blocks" << getTBF() <<msg->str() <<engineDumpStr();
 		if (mDownFinished) {
 			mtFinishSuccess();	// All done; delete the tbf.
 		}
@@ -349,7 +349,7 @@ void RLCDownEngine::engineRecvAckNack(const RLCMsgPacketDownlinkAckNack *msg)
 
 	finished:
 	//GPRSLOG(1) << getTBF() <<msg->str() <<LOGVAR(mSt.TxQNum) <<LOGVAR(mSt.VA) <<LOGVAR(mSt.VS) << GPRSLOG(mResendSsn);
-	GPRSLOG(1) << getTBF() <<msg->str() <<engineDumpStr();
+	GPRSLOG(DEBUG,GPRS_MSG) << getTBF() <<msg->str() <<engineDumpStr();
 }
 
 // To debug everything in RLCUpEngine: GPRS.Debug = 1+2+64+2048+4096=6211
@@ -367,14 +367,14 @@ void RLCUpEngine::addUpPDU(BitVector& seg)
 	// Do not use str() here, because it tries to print the pdu contents,
 	// but the pdu is incomplete.
 	mUpPDU->append(seg);
-	GPRSLOG(4096) << "addUpPDU:after="<<mUpPDU->hexstr();
+	GPRSLOG(DEBUG,GPRS_MSG) << "addUpPDU:after="<<mUpPDU->hexstr();
 }
 
 
 // Send the completed PDU on its way.
 void RLCUpEngine::sendPDU()
 {
-	GPRSLOG(2048) <<"sendPDU"<<LOGVAR2("size",mUpPDU->size())<<LOGVAR2("pdu",mUpPDU->hexstr());
+	GPRSLOG(DEBUG,GPRS_MSG) <<"sendPDU"<<LOGVAR2("size",mUpPDU->size())<<LOGVAR2("pdu",mUpPDU->hexstr());
 	mtMS->msBytesUp += mUpPDU->size();
 #if INTERNAL_SGSN
 	mtMS->sgsnWriteLowSide(*mUpPDU,getTBF()->mtTlli);
@@ -426,7 +426,7 @@ void RLCUpEngine::engineUpAdvanceWindow()
 		mSt.VQ = addSN(mSt.VQ,1);
 
 		RLCUplinkDataSegment payload(block->getPayload());
-		GPRSLOG(64) << "RLCUpEngine payload=" << payload.hexstr() <<LOGVAR2("o",payload.isOwner());
+		GPRSLOG(DEBUG,GPRS_LOOP|GPRS_MSG) << "RLCUpEngine payload=" << payload.hexstr() <<LOGVAR2("o",payload.isOwner());
 
 		// Each block can have multiple LLC segments.  The max size is payloadSize.
 		// The block size is specified by the channel coding command, but I saw the Blackberry
@@ -435,7 +435,7 @@ void RLCUpEngine::engineUpAdvanceWindow()
 
 		if (block->mE) {
 			// Whole payload is appended to the current PDU.
-			GPRSLOG(64) << "RLCUpEngine E=1,"<<LOGVAR(payload.size());
+			GPRSLOG(DEBUG,GPRS_LOOP|GPRS_MSG) << "RLCUpEngine E=1,"<<LOGVAR(payload.size());
 			addUpPDU(payload);
 			if (block->mmac.isFinal()) { sendPDU(); }	// Annex B Example 6.
 		} else {
@@ -463,7 +463,7 @@ void RLCUpEngine::engineUpAdvanceWindow()
 			for (int i = 0; i < n; i++) {
 				unsigned lenbytes = segs[i].LI;
 				unsigned sizebytes = payload.size()/8;
-				GPRSLOG(64) << "RLCUpEngine seg:"<<LOGVAR(i)<<LOGVAR(n)<<LOGVAR(lenbytes)<<LOGVAR(sizebytes)<<LOGVAR(payload.size()) <<LOGVAR2("o",payload.isOwner());
+				GPRSLOG(DEBUG,GPRS_LOOP|GPRS_MSG) << "RLCUpEngine seg:"<<LOGVAR(i)<<LOGVAR(n)<<LOGVAR(lenbytes)<<LOGVAR(sizebytes)<<LOGVAR(payload.size()) <<LOGVAR2("o",payload.isOwner());
 				// Update: 44.060 B.6 says if the final block (indicated by CV==0) no need to
 				// add any length indicators to denote termination of PDU????
 				if (lenbytes == 0) {
@@ -471,15 +471,15 @@ void RLCUpEngine::engineUpAdvanceWindow()
 					// Special case: If length == 0 in the final block,
 					// it means the PDU was unfinished.
 					if (block->mmac.isFinal()) {
-						GPRSLOG(64) << "RLCUpEngine mIncompletePDU";
+						GPRSLOG(DEBUG,GPRS_LOOP|GPRS_MSG|GPRS_ERR) << "RLCUpEngine mIncompletePDU";
 						mIncompletePDU = true;	// But we dont currently use this.
 					}
 				} else {
 					// Sanity check here.  Log any bogus blocks.
 					if (lenbytes > sizebytes) {
-						GLOG(ERR)<<"Uplink PDU with with nonsensical segments:";
 						//GLOG(INFO)<<"\tpayloadlen="<<original_size <<" E="<<block->mE;
-						GLOG(ERR)<< "\t" << LOGVAR(original_size) << LOGVAR(block->mE);
+					    	GLOG(ERR)<<"Uplink PDU with with nonsensical segments:\n" <<
+							"\t" << LOGVAR(original_size) << LOGVAR(block->mE);
 						dumpsegs(segs,n);
 						// what to do?  Just save what there really is.
 						lenbytes = sizebytes;
@@ -492,7 +492,7 @@ void RLCUpEngine::engineUpAdvanceWindow()
 			}
 			// Final M bit means add rest of the payload to the nextpdu.
 			if (payload.size() && segs[n-1].M) {
-				GPRSLOG(64) << "RLCUpEngine M=1:"<<LOGVAR(payload.size()) <<LOGVAR2("o",payload.isOwner());
+				GPRSLOG(DEBUG,GPRS_LOOP|GPRS_MSG) << "RLCUpEngine M=1:"<<LOGVAR(payload.size()) <<LOGVAR2("o",payload.isOwner());
 				addUpPDU(payload);
 			}
 		}
@@ -543,7 +543,7 @@ bool RLCUpEngine::sendNonFinalAckNack(PDCHL1Downlink *down)
 	// It would be nice to detect stuck (non-advancing) uplinks, but the MS
 	// will do that, cancel the TBF, stop answering USFs, and then we will cancel.
 	RLCMsgPacketUplinkAckNack * msg = engineUpAckNack();
-	GPRSLOG(1) <<getTBF() <<" "<<msg->str();
+	GPRSLOG(DEBUG,GPRS_MSG) <<getTBF() <<" "<<msg->str();
 	//down->send1MsgFrame(getTBF(),msg,0,MsgTransNone,NULL);
 	down->send1MsgFrame(getTBF(),msg,1,MsgTransTransmit,NULL);
 	ms->msAckNackUSFGrant = ms->msNumDataUSFGrants;	// Remember this number.
@@ -583,7 +583,7 @@ bool RLCUpEngine::engineService(PDCHL1Downlink *down)
 		}
 		if (mtMsgPending()) { return false; }
 		RLCMsgPacketUplinkAckNack * msg = engineUpAckNack();
-		GPRSLOG(1) <<tbf <<" "<<msg->str();
+		GPRSLOG(DEBUG,GPRS_MSG) <<tbf <<" "<<msg->str();
 		int result = down->send1MsgFrame(tbf,msg,2,MsgTransDataFinal,&mtN3103);
 		if (result) {
 			if (mtUnAckMode) {
@@ -801,8 +801,8 @@ void RLCDownEngine::engineWriteHighSide(SGSN::GprsSgsnDownlinkPdu *dlmsg)
 	mDownlinkPdu = dlmsg;
 	//assert(mDownPDU.getRefCnt() == 1);
 	//std::cout<<"engineWriteHighSide, ref="<<dlmsg->mDlData.getRefCnt()<<"\n";
-	GPRSLOG(1) <<tbf <<" <=== engineWriteHighSide: size="<<mDownPDU.size() <<" "<< dlmsg->mDescr<<timestr();
-	GPRSLOG(2048)<<" <=== engineWriteHighSide size="<<mDownPDU.size()<<" pdu:"<<mDownPDU.hexstr();
+	GPRSLOG(DEBUG,GPRS_MSG) <<tbf <<" <=== engineWriteHighSide: size="<<mDownPDU.size() <<" "<< dlmsg->mDescr<<timestr();
+	GPRSLOG(DEBUG,GPRS_MSG)<<" <=== engineWriteHighSide size="<<mDownPDU.size()<<" pdu:"<<mDownPDU.hexstr();
 //#if !FAST_TBF
 	unsigned bsn = 0;
 	// Update: We dont need to take ownership anymore.
@@ -878,7 +878,7 @@ RLCDownlinkDataBlock *RLCDownEngine::getBlock(unsigned vs,
 		RLCDownlinkDataBlock *block = engineFillBlock(mSt.TxQNum,tn);
 		if (block == NULL) { return NULL; }
 		mAllAcked = false;	// It is a brand new block.
-		GPRSLOG(4096) << "getBlock"<<LOGVAR(vs)<<":"<<block->str();
+		GPRSLOG(DEBUG,GPRS_MSG) << "getBlock"<<LOGVAR(vs)<<":"<<block->str();
 		mSt.TxQ[mSt.TxQNum] = block;
 		//mSt.sendTime[mSt.TxQNum] = gBSNNext;
 		mSt.VB[mSt.TxQNum] = false;		// block needs an ack.
@@ -938,9 +938,8 @@ RLCDownlinkDataBlock* RLCDownEngine::engineFillBlock(unsigned bsn,
 				if (mDownlinkPdu) {delete mDownlinkPdu;}
 				mDownlinkPdu = dlmsg;
 				getTBF()->mtDescription = dlmsg->mDescr;
-				LOGWATCHF("pdu %d\n",mDownPDU.size());
-				GPRSLOG(1) <<getTBF() <<" <=== engineWriteHighSidePull: size="<<mDownPDU.size() <<" "<< dlmsg->mDescr<<timestr();
-				GPRSLOG(2048)<<" <=== engineWriteHighSidePull size="<<mDownPDU.size()<<" pdu:"<<mDownPDU.hexstr();
+				GPRSLOG(DEBUG,GPRS_LOOP) <<getTBF() <<" <=== engineWriteHighSidePull: size="<<mDownPDU.size() <<
+					    " "<< dlmsg->mDescr<<timestr() << " pdu:"<<mDownPDU.hexstr();
 			}
 
 			// DEBUG: Disable TBF wrap around.

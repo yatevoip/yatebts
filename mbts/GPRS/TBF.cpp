@@ -117,15 +117,15 @@ TBF *TBF::newUpTBF(MSInfo *ms,RLCMsgChannelRequestDescriptionIE &mCRD,
 				if (tlli != ms->msTlli && tlli != ms->msOldTlli) {
 					// Should not happen because the internal SGSN provides
 					// the newTlli as an alias with the AttachAccept message.
-					GLOG(ERR) << "uplink TBF request"<<LOGVAR(tlli)<<" does not match MS:"<<ms;
+					GLOG(ERR) << "uplink TBF request"<<LOGHEX(tlli)<<" does not match MS:"<<ms;
 					// But go ahead and do it anyway.
 				}
-				GPRSLOG(1) << "Changing uplink TBF tlli to"<<LOGVAR(tlli)<<ms;
+				GPRSLOG(DEBUG,GPRS_MSG) << "Changing uplink TBF tlli to"<<LOGHEX(tlli)<<ms;
 				activeTbf->mtTlli = tlli;
 			} else {
 				// Just ignore this duplicate uplink request.
 				// TODO: We can infer the MS mode if this arrives on RACH.
-				GPRSLOG(1) << "MS denied second uplink TBF" << activeTbf;
+				GPRSLOG(WARNING,GPRS_ERR|GPRS_MSG) << "MS denied second uplink TBF" << activeTbf;
 			}
 			return NULL;
 		}
@@ -288,10 +288,10 @@ std::string TBF::tbfDump(bool verbose) const
 
 static void tbfDumpAll()
 {
-	if (GPRSDebug & 2) {
-		GPRSLOG(2) <<"TBF DUMP:\n";
+	if (IS_SET_GPRSDEBUG(GPRS_MSG|GPRS_CHECK_OK)) {
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) <<"TBF DUMP:\n";
 		TBF *tbf;
-		RN_MAC_FOR_ALL_TBF(tbf) { GPRSLOG(2) << tbf->tbfDump(true) << "\n"; }
+		RN_MAC_FOR_ALL_TBF(tbf) { GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << tbf->tbfDump(true) << "\n"; }
 	}
 }
 
@@ -340,7 +340,7 @@ uint32_t TBF::mtGetTlli()
 	if (gFixConvertForeignTLLI) {
 		if ((tlli & 0xc0000000) == 0x80000000) {	// Is it a foreign tlli?
 			tlli |= TLLI_LOCAL_BIT;
-			GPRSLOG(1) << "*** Converting foreign tlli to local:"<<LOGHEX(tlli);
+			GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_OK) << "*** Converting foreign tlli to local:"<<LOGHEX(tlli);
 		}
 	}
 	return tlli;
@@ -365,7 +365,7 @@ static bool sendTimeslotReconfigure(
 		delete msg;
 		return true;
 	} else {
-		GPRSLOG(1) << "GPRS sendReassignment "<<tbf<<" sending:" << msg;
+		GPRSLOG(INFO,GPRS_MSG) << "GPRS sendReassignment "<<tbf<<" sending:" << msg;
 		tbfDumpAll();
 		// This will increment the counter if the message is really sent.
 		return pacch->downlink()->
@@ -418,11 +418,11 @@ static bool sendAssignmentPacch(
 		switch (msgstate) {
 		case MsgTransAssign1:
 		case MsgTransAssign2:
-			GPRSLOG(1) << "GPRS sendAssignment "<<tbf<<" sending:" << msg;
+			GPRSLOG(INFO,GPRS_MSG) << "GPRS sendAssignment "<<tbf<<" sending:" << msg;
 			pcounter = &tbf->mtAssignCounter;
 			break;
 		case MsgTransReassign:
-			GPRSLOG(1) << "GPRS sendReassignment "<<tbf<<" sending:" << msg;
+			GPRSLOG(INFO,GPRS_MSG) << "GPRS sendReassignment "<<tbf<<" sending:" << msg;
 			pcounter = &tbf->mtReassignCounter;
 			break;
 		default: devassert(0);
@@ -479,6 +479,7 @@ void sendAssignmentCcch(
 		resBSN = pacch->makeCCCHReservation(currentAGCH,RLCBlockReservation::ForPoll,tbf,NULL,drxmode,MsgTransAssign1);
 		if (! resBSN.valid()) {
 			// We will try again later.
+			GPRSLOG(INFO,GPRS_ERR|GPRS_CHECK_FAIL) << "failed to obtain valid reservation for "<<tbf;
 			return /*false*/;	// We did not use the packet channel downlink.
 		}
 		// TODO: mtSetAckExpected function should be moved into the makeReservation code.
@@ -526,7 +527,7 @@ void sendAssignmentCcch(
 		if (os) {
 			amsg.text(*os);
 		} else {
-			GPRSLOG(1) << "GPRS sendAssignment "<<tbf<<" sending L3ImmediateAssignment:"
+			GPRSLOG(DEBUG,GPRS_MSG) << "GPRS sendAssignment "<<tbf<<" sending L3ImmediateAssignment:"
 				<<LOGVAR2("agchload",currentAGCH->load()) << amsg;
 			LOGWATCHF("%s CCCH load=%d\n", tbf->tbfid(1), currentAGCH->load());
 			tbfDumpAll();
@@ -617,8 +618,8 @@ bool sendAssignment(
 		}
 	}
 
-	if (GPRSDebug & 1) {
-		GPRSLOG(1) <<ms <<" OnCCCH="<<tbf->mtAssignmentOnCCCH
+	if (IS_SET_GPRSDEBUG(GPRS_MSG|GPRS_CHECK_OK)) {
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) <<ms <<" OnCCCH="<<tbf->mtAssignmentOnCCCH
 			<<" RRMode="<<ms->getRROperatingMode()
 			<<" T3193="<<(ms->msT3193.active()?ms->msT3193.remaining():0)
 			<<" T3168="<<(ms->msT3168.active()?ms->msT3168.remaining():0);
@@ -639,7 +640,7 @@ static bool sendTA(PDCHL1Downlink *down,TBF *tbf)
 	// DEBUG: If you change the TFI or downlink flag, this
 	// is unanswered, as expected:
 	//tamsg->setGlobalTFI(1,tbf->mtTFI);
-	GPRSLOG(1) << "GPRS sendTA "<<tbf<<" sending:" << tamsg;
+	GPRSLOG(DEBUG,GPRS_MSG) << "GPRS sendTA "<<tbf<<" sending:" << tamsg;
 	RLCDownlinkMessage *msg = tamsg;
 	// Lets ask for a response and see what happens:
 	return down->send1MsgFrame(tbf,msg,2,MsgTransTA,NULL);
@@ -676,7 +677,7 @@ bool TBF::mtAllocateUSF()
 		// This only allocates a new USF if one is not already allocated for this MS.
 		if (usf < 0) {
 			// Failure.  But we will keep the TFIs and USFs we have so far and try again later.
-			GLOG(INFO) << "USF congestion on uplink";
+			GLOG(WARNING) << "USF congestion on uplink";
 			return false;
 		}
 		mtMS->msUSFs[up->TN()] = usf;	// It might already be assigned, or maybe new.
@@ -718,7 +719,7 @@ bool TBF::mtAllocateTFI()
 		PDCHL1FEC* pdch = mtMS->msPCHDowns.front()->parent();
 		int tfi = pdch->mchTFIs->findFreeTFI(mtDir);
 		if (tfi < 0) {
-			GLOG(INFO) << "TFI congestion on "<<mtDir;
+			GLOG(WARNING) << "TFI congestion on "<<mtDir;
 			return false;
 		}
 		mtTFI = tfi;
@@ -830,7 +831,7 @@ void MSInfo::msRestart()
 static RLCDownEngine *createDownlinkTbf(MSInfo *ms, DownlinkQPdu *dlmsg, bool isRetry, ChannelCodingType codingMax)
 {
 	ms->msStalled = 0;
-	GPRSLOG(2) << "<---- downlink PDU";
+	GPRSLOG(DEBUG,GPRS_MSG) << "<---- downlink PDU";
 	RLCDownEngine *engine = new RLCDownEngine(ms);
 	// Wrong! Removed 4-24 : ms->msT3193.reset();
 	// At this point the RLCEngine takes charge of the dlmsg memory.
@@ -866,6 +867,11 @@ void MSInfo::msService()
 			msDelete();
 			return;
 		}
+	}
+
+	if (msCountTbfNoConnect > 5) {
+	    msDelete();
+	    return;
 	}
 
 	// If MS running, check for counter expiration and stop if necessary.
@@ -926,7 +932,7 @@ void MSInfo::msService()
 		// have bugs and we now use dead tbfs to legitimately block downlinks until expiry.
 		bool stallOnlyForActiveTBF = configGetNumQ("GPRS.TBF.StallOnlyForActive",0);
 		TBF *blockingtbf;
-		if (! msCountTBF2(RLCDir::Down,stallOnlyForActiveTBF?TbfMActive:TbfMAny,&blockingtbf)) {
+		if (! msCountTBF2(RLCDir::Down,stallOnlyForActiveTBF ? TbfMActive : TbfMAny,&blockingtbf)) {
 			DownlinkQPdu *dlmsg = msDownlinkQueue.read();
 			// Because the message is queued for this MS, it means the tlli
 			// is equal to either msTlli or msOldTlli.  The SGSN tells us which
@@ -940,7 +946,7 @@ void MSInfo::msService()
 			// stalltype is 1 for stalled by active, 2 for stalled by dead tbf.
 			unsigned stalltype = blockingtbf->isActive() ? 1 : 2;
 			if (stalltype != msStalled) {
-				GPRSLOG(2) << this <<" msDownlinkQueue stalled by "
+				GPRSLOG(NOTICE,GPRS_CHECK_FAIL|GPRS_MSG|GPRS_ERR) << this <<" msDownlinkQueue stalled by "
 					<<(stalltype==1 ? "active:" : "dead:") << blockingtbf;
 				msStalled = stalltype;
 			}
@@ -979,7 +985,7 @@ void TBF::mtFinishSuccess()
 {
 	mtMS->msT3191.reset();
 	//GPRSLOG(1) << "@@@ok" << this <<" dir="<<mtDir <<" descr="<<mtDescription <<" OnCCCH="<<mtAssignmentOnCCCH;
-	GPRSLOG(1) << "@@@ok" << this->tbfDump(false)<<timestr();
+	GPRSLOG(INFO,GPRS_MSG) << "@@@ok" << this->tbfDump(false)<<timestr();
 	mtSetState(TBFState::Finished);
 
 	Timeval now;
@@ -1099,9 +1105,9 @@ void TBF::mtCancel(MSStopCause::type cause,
 			break;
 	}
 	GLOG(NOTICE) << timestr() << what <<LOGVAR2("cause",cause) << ss;
-	if (GPRSDebug) {
+	/*if (GPRSDebug) {
 		std::cout << timestr() <<what <<LOGVAR2("cause",cause) << ss<<"\n";
-	}
+	}*/
 	mtMS->msT3191.reset();
 
 	// If it is a shutdown cause or an error during starting up the TBF, we kill it immediately.

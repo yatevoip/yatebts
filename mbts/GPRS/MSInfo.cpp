@@ -105,7 +105,7 @@ static MultislotClass sMultislotInfo[sMultislotMax] = {
 static MultislotClass getMultislotClass(MSInfo *ms)
 {
 	int multislotclass = ms->sgsnGetMultislotClass(ms->msTlli);
-	GPRSLOG(1) << ms <<LOGVAR(multislotclass);
+	GPRSLOG(DEBUG,GPRS_MSG) << ms <<LOGVAR(multislotclass);
 	// -1 means not specified and 0 or >45 are illegal.
 	if (multislotclass <= 0 || multislotclass > sMultislotMax) {
 		return sMultislotInfo[0];	// No multislot capability.
@@ -223,7 +223,7 @@ void MSInfo::msCleanUSFs()
 		msAckNackUSFGrant = -1;
 		for (int u = 0; u < USFMAX; u++) { msUSFs[u] = 0; }	// Not used, but be tidy.
 	}
-	GPRSLOG(1) <<"CleanUSFs"<<this<<LOGVAR(anyactiveuplinks)<<LOGVAR(chcnt)<<LOGVAR(freedusf);
+	GPRSLOG(DEBUG,GPRS_MSG) <<"CleanUSFs"<<this<<LOGVAR(anyactiveuplinks)<<LOGVAR(chcnt)<<LOGVAR(freedusf);
 }
 
 // The TBF died, so reserve the USF resources for 5 seconds.
@@ -405,7 +405,7 @@ bool MSInfo::msAddCh(unsigned chmask, const char *tnlist)
 	if (after && !tnavail(chmask,tn+1)) {return false;}
 	if (after>1 && !tnavail(chmask,tn+2)) {return false;}
 #endif
-	GPRSLOG(4) << "msAddCh" <<LOGVAR(tnlist)<<LOGVAR(before)<<LOGVAR(tnfirst);
+	GPRSLOG(DEBUG,GPRS_MSG) << "msAddCh" <<LOGVAR(tnlist)<<LOGVAR(before)<<LOGVAR(tnfirst);
 	for (tn=tnfirst,cp=tnlist; *cp; cp++, tn=addTn(tn,1)) {
 		if (*cp == 'P') { continue; }	// PACCH already allocated, so it wont look avail.
 		if (!tnavail(chmask,tn)) {return false;}
@@ -414,7 +414,7 @@ bool MSInfo::msAddCh(unsigned chmask, const char *tnlist)
 	// Allocate the channels.
 	tn = addTn(msPacch->TN(),- before);
 	for (tn=tnfirst,cp=tnlist; *cp; cp++, tn=addTn(tn,1)) {
-		GPRSLOG(4) << "msAddCh loop" <<LOGVAR(tnlist)<<LOGVAR(tnfirst)<<LOGVAR(*cp)<<LOGVAR(tn);
+		GPRSLOG(DEBUG,GPRS_LOOP) << "msAddCh loop" <<LOGVAR(tnlist)<<LOGVAR(tnfirst)<<LOGVAR(*cp)<<LOGVAR(tn);
 		PDCHL1FEC *ch = gL2MAC.macFindChannel(msPacch->ARFCN(),tn);
 		switch (*cp) {
 		case 'D':	// downlink only timeslot.
@@ -471,7 +471,7 @@ bool MSInfo::msAssignChannels2(int maxdown, int maxup, int sum)
 		pdch1 = gL2MAC.macPickChannel();
 	}
 	if (pdch1 == NULL) {
-		GPRSLOG(1) << "msAssignChannels failed" <<this;
+		GPRSLOG(INFO,GPRS_ERR) << "msAssignChannels failed" <<this;
 		return false;
 	}
 
@@ -500,7 +500,7 @@ bool MSInfo::msAssignChannels2(int maxdown, int maxup, int sum)
 #endif
 
 	unsigned mask = gL2MAC.macFindChannels(pdch1->ARFCN());
-	GPRSLOG(2)<<format("AssignChannels3, down/up=%d/%d sum=%d mask=0x%x",
+	GPRSLOG(DEBUG,GPRS_MSG)<<format("AssignChannels3, down/up=%d/%d sum=%d mask=0x%x",
 		maxdown,maxup,sum,mask);
 
 	// Try to match the available channels to the request.
@@ -599,7 +599,7 @@ bool MSInfo::msAssignChannels()
 			// Limit to phone capabilities.
 			if (maxdown > (int)slots.mMultislotRx) { maxdown = slots.mMultislotRx; }
 			if (maxup > (int)slots.mMultislotTx) { maxup = slots.mMultislotTx; }
-			GPRSLOG(1)<<format("Multislot mscap=%d/%d max,down/up=%d/%d",
+			GPRSLOG(DEBUG,GPRS_MSG)<<format("Multislot mscap=%d/%d max,down/up=%d/%d",
 				slots.mMultislotRx,slots.mMultislotTx,maxdown,maxup);
 
 			// Dont bother with this test.  Would only occur if you set
@@ -635,7 +635,7 @@ bool MSInfo::msAssignChannels()
         if (msPCHDowns.size() > 1) {
             std::ostringstream os;
             msDumpChannels(os);
-            LOG(INFO) << "Multislot assignment for "<<this<<os;
+            GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_OK) << "Multislot assignment for "<<this<<os;
         }
 
 	} else {
@@ -846,7 +846,7 @@ ChannelCodingType MSInfo::msGetChannelCoding(RLCDirType wdir) const
 MSInfo *bssgMSChangeTLLI(uint32_t oldTLLI,uint32_t newTLLI)
 {
     MSInfo *ms = NULL;
-    GPRSLOG(1) << "MSChangeTLLI"<<LOGHEX(oldTLLI)<<LOGHEX(newTLLI);
+    GPRSLOG(DEBUG,GPRS_MSG) << "MSChangeTLLI"<<LOGHEX(oldTLLI)<<LOGHEX(newTLLI);
 	// (pat) 6-16-2012: I modified this code without testing,
 	// since we longer use the BSSG interface.
     if ((ms = gL2MAC.macFindMSByTlli(newTLLI, false))) {

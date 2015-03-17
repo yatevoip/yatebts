@@ -106,22 +106,22 @@ void NsRecvMsg(unsigned char *data, int nsize)
 {
 	NSPDUType::type nstype = (NSPDUType::type) data[0];
 	// We dont need to see all the keep alive messages.
-	if (nstype != NSPDUType::NS_UNITDATA) { GPRSLOG(4) << "BSSG NsRecvMsg "<<nstype<<LOGVAR(nsize); }
+	if (nstype != NSPDUType::NS_UNITDATA) { GPRSLOG(DEBUG,GPRS_MSG) << "BSSG NsRecvMsg "<<nstype<<LOGVAR(nsize); }
 	switch (nstype) {
 	case NSPDUType::NS_UNITDATA: {
 		int bvci = getntohs(&data[2]);
 		if (bvci == BVCI::SIGNALLING) {
-			GPRSLOG(4) << "BSSG <=== signalling "<<nstype<<LOGVAR(nsize) <<timestr();
+			GPRSLOG(INFO,GPRS_LOOP) << "BSSG <=== signalling "<<nstype<<LOGVAR(nsize) <<timestr();
 			BsRecvSignallingMsg(data, nsize);
 		} else if (bvci == BVCI::PTM) {
-			GPRSLOG(4) << "BSSG <=== "<<nstype<<LOGVAR(nsize)<<" ignored" <<timestr();
+			GPRSLOG(INFO,GPRS_LOOP) << "BSSG <=== "<<nstype<<LOGVAR(nsize)<<" ignored" <<timestr();
 			// Not implemented
 		} else {
 			// Send data to the MAC
 			// We left the NS header intact.
 			BSSGDownlinkMsg *dlmsg = new BSSGDownlinkMsg(data,nsize);
 			//GPRSLOG(1) << "BSSG <=== queued "<<dlmsg->str() <<timestr();
-			GPRSLOG(1) << "BSSG <=== queued size="<<dlmsg->size() <<timestr();
+			GPRSLOG(INFO,GPRS_LOOP|GPRS_MSG) << "BSSG <=== queued size="<<dlmsg->size() <<timestr();
 			gBSSG.mbsRxQ.write(dlmsg);
 		}
 		break;
@@ -162,7 +162,7 @@ void NsRecvMsg(unsigned char *data, int nsize)
 		gBSSG.mbsAliveAckReceived = true;
 		break;
 	default:
-		LOG(INFO) << "unrecognized NS message received, type "<<nstype;
+		GLOG(INFO) << "unrecognized NS message received, type "<<nstype;
 		break;
 	}
 }
@@ -214,9 +214,9 @@ void *sendServiceLoop(void *arg)
 		int msgsize = ulmsg->size();
 		ssize_t result = send(bssgp->mbsSGSockfd,ulmsg->begin(),msgsize,0);
 		nstype = ulmsg->getNSPDUType();
-		int debug_level = 1; //(nstype == NSPDUType::NS_UNITDATA) ? 1 : 4;
-		if (GPRS::GPRSDebug & debug_level) {
-			GPRSLOG(debug_level) << "BSSG ===> sendServiceLoop sent "
+		int debug_level = GPRS_LOOP; //(nstype == NSPDUType::NS_UNITDATA) ? 1 : 4;
+		if (IS_SET_GPRSDEBUG(debug_level)) {
+			GPRSLOG(DEBUG,debug_level) << "BSSG ===> sendServiceLoop sent "
 				<<nstype<<LOGVAR(msgsize)<<ulmsg->str()<<timestr();
 		}
 		if (result != msgsize) {
@@ -265,7 +265,7 @@ static int opensock(uint32_t sgsnIp, int sgsnPort /*,int bssgPort*/ )
 		close(sockfd);
 		return -1;
 	} else {
-		GPRSLOG(1) << "connected to SGSN at "<< inet_ntoa(sgsnAddr.sin_addr) <<" port "<<sgsnPort;
+		GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_OK) << "connected to SGSN at "<< inet_ntoa(sgsnAddr.sin_addr) <<" port "<<sgsnPort;
 	}
 	return sockfd;
 }
@@ -335,7 +335,7 @@ bool BSSGMain::BSSGReset()
 		Utils::sleepf(0.1);
 
 		if (i >= 40) {	// wait 4 seconds
-			GPRSLOG(1) << LOGVAR(mbsResetReceived)
+			GPRSLOG(WARNING,GPRS_ERR) << LOGVAR(mbsResetReceived)
 				<<LOGVAR(mbsResetAckReceived) <<LOGVAR(mbsBlocked);
 			LOG(INFO) << "SGSN failed to respond\n";
 			return false;
@@ -362,7 +362,7 @@ void BSSGWriteLowSide(NSMsg *ulmsg)
 		// For testing, deliver messages to this queue instead:
 		gBSSG.mbsTestQ->write(ulmsg);
 	} else {
-		GPRSLOG(1) << "BSSG ===> writelowside " <<ulmsg->str()<<timestr();
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_LOOP) << "BSSG ===> writelowside " <<ulmsg->str()<<timestr();
 		gBSSG.mbsTxQ.write(ulmsg);	// normal mode; block is headed for the SGSN.
 	}
 }

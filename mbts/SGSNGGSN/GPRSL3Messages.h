@@ -125,7 +125,7 @@ class L3GprsFrame : public ByteVector
 	void skipLV(size_t &rp, int minlen, int maxlen, const char *text) {
 		int len = readByte(rp);
 		if (len < minlen || len > maxlen) {
-			LLCWARN("unexpected message length for iei:"<<mIEI<<":"<<text);
+			SGSNLOGF(WARNING,GPRS_ERR,"LLC","unexpected message length for iei:"<<mIEI<<":"<<text);
 		}
 		rp += len;
 	}

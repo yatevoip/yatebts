@@ -93,7 +93,7 @@ void PDCHL1FEC::mchStart() {
 	// for type IGPRS is set the same as type I which is only 26, not 52.
 	RLCBSN_t bsn = FrameNumber2BSN(gBTS.time().FN()) + 1;
 	for (int i = 0; i < 12; i++, bsn = bsn + 1) {
-		GPRSLOG(1) <<"sendIdleFrame"<<LOGVAR2("TN",TN())<<LOGVAR(bsn)<<LOGVAR(i);
+		GPRSLOG(DEBUG,GPRS_LOOP) <<"sendIdleFrame"<<LOGVAR2("TN",TN())<<LOGVAR(bsn)<<LOGVAR(i);
 		mchDownlink->sendIdleFrame(bsn);
 	}
 	mchOldFec->setGPRS(true,this);
@@ -299,12 +299,12 @@ bool PDCHL1Downlink::send1DataFrame(
 
 	BitVector tobits = block->getBitVector(); // tobits deallocated when this function exits.
 	if (block->mChannelCoding == 0) { devassert(tobits.size() == 184); }
-	if (GPRSDebug & 1) {
+	if (IS_SET_GPRSDEBUG(GPRS_LOOP)) {
 		RLCBlockReservation *res = mchParent->getReservation(gBSNNext);
 		std::ostringstream sshdr;
 		block->text(sshdr,false); //block->RLCDownlinkDataBlockHeader::text(sshdr);
 		ByteVector content(tobits);
-		GPRSLOG(1) << "send1DataFrame "<<parent()<<" "<<tbf<<LOGVAR(tbf->mtExpectedAckBSN)
+		GPRSLOG(DEBUG,GPRS_LOOP) << "send1DataFrame "<<parent()<<" "<<tbf<<LOGVAR(tbf->mtExpectedAckBSN)
 			<< " "<<sshdr.str()
 			<<" "<<(res ? res->str() : "")
 			<< LOGVAR2("content",content);
@@ -330,7 +330,7 @@ bool PDCHL1Downlink::send1DataFrame(
 			}
 		}
 		thing[result->size()] = 0;
-		GPRSLOG(1) <<"encoding error" <<LOGVAR2("cs",(int)debugDecoder.getCS())
+		GPRSLOG(INFO,GPRS_ERR) <<"encoding error" <<LOGVAR2("cs",(int)debugDecoder.getCS())
 			<<LOGVAR(diffbit)
 			<<LOGVAR2("in:size",tobits.size()) <<LOGVAR2("out:size",result->size())
 			<<"\n"<<tobits
@@ -375,7 +375,7 @@ void PDCHL1Downlink::bugFixIdleFrame()
 	int mfn = (fn / 13);			// how many 13-multiframes
 	int rem = (fn - (mfn*13));	// how many blocks within the last multiframe.
 	int tbsn = mfn * 3 + ((rem==12) ? 2 : (rem/4));
-	GPRSLOG(2) <<"idleframe"<<LOGVAR(fn)<<LOGVAR(tbsn)<<LOGVAR(rem);
+	GPRSLOG(DEBUG,GPRS_MSG) <<"idleframe"<<LOGVAR(fn)<<LOGVAR(tbsn)<<LOGVAR(rem);
 	}
 
 	/***
@@ -414,19 +414,14 @@ bool PDCHL1Downlink::send1MsgFrame(
 	// Convert to a BitVector.  Messages always use CS-1 encoding.
 	BitVector tobits(RLCBlockSizeInBits[ChannelCodingCS1]);
 	msg->write(tobits);
-	// The possible downlink debug things we want to see are:
-	// 2: Only non-dummy messages.
-	// 32: include messages with non-idle MAC header, means mUSF or mSP.
-	// 1024: all messages including dummy ones.
-	if (GPRSDebug) {
-		if ((!dummy && (GPRSDebug&2)) || (!idle && (GPRSDebug&32)) || (GPRSDebug&1024)) {
-			ByteVector content(tobits);
-			GPRSLOG(2|32|1024) << "send1MsgFrame "<<parent()
-				<<" "<<msg->mTBF<< " "<<msg->str()
-				<< " " <<LOGVAR2("content",content);
-				// The res is unrelated to the message, and confusing, so dont print it:
-				//<<" "<<(res ? res->str() : "");
-		}
+	// print messages only if we debug 
+	if (IS_SET_GPRSDEBUG(GPRS_MSG)) {
+		ByteVector content(tobits);
+		GPRSLOG(DEBUG,GPRS_MSG) << "send1MsgFrame "<<parent()
+			<<" "<<msg->mTBF<< " "<<msg->str()
+			<< " " <<LOGVAR2("content",content);
+			// The res is unrelated to the message, and confusing, so dont print it:
+			//<<" "<<(res ? res->str() : "");
 	}
 
 #if 0
@@ -569,12 +564,12 @@ static BitVector *decodeLowSide(const RxBurst &inBurst, int B, GprsDecoder &deco
 	switch ((*ccPtr = decoder.getCS())) {
 	case ChannelCodingCS4:
 		success = decoder.decodeCS4();
-		LOG(DEBUG) << "CS-4 success=" << success;
+		GPRSLOG(DEBUG,GPRS_MSG) << "CS-4 success=" << success;
 		result = &decoder.mD_CS4;
 		break;
 	case ChannelCodingCS1:
 		success = decoder.decode();
-		LOG(DEBUG) << "CS-1 success=" << success;
+		GPRSLOG(DEBUG,GPRS_MSG) << "CS-1 success=" << success;
 		result = &decoder.mD;
 		break;
 	default: devassert(0);	// Others not supported yet.
@@ -615,7 +610,7 @@ void PDCHL1Uplink::writeLowSideRx(const RxBurst &inBurst)
 	int rem = (burstfn - (mfn*13));	// how many blocks within the last multiframe.
 	int B = rem % 4;
 
-	if (avg > 0.5) { GPRSLOG(256) << "FEC:"<<LOGVAR(B)<<" "<<inBurst<<LOGVAR(avg); }
+	if (avg > 0.5) { GPRSLOG(DEBUG,GPRS_LOOP) << "FEC:"<<LOGVAR(B)<<" "<<inBurst<<LOGVAR(avg); }
 
 	ChannelCodingType cc;
 	BitVector *result = decodeLowSide(inBurst,B,mchCS14Dec,&cc);
@@ -657,13 +652,17 @@ void PDCHL1Uplink::writeLowSideRx(const RxBurst &inBurst)
 					for (int i = 0; i < 4; i++) {
 						// There was an unanswered reservation or usf.
 						avg = mchCS14Dec.mI[i].getEnergy(&low);
-						GPRSLOG(1) << "energy["<<i<<"]:"<<LOGVAR(avg)<<LOGVAR(low)<<" "
+						GPRSLOG(INFO,GPRS_MSG) << "energy["<<i<<"]:"<<LOGVAR(avg)<<LOGVAR(low)<<" "
 							<<mchCS14Dec.mI[i];
 					}
 				}
-				GLOG(DEBUG)<<ss.str();
+				if (result) {
+				    GPRSLOG(DEBUG,GPRS_MSG) << ss.str();
+				}
+				else
+				    GPRSLOG(INFO,GPRS_ERR|GPRS_MSG) << ss.str();
 				// Make sure we see a decoder failure if it reoccurs.
-				if (missedRes) std::cout <<ss.str() <<"\n";
+				//if (missedRes) std::cout <<ss.str() <<"\n";
 			}
 		} // if GPRSDebug
 
@@ -672,7 +671,7 @@ void PDCHL1Uplink::writeLowSideRx(const RxBurst &inBurst)
 			static int cnt = 0;
 			if (bsn >= gBSNNext-1) {
 				if (cnt++ % 32 == 0) {
-					GLOG(ERR) << "Incoming burst at frame:"<<burst_fn
+					GPRSLOG(ERR,GPRS_ERR) << "Incoming burst at frame:"<<burst_fn
 						<<" is not sufficiently ahead of clock:"<<gBSNNext.FN();
 					if (GPRSDebug) {
 					std::cout << "Incoming burst at frame:"<<burst_fn
@@ -700,7 +699,7 @@ void PDCHL1Uplink::writeLowSideRx(const RxBurst &inBurst)
 	} else {
 		// We dont have a full 4 bursts yet, and we rarely care about these
 		// intermediate results, but here is a way to see them:
-		GPRSLOG(64) <<"writeLowSideRx "<<parent()<<LOGVAR(burstfn)<<LOGVAR(B) 
+		GPRSLOG(DEBUG,GPRS_LOOP) <<"writeLowSideRx "<<parent()<<LOGVAR(burstfn)<<LOGVAR(B) 
 			<<" RSSI=" <<inBurst.RSSI() << " timing=" << inBurst.timingError();
 	}
 }
@@ -750,8 +749,8 @@ void PDCHL1Downlink::dlService()
 	// NO: mchResync();
 	static int debugCntTotal = 0, debugCntDummy = 0;
 	debugCntTotal++;
-	if ((GPRSDebug&512) || debugCntTotal % 1024 == 0) {
-		GPRSLOG(2) << "dlService sent total="<<debugCntTotal<<" dummy="<<debugCntDummy <<this->parent();
+	if (IS_SET_GPRSDEBUG(GPRS_LOOP) || debugCntTotal % 1024 == 0) {
+		GPRSLOG(DEBUG,GPRS_LOOP) << "dlService sent total="<<debugCntTotal<<" dummy="<<debugCntDummy <<this->parent();
 	}
 
 	// If gFixIdleFrame only send blocks on the even BSNs,
@@ -789,7 +788,7 @@ void PDCHL1Downlink::dlService()
 	TBFList_t::iterator itr;
 	for (RListIterator<TBF*> itrl(gL2MAC.macTBFs); itrl.next(tbf,itr); ) {
 		if (!tbf->canUseDownlink(this)) {
-			GPRSLOG(4) <<"dlService"<<tbf<<" state "<<tbf->mtGetState()
+			GPRSLOG(INFO,GPRS_LOOP|GPRS_CHECK_FAIL) <<"dlService"<<tbf<<" state "<<tbf->mtGetState()
 				<<" reqch:"<<tbf->mtMS->msPacch
 				<< " can not use downlink:"<<this->parent();
 			continue;
@@ -797,7 +796,7 @@ void PDCHL1Downlink::dlService()
 		TBFState::type oldstate = tbf->mtGetState();
 
 		if (tbf->mtServiceDownlink(this)) {
-			GPRSLOG(2) <<"dlService"<<tbf<<LOGVAR(oldstate)<<" state="<<tbf->mtGetState()
+			GPRSLOG(DEBUG,GPRS_LOOP) <<"dlService"<<tbf<<LOGVAR(oldstate)<<" state="<<tbf->mtGetState()
 				<<" reqch:"<<tbf->mtMS->msPacch
 				<<" using ch:"<<this->parent();
 			// Move this tbf to end of the list so we may service someone else next time.

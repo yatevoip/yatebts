@@ -18,6 +18,7 @@
 #define SGSNBASE_H
 #include "Logger.h"
 #include "miniggsn.h"
+#include "GPRSInternal.h"
 
 #define SNDCP_IN_PDP 1
 
@@ -26,23 +27,27 @@ namespace SGSN {
 #undef WARNING
 #endif
 
-extern bool sgsnDebug();
+extern unsigned int sgsnDebug();
 //#define GGSNLOG2(level,who,stuff) {std::cout <<who<<stuff<<"\n";}
 // Normal log message, but if debugging is on print all regardless of Log.Level.
 //#define GGSNLOG1(level,who,stuff) if (IS_LOG_LEVEL(level)||sgsnDebug()) _LOG(level)<<who<<timestr()<<","<<stuff;
-#define GGSNLOG1(level,who,stuff) if (IS_LOG_LEVEL(level)||sgsnDebug()) _LOG(level)<<who<<stuff;
+// #define GGSNLOG1(level,bitmask,who,stuff) PS_LOG(level,bitmask) << who << ": " << stuff;
 // Normal log plus put it in the ggsn.log file.
-#define GGSNLOG2(level,who,stuff) GGSNLOG1(level,who,stuff); \
-		if (sgsnDebug()) MGLOG(who<<stuff);
-#define GGSNLOG(stuff) GGSNLOG2(INFO,"SGSN:",stuff)
-#define LLCDEBUG(stuff)   GGSNLOG1(DEBUG,"LLC:",stuff)
-#define SNDCPDEBUG(stuff) GGSNLOG1(DEBUG,"SNDCP:",stuff)
-#define LLCWARN(stuff) GGSNLOG2(WARNING,"LLC:",stuff)
-#define LLCINFO(stuff) GGSNLOG2(INFO,"LLC:",stuff)
-#define SGSNLOG(stuff)  GGSNLOG2(INFO,"SGSN:",stuff)
-#define SGSNERROR(stuff)  GGSNLOG2(ERR,"SGSN:",stuff)
-#define SGSNWARN(stuff)  GGSNLOG2(WARNING,"SGSN:",stuff)
+// #define GGSNLOG2(level,who,stuff) GGSNLOG1(level,who,stuff);		if (sgsnDebug()) MGLOG(who<<stuff);
+// #define GGSNLOG(stuff) GGSNLOG2(INFO,"SGSN:",stuff)
+// #define LLCDEBUG(stuff)   GGSNLOG1(DEBUG,"LLC:",stuff)
+// #define SNDCPDEBUG(stuff) GGSNLOG1(DEBUG,"SNDCP:",stuff)
+// #define LLCWARN(stuff) GGSNLOG2(WARNING,"LLC:",stuff)
+// #define LLCINFO(stuff) GGSNLOG2(INFO,"LLC:",stuff)
+// #define SGSNLOG(stuff)  GGSNLOG2(INFO,"SGSN:",stuff)
+// #define SGSNERROR(stuff)  GGSNLOG2(ERR,"SGSN:",stuff)
+// #define SGSNWARN(stuff)  GGSNLOG2(WARNING,"SGSN:",stuff)
 //#define SGSNDEBUG(stuff)  GGSNLOG1(DEBUG,"SGSN:",stuff) not used
+
+#define SGSNLOG(level,bitmask,who,stuff) PS_LOG(level,bitmask) << who << ": " << stuff;
+
+#define SGSNLOGF(level,bitmask,who,stuff) SGSNLOG(level,bitmask,who,stuff); \
+		if (sgsnDebug()) MGLOG(who << ": " << stuff);
 
 struct LlcEngine;
 struct LlcEntity;

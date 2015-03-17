@@ -561,7 +561,7 @@ void BSSGMsgULUnitData::setLength()
 	// The PDU begins immediately after the 2 byte length.
 	assert(size() >= HeaderLength);
 	unsigned pdulen = size() - HeaderLength;
-	GPRSLOG(1) << "setLength:"<<LOGVAR(pdulen) << LOGVAR(mLengthPosition) << LOGVAR(size());
+	GPRSLOG(DEBUG,GPRS_MSG) << "setLength:"<<LOGVAR(pdulen) << LOGVAR(mLengthPosition) << LOGVAR(size());
 	setUInt16(mLengthPosition,pdulen);
 }
 

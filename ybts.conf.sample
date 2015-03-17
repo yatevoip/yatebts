@@ -524,8 +524,15 @@ Radio.C0=
 ; This section controls more advanced GPRS features.
 ; Normally nothing should be changed in this section.
 
-; Debug: boolean: Toggle GPRS debugging. Defaults to no.
-;Debug=no
+; Debug: integer: Activate GPRS debug. It is a mask of debug levels to activate.
+; The bits that can be set are:
+; GPRS_ERR = 1 -  report an error, default value for Debug
+; GPRS_OK  = 2 -  report a succesful outcome
+; GPRS_CHECK_FAIL = 4 - report that a condition check has failed
+; GPRS_CHECK_OK = 8  -  report that a condition check has passed
+; GPRS_LOOP = 16 - print debug information in loops
+; GPRS_MSG  = 32 -  report sending/receiving of messages
+;Debug=1
 
 ; MS.Power.Alpha: integer: MS power control parameter, unitless, in steps of 0.1, so a parameter of 5 is an alpha value of 0.5.
 ; Determines the sensitivity of the MS to variations in downlink RSSI.

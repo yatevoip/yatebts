@@ -201,7 +201,7 @@ struct LlcFrameI : public LlcFrame, public LlcMsg
 	unsigned getS() { return getField2(controlOffset+2,6,2); }	// S1 and S2 bits.
 
 	void llcProcess(LlcEntity *lle) {	// We dont handle them.
-		LLCWARN("LLC unexpected I frame ignored"<<LOGVAR2("S",getS()));
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","LLC unexpected I frame ignored"<<LOGVAR2("S",getS()));
 	}
 };
 
@@ -215,7 +215,7 @@ struct LlcFrameS : public LlcFrame, public LlcMsg
 	unsigned getS() { return getField2(controlOffset+1,6,2); }	// S1 and S2 bits.
 
 	void llcProcess(LlcEntity *lle) {	// We dont handle them.
-		LLCWARN("LLC unexpected S frame ignored"<<LOGVAR2("S",getS()));
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","LLC unexpected S frame ignored"<<LOGVAR2("S",getS()));
 	}
 };
 
@@ -254,8 +254,7 @@ struct LlcFrameSack : public LlcFrame , public LlcMsg
 {
 	LlcFrameSack(ByteVector &f) : LlcFrame(f) {}
 	void llcProcess(LlcEntity *lle) {
-		LOG(ERR) << "LLC SSACK frame ignored";
-		LLCWARN("LLC SSACK frame ignored");
+		SGSNLOGF(WARNING,GPRS_ERR,"LLC","LLC SSACK frame ignored");
 	}
 };
 

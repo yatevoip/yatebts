@@ -336,7 +336,7 @@ void USFList::setUsf(unsigned downusf, unsigned downbsn)		// Save usf for curren
 
 void L2MAC::macConfigInit()
 {
-	GPRSSetDebug(configGetNumQ("GPRS.Debug",0));
+	GPRSSetDebug(configGetNumQ("GPRS.Debug",GPRS_ERR));
 	gGprsWatch = configGetNumQ("GPRS.WATCH",0);
 	gLogToConsole = configGetNumQ("Log.ToConsole",0);
 
@@ -430,14 +430,14 @@ void L2MAC::macAddTBF(TBF *tbf) {
 
 void L2MAC::macForgetTBF(TBF *tbf, bool forever)
 {
-	GPRSLOG(2) << "forget "<<tbf->tbfid(0);
+	GPRSLOG(DEBUG,GPRS_MSG) << "forget "<<tbf->tbfid(0);
 	macTBFs.remove(tbf);
 	// lock unnecessary, using macLock now:
 	//macTBFs.remove_safely(tbf); // Usually already locked, so lock is recursive
 	//ScopedLock lock2(macExpiredTBFs.mListLock);
 	if (forever) {
 		macExpiredTBFs.remove(tbf);	// Just in case it was on this list.
-		GPRSLOG(2) << "delete ",tbf->tbfid(0);
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "delete forever ",tbf->tbfid(0);
 		delete tbf;
 		return;
 	}
@@ -446,7 +446,7 @@ void L2MAC::macForgetTBF(TBF *tbf, bool forever)
 	while (macExpiredTBFs.size() > keepExpired) {
 		TBF *tbf2 = macExpiredTBFs.back();
 		macExpiredTBFs.pop_back();	// returns void, the nitwits.
-		GPRSLOG(2) << "delete ",tbf2->tbfid(0);
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "delete expired ",tbf2->tbfid(0);
 		delete tbf2;
 	}
 }
@@ -499,7 +499,7 @@ MSInfo *L2MAC::macFindMSByTlli(uint32_t tlli, int create /*=0*/)
 	}
 	if (! create) { return NULL; }
 	ms = new MSInfo(tlli);
-	GPRSLOG(1) << "New MS:"<<ms<<LOGHEX(tlli);
+	GPRSLOG(INFO,GPRS_MSG) << "New MS:"<<ms<<LOGHEX(tlli);
 	return ms;
 }
 
@@ -592,8 +592,7 @@ bool L2MAC::macFreeChannel()
 
 	//PDCHL1FEC *pdch = gL2MAC.macPickChannel();	// pick the least busy channel;
 	PDCHL1FEC *pdch = gL2MAC.macPDCHs.back();
-	GLOG(INFO) << "GPRS freeing channel" << pdch;
-	GPRSLOG(1) << "GPRS freeing channel " << pdch;
+	GLOG(INFO) << "GPRS freeing channel " << pdch;
 	delete pdch;	// Among other things, removes from macPDCHs before freeing it.
 	macPacchs.clear();	// Must rebuild the pacch list.
 	return true;
@@ -629,7 +628,7 @@ void L2MAC::macForgetCh(PDCHL1FEC*pch)
 	}
 	macPDCHs.remove(pch);
 	macPacchs.clear();	// Must rebuild the pacch list.
-	GPRSLOG(1) << "macForgetChannel, remaining="<<macPDCHs.size();
+	GLOG(DEBUG) << "macForgetChannel, remaining="<<macPDCHs.size();
 }
 
 // Return a mask of the channels available on this arfcn.
@@ -797,7 +796,7 @@ static void macPacchRebuild()
 	}
 	if (asize) { macPacchAddAdjCh(alist,asize); }
 
-	if (GPRSDebug) { printf("after macPacchRebuild:"); dumpPdch(); }
+	//if (GPRSDebug) { printf("after macPacchRebuild:"); dumpPdch(); }
 
 	// Check for disaster.  This would happen if all the channels were singletons.
 	if (gL2MAC.macPacchs.size() == 0) {
@@ -853,15 +852,15 @@ PDCHL1FEC *L2MAC::macPickChannel()
 				// Add 1 in case nobody is sending anything we will still differentiate empty channels.
 				int msload = ms->msDownlinkQueue.size() + ms->msTrafficMetric * 30;
 				load += 1 + msload;
-				GPRSLOG(2) << "macPickChannel loop"<<LOGVAR(ch)<<ms<<LOGVAR(msload) << LOGVAR(load);
+				GPRSLOG(DEBUG,GPRS_LOOP) << "macPickChannel loop"<<LOGVAR(ch)<<ms<<LOGVAR(msload) << LOGVAR(load);
 			}
 		}
 		if (bestch == NULL || load < bestload) {
 			bestch = ch; bestload = load;
 		}
-		GPRSLOG(2) << "macPickChannel intermediate"<<LOGVAR(bestch) << LOGVAR(ch) << LOGVAR(load);
+		GPRSLOG(DEBUG,GPRS_LOOP) << "macPickChannel intermediate"<<LOGVAR(bestch) << LOGVAR(ch) << LOGVAR(load);
 	}
-	GPRSLOG(2) << "macPickChannel result "<<LOGVAR(bestch);
+	GPRSLOG(DEBUG,GPRS_MSG|GPRS_LOOP) << "macPickChannel result "<<LOGVAR(bestch);
 
 	// And there you have it.
 	return bestch;
@@ -950,7 +949,7 @@ void L2MAC::macStop(bool channelstoo)
 			if (! macFreeChannel()) break;
 		}
 	}
-	GPRSLOG(1) << "macStop successful\n";
+	GPRSLOG(INFO,GPRS_MSG) << "macStop successful\n";
 }
 
 
@@ -1002,20 +1001,20 @@ RLCBSN_t L1UplinkReservation::makeReservationInt(
 		}
 		// This I/O is so stupid...
 		if (rd) {
-			GPRSLOG(1) << "makeReservation"<<tbf<<tbf->mtMS <<LOGVAR(restype)<<LOGVAR(afterBSN)
+			GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "makeReservation"<<tbf<<tbf->mtMS <<LOGVAR(restype)<<LOGVAR(afterBSN)
 				<<",fn="<<(afterBSN.valid() ? afterBSN.FN() : 0) << LOGVAR(mttype)
 				<< LOGVAR(rd->mRSSI) << LOGVAR(rd->mTimingError);
 		} else {
-			GPRSLOG(1) << "makeReservation"<<tbf<<tbf->mtMS <<LOGVAR(restype)<<LOGVAR(afterBSN)
+			GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "makeReservation"<<tbf<<tbf->mtMS <<LOGVAR(restype)<<LOGVAR(afterBSN)
 				<<",fn="<<(afterBSN.valid() ? afterBSN.FN() : 0) << LOGVAR(mttype);
 		}
 	} else {
 		if (rd) {
-			GPRSLOG(1) << "makeReservation" <<LOGVAR(restype)<<LOGVAR(afterBSN)
+			GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "makeReservation" <<LOGVAR(restype)<<LOGVAR(afterBSN)
 				<<",fn="<<(afterBSN.valid() ? afterBSN.FN() : 0) << LOGVAR(mttype)
 				<< LOGVAR(rd->mRSSI) << LOGVAR(rd->mTimingError);
 		} else {
-			GPRSLOG(1) << "makeReservation" <<LOGVAR(restype)<<LOGVAR(afterBSN)
+			GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "makeReservation" <<LOGVAR(restype)<<LOGVAR(afterBSN)
 				<<",fn="<<(afterBSN.valid() ? afterBSN.FN() : 0) << LOGVAR(mttype);
 		}
 	}
@@ -1047,12 +1046,12 @@ RLCBSN_t L1UplinkReservation::makeReservationInt(
 		rp->mrBSN = bsn;
 		rp->mrTBF = tbf;
 		if (rd) { rp->mrRadData = *rd; }
-		GPRSLOG(1) << "    reservation result:"<<LOGVAR(bsn)<<LOGVAR(bsn.FN())<<LOGVAR(rrbp)<<"\n";
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "    reservation result:"<<LOGVAR(bsn)<<LOGVAR(bsn.FN())<<LOGVAR(rrbp)<<"\n";
 		if (prrbp) { *prrbp = rrbp; }
 		mac_debug();
 		return bsn;
 	}
-	GPRSLOG(1) << "   reservation failure"<<LOGVAR(first)<<LOGVAR(lastplus1)<<"\n";
+	GPRSLOG(INFO,GPRS_ERR|GPRS_CHECK_FAIL) << "   reservation failure"<<LOGVAR(first)<<LOGVAR(lastplus1)<<"\n";
 	mac_debug();
 	return -1;	// Abject failure.
 }
@@ -1083,7 +1082,7 @@ RLCBSN_t L1UplinkReservation::makeCCCHReservation(
 	int qmax = gConfig.getNum("GSM.CCCH.AGCH.QMax");
 	if (qmax > 0 && AGCH->load()>(unsigned)qmax) {
 		if (type == RLCBlockReservation::ForRACH) {
-			GPRSLOG(1) << "RACH dropped due to AGCH congestion.\n";
+			GPRSLOG(WARNING,GPRS_ERR) << "RACH dropped due to AGCH congestion.\n";
 		} else if (type == RLCBlockReservation::ForPoll) {
 			GLOG(INFO) << "CCCH congestion prevented Packet Downlink Assignment Message";
 		}
@@ -1182,7 +1181,7 @@ RLCBlockReservation::type L1UplinkReservation::recvReservation(
 		if (rp->mrTBF) {
 			devassert(rp->mrType != RLCBlockReservation::ForRACH);
 			TBF *rtbf = rp->mrTBF;
-			GPRSLOG(1) << "recvReservation " <<rp->mrType <<LOGVAR2("ttype",rp->mrSubType)
+			GPRSLOG(DEBUG,GPRS_MSG) << "recvReservation " <<rp->mrType <<LOGVAR2("ttype",rp->mrSubType)
 				<<rtbf <<rtbf->mtMS <<LOGVAR(bsn) <<" "<<ch;
 			*restbf = rtbf;
 			rtbf->mtRecvAck(rp->mrSubType);
@@ -1192,10 +1191,10 @@ RLCBlockReservation::type L1UplinkReservation::recvReservation(
 			default: break;
 			}
 		} else {
-			GPRSLOG(1) << "recvReservation"<<rp->mrType<<" tbf=null" <<LOGVAR(bsn)<<" "<<ch;
+			GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_FAIL) << "recvReservation"<<rp->mrType<<" tbf=null" <<LOGVAR(bsn)<<" "<<ch;
 		}
 	} else {
-		//GPRSLOG(1) << "recvReservation unrecognized"<<LOGVAR(bsn)<<"\n";
+		//GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_FAIL|GPRS_ERR) << "recvReservation unrecognized"<<LOGVAR(bsn)<<"\n";
 	}
 	clearReservation(bsn,NULL); // Be tidy.
 	return result;
@@ -1221,10 +1220,10 @@ static
 int findNeedyUSF(PDCHL1FEC *pdch)
 {
 	int usf;
-	GPRSLOG(512) << "findNeedyUSF start for "<<pdch;
+	GPRSLOG(DEBUG,GPRS_LOOP) << "findNeedyUSF start for "<<pdch;
 
 	if (extDyn.isUplinkReserved(pdch)) {
-		GPRSLOG(512) << "findNeedyUSF extDyn.isUplinkReserved "<<pdch;
+		GPRSLOG(INFO,GPRS_ERR) << "findNeedyUSF extDyn.isUplinkReserved "<<pdch;
 		return 0;
 	}
 
@@ -1243,7 +1242,7 @@ int findNeedyUSF(PDCHL1FEC *pdch)
 			// Lets see if the MS wants to send something to us.
 			TBF *tbf;
 			RN_MS_FOR_ALL_TBF(ms,tbf) {
-				GPRSLOG(512) << "findNeedyUSF "<<ms <<" testing" <<tbf;
+				GPRSLOG(DEBUG,GPRS_LOOP) << "findNeedyUSF "<<ms <<" testing" <<tbf;
 				if (tbf->mtDir != RLCDir::Up) continue;
 				// We dont include state DataFinal, because then we have already
 				// received all the blocks and are waiting for an RRBP reservation,
@@ -1306,7 +1305,7 @@ int findNeedyUSF(PDCHL1FEC *pdch)
 				//if (tbf->stalled()) continue;
 
 				int thisage = gBSNNext - ms->msLastUsfGrant;
-				GPRSLOG(512) << "findNeedyUSF for "<<ms <<LOGVAR(usf)<<LOGVAR(thisage)<<tbf;
+				GPRSLOG(DEBUG,GPRS_LOOP) << "findNeedyUSF for "<<ms <<LOGVAR(usf)<<LOGVAR(thisage)<<tbf;
 				if (besttbf) {
 					// We want to keep the TBF with the longest age.
 					if (thisage < bestage) continue;
@@ -1324,7 +1323,7 @@ int findNeedyUSF(PDCHL1FEC *pdch)
 		// In state DataReassign, dont penalize the MS for not listening,
 		// because we dont know if it is still on this chan or not.
 		besttbf->mtMS->msCountUSFGrant(besttbf->mtGetState() == TBFState::DataTransmit);
-		GPRSLOG(4)<<LOGVAR(bestusf)<<LOGVAR(besttbf)<<"\n";
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK)<<LOGVAR(bestusf)<<LOGVAR(besttbf)<<"\n";
 		return bestusf;
 	}
 
@@ -1417,7 +1416,7 @@ void GPRSProcessRACH(unsigned RA,
 {
 	if (! GPRSConfig::IsEnabled()) return;
 	ChIdleCounter = 0;
-	GPRSLOG(1) << "Received RACH"<<LOGVAR(RA)<<LOGVAR(when)<<LOGVAR(RSSI)<<LOGVAR(timingError)<<"\n";
+	GPRSLOG(INFO,GPRS_MSG) << "Received RACH"<<LOGVAR(RA)<<LOGVAR(when)<<LOGVAR(RSSI)<<LOGVAR(timingError)<<"\n";
 	Stats.countRach++;
 	gReports.incr("GPRS.RACH");
 
@@ -1425,7 +1424,7 @@ void GPRSProcessRACH(unsigned RA,
 	gL2MAC.macRachQ.write(rip);
 
 	if (! gL2MAC.macStart()) {
-		GPRSLOG(1) << "MAC failed to init!\n";
+		GPRSLOG(WARNING,GPRS_ERR) << "MAC failed to init!\n";
 	}
 }
 
@@ -1448,7 +1447,7 @@ void GPRSProcessRACH(unsigned RA,
 // Power control in GSM03.64 sec6.5.8
 void RachInfo::serviceRach()
 {
-	GPRSLOG(1) << "MAC serviceRACH\n";
+	GPRSLOG(DEBUG,GPRS_MSG) << "MAC serviceRACH\n";
 	ChIdleCounter = 0;
 	CCCHLogicalChannel *AGCH = gBTS.getAGCH();
 	/** code moved to makeCCCHReservation()
@@ -1467,7 +1466,7 @@ void RachInfo::serviceRach()
 	PDCHL1FEC *chan = gL2MAC.macPickChannel();	// pick the least busy channel;
 	//PDCHL1FEC *chan = gL2MAC.macPDCHs.front();	// First channel is our PAACH.
 	if (chan == NULL) {
-		GPRSLOG(1) << "MAC serviceRACH failed to find available channel!\n";
+		GPRSLOG(INFO,GPRS_ERR) << "MAC serviceRACH failed to find available channel!\n";
 		return;
 	}
 
@@ -1506,13 +1505,13 @@ void RachInfo::serviceRach()
 		if (! RBN.valid()) {
 			// Abject failure.  This is probably due to AGCH congestion,
 			// and we printed one message already.
-			GPRSLOG(1) << "serviceRACH failed to make a reservation at"
+			GPRSLOG(INFO,GPRS_ERR) << "serviceRACH failed to make a reservation at"
 				<<LOGVAR(gBSNNext) <<LOGVAR(now);
 			// The MS may try another RACH for us again later,
 			// or give up and try some other cell that it can also hear.
 			return;
 		}
-		GPRSLOG(1) << "serviceRACH at "<<LOGVAR(gBSNNext) <<LOGVAR(now) 
+		GPRSLOG(DEBUG,GPRS_MSG|GPRS_CHECK_OK) << "serviceRACH at "<<LOGVAR(gBSNNext) <<LOGVAR(now) 
 			<<" with reservation at "<<LOGVAR(RBN) <<"=" <<RBN.FN() << " frames.";
 
 		// GSM 4.08 3.5.2.1.3.1: The immediate assignment message includes
@@ -1535,7 +1534,7 @@ void RachInfo::serviceRach()
 		// and probably unnecessary.  It is not really necessary to change these at all here.
 		pa->setPacketPowerOptions(GetPowerAlpha(),GetPowerGamma());
 
-		GPRSLOG(1) << "GPRS serviceRACH sending L3ImmediateAssignment:" << result;
+		GPRSLOG(DEBUG,GPRS_MSG) << "GPRS serviceRACH sending L3ImmediateAssignment:" << result;
 		AGCH->send(result);
 		break;
 	}
@@ -1548,7 +1547,7 @@ void L2MAC::macServiceRachQ()
 {
 	RachInfo *rip;
 	while ((rip = macRachQ.readNoBlock())) {
-		GPRSLOG(1) << "GPRS: servicing RACHQ";
+		GPRSLOG(DEBUG,GPRS_LOOP) << "GPRS: servicing RACHQ";
 		LOGWATCHF("RACH %s\n",strrchr(timestr().c_str(),':')+1);
 		// TODO: Check the burst age again, in case start of GPRS service was delayed.
 		// If the RACH is too old, discard it.
@@ -1558,7 +1557,7 @@ void L2MAC::macServiceRachQ()
 			macAddChannel();
 		}
 		if (!macActiveChannels()) {
-			GPRSLOG(1) << "GPRS: RACHQ failed to allocate channels";
+			GPRSLOG(INFO,GPRS_ERR) << "GPRS: RACHQ failed to allocate channels";
 			// Failed to allocate any channels at all.
 			// Toss the RACH.  The MS will just have to try again later.
 			//macRachQ.write(rip);	// We reordered the RACHs, but should not matter.
@@ -1578,7 +1577,7 @@ static void processRLCUplinkDataBlock(PDCHL1FEC *pdch, RLCRawBlock *src,TBF *res
 	// If this flag is set, data blocks are supposed to arrive
 	// only on odd numbered blocks
 	if (gFixIdleFrame && (0==(src->mBSN&1))) {
-		GPRSLOG(1) << "@@@OOPS: Even numbered uplink data block:"<<src->mBSN;
+		GPRSLOG(INFO,GPRS_ERR) << "@@@OOPS: Even numbered uplink data block:"<<src->mBSN;
 	}
 
 	// Reassociate the block with the TBF to which it belongs:
@@ -1600,10 +1599,10 @@ static void processRLCUplinkDataBlock(PDCHL1FEC *pdch, RLCRawBlock *src,TBF *res
 
 		//GPRSLOG(1) << "### Uplink Data Block tfi="<<rb->mTFI
 		//	<<" tbf="<<tbf << " bsn="<<src->mBSN;
-		if (GPRSDebug&2) {
+		if (IS_SET_GPRSDEBUG(GPRS_MSG)) {
 			std::ostringstream oss;
 			rb->RLCUplinkDataBlockHeader::text(oss);
-			GPRSLOG(2) << "Uplink Data Block tfi="<<rb->mTFI
+			GPRSLOG(DEBUG,GPRS_MSG) << "Uplink Data Block tfi="<<rb->mTFI
 				<<" tbf=" <<tbf <<" bsn="<<src->mBSN <<tbf<<oss.str();
 		}
 		if (restbf && restbf != tbf) {
@@ -1639,7 +1638,7 @@ static void processUplinkResourceRequest(
 	if (!ms) {
 		// 3-20120: This happened if the MS tried to identify itself using a TFI,
 		// but the TBF for that TFI is already deleted.  Just ignore it, nothing else we can do.
-		GPRSLOG(1) << "UplinkResourceRequest for unidentified MS on ch:" << requestch;
+		GPRSLOG(WARNING,GPRS_ERR) << "UplinkResourceRequest for unidentified MS on ch:" << requestch;
 		return;
 	}
 	ms->talkedUp();
@@ -1687,7 +1686,7 @@ static void processUplinkResourceRequest(
 	// as PACCH, and will continue to do so unless and until we tell it otherwise.
 	if (ms->msPacch && ms->msPacch != requestch) {
 		// This does not really matter.
-		GPRSLOG(1) << ms <<" ch:"<<ms->msPacch<<" different from msg ch:"<<requestch;
+		GPRSLOG(INFO,GPRS_ERR) << ms <<" ch:"<<ms->msPacch<<" different from msg ch:"<<requestch;
 	}
 
 	// If the MS is calling us on RACH, the old channel assignments are at best
@@ -1734,7 +1733,7 @@ static void processUplinkResourceRequest(
 	TBF *atbf;	// There could be both up and down tbfs, so check both.
 	bool ignore = 0;
 	if (isRach && ms->msCountActiveTBF(RLCDir::Down, &atbf)) {
-		GLOG(ERR) << ms <<" RACH while TBF transmitting:"<<atbf << " cancelled";
+		GLOG(ERR) << ms <<" RACH while downlink TBF transmitting:"<<atbf << " cancelled";
 		// We should differentiate the case where the downlink happened via
 		// immediate assignment that passed the RACH in flight.
 		// The network sends the One Block Assignment and the DIA
@@ -1775,7 +1774,7 @@ static void processUplinkResourceRequest(
 			atbf->mtCancel(MSStopCause::Rach,TbfRetryAfterWait);
 		}
 		ignore = true;
-		GLOG(WARNING) << ms <<" Ignoring RACH while TBF active:"<<atbf;
+		GLOG(WARNING) << ms <<" Ignoring RACH while downlink TBF active:"<<atbf;
 	}
 
 	if (ms->msCountTransmittingTBF(RLCDir::Up, &atbf)) {
@@ -1789,7 +1788,7 @@ static void processUplinkResourceRequest(
 			// For safety sake we are going to ignore this rach and make the
 			// MS do another one.
 			ignore = true;
-			GLOG(WARNING) << ms <<" Ignoring RACH while TBF active:"<<atbf;
+			GLOG(WARNING) << ms <<" Ignoring RACH while uplink TBF active:"<<atbf;
 		} else {
 
 			// New: Fall through to call newUpTbf
@@ -1829,7 +1828,7 @@ static void processUplinkResourceRequest(
 	if (tbf == NULL) return;
 	//tbf->mtUnAckMode = rmsg->mCRD.mRLCMode;
 
-	GPRSLOG(1) <<"UplinkResourceRequest" <<LOGHEX(rmsg->mTLLI) <<ms
+	GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_OK) <<"UplinkResourceRequest" <<LOGHEX(rmsg->mTLLI) <<ms
 		<<tbf <<" rlcmode=" <<tbf->mtUnAckMode
 		<<" count tbfs=",ms->msCountActiveTBF(RLCDir::Up);
 }
@@ -1840,7 +1839,7 @@ static void processResourceRequest(
 {
 	int accessType = rmsg->mAccessTypePresent ? (int) rmsg->mAccessType : 0;
 	//GPRSLOG(1) << "processResourceRequest"<<LOGVAR(accessType);
-	GPRSLOG(1) << "processResourceRequest "<<rmsg->str();
+	GPRSLOG(INFO,GPRS_MSG) << "processResourceRequest "<<rmsg->str();
 	// TODO: This switch is not very interesting...
 	switch (accessType) {	// GSM04.60 table 11.2.16.2
 		case 0:	// Two Phase Access Request [second half of it]
@@ -1874,13 +1873,13 @@ static void processDownlinkAckNack(PDCHL1FEC *pdch,RLCMsgPacketDownlinkAckNack* 
 			TBF *uptbf = TBF::newUpTBF(ms,rmsg->mCRD,ms->msTlli,false);
 
 			if (uptbf) {
-				GPRSLOG(1) <<"Uplink TBF from downlink AckNack" <<ms
+				GPRSLOG(INFO,GPRS_CHECK_OK|GPRS_MSG) <<"Uplink TBF from downlink AckNack" <<ms
 					<<tbf <<" rlcmode=" <<tbf->mtUnAckMode
 					<<" count tbfs=",ms->msCountActiveTBF(RLCDir::Up);
 			}
 		}
 	} else {
-		GPRSLOG(1) <<"ERROR: downlinkacknack for "<<LOGVAR(tfi)<<" with no TBF!";
+		GPRSLOG(WARNING,GPRS_ERR|GPRS_CHECK_FAIL) <<"ERROR: downlinkacknack for "<<LOGVAR(tfi)<<" with no TBF!";
 	}
 }
 
@@ -1899,7 +1898,7 @@ static void processControlAcknowledgement(PDCHL1FEC*pdch, RLCMsgPacketControlAck
 {
 	// TODO: We should add a debug check to make sure the MS identified by this TLLI
 	// is the same one in the reservation.
-	GPRSLOG(1) << "processControlAck "<<rmsg->str();
+	GPRSLOG(INFO,GPRS_MSG) << "processControlAck "<<rmsg->str();
 
 	// We dont have to do anything; recvReservation informed the TBF.
 	uplinkCommon(rmsg->mTLLI,rd,"ControlAck");
@@ -1907,7 +1906,7 @@ static void processControlAcknowledgement(PDCHL1FEC*pdch, RLCMsgPacketControlAck
 
 static void processUplinkDummy(PDCHL1FEC *pdch, RLCMsgPacketUplinkDummyControlBlock* rmsg, RadData &rd)
 {
-	GPRSLOG(1) << "processDummyUplink "<<rmsg->str();
+	GPRSLOG(DEBUG,GPRS_MSG) << "processDummyUplink "<<rmsg->str();
 	uplinkCommon(rmsg->mTLLI,rd,"DummyUplinkControl");
 }
 
@@ -1919,7 +1918,7 @@ static void processUplinkBlock(PDCHL1FEC *pdch, RLCRawBlock *src)
 	// TODO ...
 
 	char buf[40];
-	GPRSLOG(1) <<"-----> processUplinkBlock mac type="<<MACPayloadType::name(src->mmac.mPayloadType) << " ch:"<<pdch<<pdch->getAnsweringUsfText(buf,src->mBSN);
+	GPRSLOG(DEBUG,GPRS_MSG) <<"-----> processUplinkBlock mac type="<<MACPayloadType::name(src->mmac.mPayloadType) << " ch:"<<pdch<<pdch->getAnsweringUsfText(buf,src->mBSN);
 	RadData rd;
 	TBF *restbf;
 	RLCUplinkMessage::MessageType mtype;
@@ -1950,7 +1949,7 @@ static void processUplinkBlock(PDCHL1FEC *pdch, RLCRawBlock *src)
 			break;
 		case MACPayloadType::RLCControl: {
 			mtype = (RLCUplinkMessage::MessageType) src->mData.peekField(8,6);
-			GPRSLOG(1) << "processUplinkMessage:" <<RLCUplinkMessage::name(mtype);
+			GPRSLOG(DEBUG,GPRS_MSG) << "processUplinkMessage:" <<RLCUplinkMessage::name(mtype);
 
 			RLCUplinkMessage* msg = RLCUplinkMessageParse(src);
 			if (msg == NULL) {
@@ -2003,7 +2002,7 @@ static void processBSSGMessages()
 		case BSSG::BSPDUType::DL_UNITDATA: {
 
 			BSSG::BSSGMsgDLUnitData *dlmsg = new BSSG::BSSGMsgDLUnitData(dmsg); 
-			GPRSLOG(1) << "BSSG <=== "<<dlmsg->str()<<timestr();
+			GPRSLOG(DEBUG,GPRS_LOOP) << "BSSG <=== "<<dlmsg->str()<<timestr();
 			// Note that the ByteVector from dmsg that contains the PDU
 			// has been moved to dlmsg.
 			//devassert(dlmsg->getRefCnt() == 2);
@@ -2043,7 +2042,7 @@ static void processBSSGMessages()
 		case BSSG::BSPDUType::FLOW_CONTROL_MS_ACK:	// network->BSS
 		default:
 			// See the list of unimplemented messages in BsRecvMsg()
-			GPRSLOG(1) << "BSSG Downlink Message Ignored:"<<dmsg;
+			GPRSLOG(INFO,GPRS_ERR|MSG) << "BSSG Downlink Message Ignored:"<<dmsg;
 			//<<BSSG::BSPDUType::name(msgtype) << " size="<<dmsg->size();
 			break;
 		}
@@ -2248,7 +2247,7 @@ static void advanceBSNNext(int amt)
 				RLCBSN_t rprevdeb(gBSNNext-(BSNLagTime+ExtraClockDelay+2));
 				res = pdch->getReservation(rprevdeb);
 				if (res) {
-					GPRSLOG(1) << "Reservation unanswered "<<res->mrType<<LOGVAR2("ttype",res->mrSubType)<<" "<<res->mrTBF 
+					GPRSLOG(DEBUG,GPRS_MSG|GPRS_LOOP) << "Reservation unanswered "<<res->mrType<<LOGVAR2("ttype",res->mrSubType)<<" "<<res->mrTBF 
 						<<" bsn=" <<rprevdeb <<" fn="<<rprevdeb.FN() << *res;
 				}
 			}
@@ -2298,7 +2297,7 @@ static void serviceLoopSynchronize(bool firsttime)
 		int fnnow = tstart.FN();
 		if (!firsttime) {
 			int fndelta = GSM::FNDelta(fnnow,fnprev);
-			GPRSLOG(16) << "GSM FN delta="<<fndelta<<"\n";
+			GPRSLOG(DEBUG,GPRS_LOOP) << "GSM FN delta="<<fndelta<<"\n";
 			// 12-12-2011: The FN does run backwards ocassionally,
 			// because the Clock mClock we use is only approximate,
 			// and it is updated reguarly by the radio.
@@ -2314,7 +2313,7 @@ static void serviceLoopSynchronize(bool firsttime)
 				//gFixSyncUseClock = true;	// Switch to alternate methodology
 			}
 			if (fndelta > 6) {
-				GPRSLOG(4) << "GSM FN ran forwards by " << fndelta << "\n";
+				GPRSLOG(INFO,GPRS_LOOP|GPRS_MSG) << "GSM FN ran forwards by " << fndelta << "\n";
 			}
 		}
 		fnprev = fnnow;
@@ -2341,7 +2340,7 @@ static void serviceLoopSynchronize(bool firsttime)
 		int deltaAfterWait = GSM::FNDelta(tnow.FN(),tprev.FN());
 		// The deltaAfterWait is usually -1, so ignore that.
 		if (deltaAfterWait > 3 || deltaAfterWait < -1) {
-			GPRSLOG(2) << "gBTS.clock.wait unexpected wait time: "<<LOGVAR(deltaAfterWait);
+			GPRSLOG(INFO,GPRS_ERR|GPRS_CHECK_FAIL) << "gBTS.clock.wait unexpected wait time: "<<LOGVAR(deltaAfterWait);
 		}
 
 		// See if this thread was stalled in the last iteration.
@@ -2363,7 +2362,7 @@ static void serviceLoopSynchronize(bool firsttime)
 				// This is really a disaster.
 				gBSNNext = bsnFixed + 1;
 			}
-			GPRSLOG(2) << "unexpected gBSNNext delta:" <<LOGVAR(delta)
+			GPRSLOG(INFO,GPRS_ERR|GPRS_CHECK_FAIL) << "unexpected gBSNNext delta:" <<LOGVAR(delta)
 					<<LOGVAR(tnow) <<LOGVAR(gBSNNext) <<LOGVAR(gBSNNext.FN()) <<LOGVAR(bsnFixed)
 					<< " seconds=" << (timef() - timeprev)  << "\n";
 		}
@@ -2394,16 +2393,16 @@ static void serviceLoopSynchronize(bool firsttime)
 void L2MAC::macServiceLoop()
 {
 	double starttime = 0;	// useless initialization to shut up gcc.
-	GPRSLOG(16) << "macServiceLoop:" << LOGVAR(gBSNNext);
+	GPRSLOG(DEBUG,GPRS_LOOP) << "macServiceLoop:" << LOGVAR(gBSNNext);
 
-	if (GPRSDebug) { starttime = timef(); }
+	if (IS_SET_GPRSDEBUG(GPRS_LOOP)) { starttime = timef(); }
 	mac_debug();
 
 	// Step: Each incoming RACH will need a single block assignment.
 	// We do this first because if no channels are assigned to GPRS,
 	// this will allocate the first GPRS channel as a side effect.
 	macServiceRachQ();
-	GPRSLOG(16) << "macServiceLoop: after serviceRachQ";
+	GPRSLOG(DEBUG,GPRS_LOOP) << "macServiceLoop: after serviceRachQ";
 
 	// Step: Maybe add or free some radio channels.
 	macCheckChannels();
@@ -2420,7 +2419,7 @@ void L2MAC::macServiceLoop()
 		}
 	}
 
-	GPRSLOG(16) << "macServiceLoop: after uplink service";
+	GPRSLOG(DEBUG,GPRS_LOOP) << "macServiceLoop: after uplink service";
 
 	// Step:  Service unattached TBFs.  (An attached TBF has resources
 	// assigned to its MS. Attached TBFs are handled by dlService().)
@@ -2440,7 +2439,7 @@ void L2MAC::macServiceLoop()
 	RN_MAC_FOR_ALL_MS(ms) {
 		ms->msService();
 	}
-	GPRSLOG(16) << "macServiceLoop: after ms service";
+	GPRSLOG(DEBUG,GPRS_LOOP) << "macServiceLoop: after ms service";
 
 	// Step:  Feed each downlink PDCH with RadioBlocks.
 	// As a side effect, this services all the [connected] TBFs in round robin order.
@@ -2449,7 +2448,7 @@ void L2MAC::macServiceLoop()
 		extDyn.edSetCn(pdch->CN());
 		pdch->downlink()->dlService();
 	}
-	GPRSLOG(16) << "macServiceLoop: after downlink service";
+	GPRSLOG(DEBUG,GPRS_LOOP) << "macServiceLoop: after downlink service";
 
 	// LONG RANGE TODO: At the end of a TBF, if the downlink TBF queue is low,
 	// we should send flow control to BSSG.  See engineRecvAckNack
@@ -2461,13 +2460,13 @@ void L2MAC::macServiceLoop()
 #if INTERNAL_SGSN==0
 		processBSSGMessages();
 #endif
-		GPRSLOG(16) << "macServiceLoop: after bssg service";
+		GPRSLOG(DEBUG,GPRS_LOOP) << "macServiceLoop: after bssg service";
 	} else {
 		processSgsnMessages();
 	}
 
 	// Step: gather statistics about this loop.
-	if (GPRSDebug) {
+	if (IS_SET_GPRSDEBUG(GPRS_LOOP)) {
 		double elapsed = timef() - starttime;
 		Stats.macServiceLoopTime.addPoint(elapsed);
 	}
@@ -2494,7 +2493,7 @@ static void *macThreadFunc(void *arg)
 		}
 	}
 
-	GPRSLOG(1) << "macServiceLoop starting:" << LOGVAR(gBSNNext) <<LOGVAR(fnstart);
+	GPRSLOG(INFO,GPRS_MSG|GPRS_LOOP) << "macServiceLoop starting:" << LOGVAR(gBSNNext) <<LOGVAR(fnstart);
 
 	// We need to run the service loop even if there are no channels allocated because
 	// the BSSG may add downlink PDUs to an MS which will create a new TBF,
@@ -2512,7 +2511,7 @@ static void *macThreadFunc(void *arg)
 		}
 	}
 
-	GPRSLOG(1) << "macServiceLoop ending:" << LOGVAR(gBSNNext);
+	GPRSLOG(INFO,GPRS_MSG|GPRS_LOOP) << "macServiceLoop ending:" << LOGVAR(gBSNNext);
 
 	gL2MAC.macRunning = false;
 	return NULL;

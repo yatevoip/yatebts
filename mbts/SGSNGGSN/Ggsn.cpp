@@ -101,7 +101,7 @@ static void sethighpri()
 	pthread_t me = pthread_self();
 	int policy; struct sched_param sp;
 	pthread_getschedparam(me,&policy,&sp);
-	SGSNLOG("service loop"<<LOGVAR(policy)<<LOGVAR2("priority",sp.sched_priority));
+	SGSNLOGF(DEBUG,GPRS_LOOP,"SGSN","service loop"<<LOGVAR(policy)<<LOGVAR2("priority",sp.sched_priority));
 	policy = SCHED_FIFO;	// Gives this thread higher priority.
 	pthread_setschedparam(me,policy,&sp);
 }
@@ -118,7 +118,7 @@ void *miniGgsnReadServiceLoop(void *arg)
 		fds[0].revents = 0;		// being cautious
 		// We time out occassionally to check if the user wants to shut the sgsn down.
 		if (-1 == poll(fds,1,ggsn->mStopTimeout)) {
-			SGSNERROR("ggsn: poll failure");
+			SGSNLOGF(ERR,GPRS_ERR,"SGSN","ggsn: poll failure");
 			return 0;
 		}
 		if (fds[0].revents & POLLIN) {
@@ -242,7 +242,7 @@ static void setPco(ByteVector &resultpco, ByteVector &pcoReq)
 	unsigned char *end = pc + resultpco.size();
 	 __attribute__((unused)) const char *protname = "";
 	if (*pc++ != 0x80) {
-		MGERROR("SGSN: Unrecognized PCO Config Protocol: %d\n",pc[-1]);
+		SGSNLOGF(ERR,GPRS_ERR,"SGSN","Unrecognized PCO Config Protocol:" <<  pc[-1]);
 	} else while (pc < end) {
 		unsigned proto = (pc[0] << 8) + pc[1];
 		pc += 2;
@@ -273,8 +273,8 @@ static void setPco(ByteVector &resultpco, ByteVector &pcoReq)
 						pc[0] = 2;	// IPCP command = ACK
 						if (op[1] < 6) {
 							bad_ipcp_opt_len:
-							MGERROR("SGSN: Invalid PCO IPCP Config Option Length: opt=0x%x len=%d\n",
-							op[0], op[1]);
+							SGSNLOGF(ERR,GPRS_ERR,"SGSN","Invalid PCO IPCP Config Option Length: opt=" << LOGVALHEX(op[0])
+							<< "len=" << op[1]);
 							goto next_protocol;
 						}
 						memcpy(&op[2], &mg_dns[0], 4);	// addr in network order.
@@ -292,7 +292,7 @@ static void setPco(ByteVector &resultpco, ByteVector &pcoReq)
 						what = "secondary NBNS [NetBios Name Service]"; goto bad_ipcp;
 					default: bad_ipcp:
 						// It would be nice to send an SMS message that the phone is set up improperly.
-						MGWARN("SGSN: warning: ignoring PDP Context activation IPCP option %d %s\n",pc[4],what);
+						SGSNLOGF(WARNING,GPRS_ERR,"SGSN","warning: ignoring PDP Context activation IPCP option " << pc[4] << " " << what);
 						break;
 					}
 				}
@@ -379,7 +379,7 @@ void sendPdpContextAccept(SgsnInfo *si, PdpContext *pdp)
 	setIpAddr(pdpa.mPdpAddress,pdp->mgp);
 	// No Packet Flow Identifier - not implemented.
 	// No SM cause, unless "the network accepts the requested PDN connectivity with restrictions."
-	SGSNLOG("Sending "<<pdpa.str() <<" "<<si);	//done by sgsnWriteHighSideMsg
+	SGSNLOGF(INFO,GPRS_MSG|GPRS_OK,"SGSN","Sending "<<pdpa.str() <<" "<<si);	//done by sgsnWriteHighSideMsg
 
 	// Send L3 Activate PDP Context Accept it on its way.
 	si->sgsnWriteHighSideMsg(pdpa);
@@ -396,13 +396,13 @@ static void handleActivatePdpContextRequest(SgsnInfo *si, L3SmMsgActivatePdpCont
 	// So just dont bother to validate llc sapi at all in UMTS, since we dont use it for anything.
 #if RN_UMTS == 0
 	if (! LlcEngine::isValidDataSapi(pdpr.mLlcSapi)) {
-		SGSNWARN(name<<"invalid llc sapi:"<<pdpr.mLlcSapi);
+		SGSNLOGF(WARNING,GPRS_ERR,"SGSN",name<<"invalid llc sapi:"<<pdpr.mLlcSapi);
 		sendPdpContextReject(si,SmCause::Invalid_mandatory_information,ti);
 		return;
 	}
 #endif
 	if (pdpr.mNSapi < 5 || pdpr.mNSapi > 15) {
-		SGSNWARN(name<<"invalid ns sapi:"<<pdpr.mNSapi);
+		SGSNLOGF(WARNING,GPRS_ERR,"SGSN",name<<"invalid ns sapi:"<<pdpr.mNSapi);
 		sendPdpContextReject(si,SmCause::Invalid_mandatory_information,ti);
 		return;
 	}
@@ -429,22 +429,22 @@ static void handleActivatePdpContextRequest(SgsnInfo *si, L3SmMsgActivatePdpCont
 			duplicateRequest = true;
 			if (pdp->mNSapi != (int) pdpr.mNSapi) {
 				// TODO: We should punt at this point.
-				SGSNWARN(name<<"duplicate request with different ns sapi:"<<pdpr.mNSapi);
+				SGSNLOGF(WARNING,GPRS_ERR,"SGSN",name<<"duplicate request with different ns sapi:"<<pdpr.mNSapi);
 			}
 		} else {
-			SGSNWARN(name<<"ns sapi already in use:"<<pdpr.mNSapi);
+			SGSNLOGF(WARNING,GPRS_ERR,"SGSN",name<<"ns sapi already in use:"<<pdpr.mNSapi);
 			sendPdpContextReject(si,SmCause::NSAPI_already_used,ti);
 			return;
 		}
 	}
 
 	if (duplicateRequest) {
-		SGSNLOG("Duplicate PdpContextRequest");
+		SGSNLOGF(INFO,GPRS_ERR,"SGSN","Duplicate PdpContextRequest");
 	} else {
 		// Allocate an IP address.
 		mg_con_t *mgp = mg_con_find_free(gmm->mPTmsi,pdpr.mNSapi);
 		if (mgp == NULL) {
-			SGSNERROR(name<<"out of ip addresses");
+			SGSNLOGF(WARNING,GPRS_ERR,"SGSN",name<<"out of ip addresses");
 			sendPdpContextReject(si,SmCause::Insufficient_resources,ti);
 			return;
 		}
@@ -477,7 +477,7 @@ static void handleActivatePdpContextRequest(SgsnInfo *si, L3SmMsgActivatePdpCont
 			pdp->mRabStatus = SgsnAdapter::allocateRabForPdp(si->mMsHandle,pdpr.mNSapi,pdpr.mQoS);
 			switch (pdp->mRabStatus.mStatus) {
 			case RabStatus::RabFailure:
-				SGSNERROR(name<<"Rab Allocation Failure:"<<SmCause::name(pdp->mRabStatus.mFailCode));
+				SGSNLOGF(ERR,GPRS_ERR,"SGSN",name<<"Rab Allocation Failure:"<<SmCause::name(pdp->mRabStatus.mFailCode));
 				sendPdpContextReject(si,pdp->mRabStatus.mFailCode,ti);
 				return;
 			case RabStatus::RabPending:
@@ -548,7 +548,7 @@ void handleDeactivatePdpContextRequest(SgsnInfo *si, L3SmMsgDeactivatePdpContext
 			}
 		}
 		if (!found) {
-			SGSNWARN("PdpContextDeactivate: pdp context not found for ti="<<deact.mTransactionId);
+			SGSNLOGF(WARNING,GPRS_ERR,"SGSN","PdpContextDeactivate: pdp context not found for ti="<<deact.mTransactionId);
 			// and send what??
 		}
 	}
@@ -575,13 +575,13 @@ void Ggsn::handleL3SmMsg(SgsnInfo *si,L3GprsFrame &frame1)
 	switch (mt) {
 	case L3SmMsg::ActivatePDPContextRequest: {
 		L3SmMsgActivatePdpContextRequest pdpr(frame);
-		SGSNLOG("Received "<<pdpr.str() <<si);
+		SGSNLOGF(INFO,GPRS_MSG|GPRS_CHECK_OK|GPRS_OK,"SGSN","Received "<<pdpr.str() <<si);
 		handleActivatePdpContextRequest(si,pdpr);
 		break;
 	}
 	case L3SmMsg::SMStatus: {
 		L3SmMsgSmStatus stmsg(frame);
-		SGSNLOG("Received SmStatus: "<<stmsg.str()<<si);
+		SGSNLOGF(INFO,GPRS_MSG|GPRS_CHECK_OK|GPRS_OK,"SGSN","Received SmStatus: "<<stmsg.str()<<si);
 		break;
 	}
 	//case L3SmMsg::ActivatePDPContextAccept:
@@ -592,7 +592,7 @@ void Ggsn::handleL3SmMsg(SgsnInfo *si,L3GprsFrame &frame1)
 	case L3SmMsg::DeactivatePDPContextRequest: {
 		//SGSNLOG("Incoming Deactivate pdp, frame="<<frame<< " bv="<<(ByteVector)frame);
 		L3SmMsgDeactivatePdpContextRequest deact(frame);
-		SGSNLOG("Received DeactivatePdpContextRequest: "<<deact.str());
+		SGSNLOGF(INFO,GPRS_MSG|GPRS_CHECK_OK|GPRS_OK,"SGSN","Received DeactivatePdpContextRequest: "<<deact.str());
 		handleDeactivatePdpContextRequest(si,deact);
 		break;
 	}
@@ -620,7 +620,7 @@ void Ggsn::handleL3SmMsg(SgsnInfo *si,L3GprsFrame &frame1)
 	//RequestSecondaryPDPContextActivationReject = 0x5c,
 	//Notification = 0x5d,
 	default:
-		SGSNWARN("Ignoring GPRS SM message type "<<mt<<" " <<L3SmMsg::name(mt));
+		SGSNLOGF(WARNING,GPRS_ERR,"SGSN","Ignoring GPRS SM message type "<<mt<<" " <<L3SmMsg::name(mt));
 		break;
 	}
 }

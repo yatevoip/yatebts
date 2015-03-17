@@ -242,12 +242,12 @@ class PdpContext
 	}
 
 	void PdpContext::pdpWriteLowSide(ByteVector &payload) {
-		SNDCPDEBUG("pdpWriteLowSide"<<LOGVAR2("packetlen",payload.size()));
+		SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"SNDCP","pdpWriteLowSide"<<LOGVAR2("packetlen",payload.size()));
 		PdpPdu *newpdu = new PdpPdu(payload,this->mgp);
 		gGgsn.mTxQ.write(newpdu);
 	}
 	void PdpContext::pdpWriteHighSide(unsigned char *packet, unsigned packetlen) {
-		SNDCPDEBUG("pdpWriteHighSide"<<LOGVAR2("packetlen",packetlen));
+		SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"SNDCP","pdpWriteHighSide"<<LOGVAR2("packetlen",packetlen));
 		ByteVectorTemp sdu(packet,packetlen);
 		//mpdpDownstream->snWriteHighSide(sdu);
 		mpcGmm->getSI()->sgsnWriteHighSide(sdu,mNSapi);

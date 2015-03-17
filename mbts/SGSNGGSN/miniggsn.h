@@ -93,14 +93,7 @@ extern time_t gGgsnInitTime;
 	}
 #define MGLOG(stuff) {std::ostringstream ss; ss<<stuff; MGLOGF("%s",ss.str().c_str());}
 
-#define MGDEBUG(lev,...) MGLOGF(__VA_ARGS__) {char *tmp;if (asprintf(&tmp,__VA_ARGS__)>0){LOG(DEBUG)<<tmp;free(tmp);}}
-
-#define MGERROR(...) {MGLOGF(__VA_ARGS__) char *tmp;if (asprintf(&tmp,__VA_ARGS__)>0){LOG(ERR)<<tmp;free(tmp);}}
-#define MGWARN(...) {MGLOGF(__VA_ARGS__) char *tmp;if (asprintf(&tmp,__VA_ARGS__)>0){LOG(WARNING)<<tmp;free(tmp);}}
-#define MGINFO(...) {MGLOGF(__VA_ARGS__) char *tmp;if (asprintf(&tmp,__VA_ARGS__)>0){LOG(INFO)<<tmp;free(tmp);}}
-#define MGINFO2(...) {MGINFO(__VA_ARGS__) \
-	printf(__VA_ARGS__);putchar('\n');fflush(stdout); }
-
+#define MGDEBUG(lev,...) MGLOGF(__VA_ARGS__) {char *tmp;if (asprintf(&tmp,__VA_ARGS__)>0){LOG(lev)<<tmp;free(tmp);}}
 
 };	// namespace
 #endif

@@ -114,13 +114,27 @@ namespace GPRS {
 #ifdef GPRSLOG
 #undef GPRSLOG
 #endif
-// 6-18-2012: If someone sets Log.Level to DEBUG, show everything.
-#define GPRSLOG(level) if (GPRS::GPRSDebug & (level) || IS_LOG_LEVEL(DEBUG)) \
-	_LOG(DEBUG) <<"GPRS"<<(level)<<","<<GPRS::gBSNNext<<":"
-#define LOGWATCHF(...) if (GPRS::gGprsWatch&1) printf(__VA_ARGS__); GPRSLOG(1)<<"watch:"<<format(__VA_ARGS__);
+
+// BITS for activating levels of debug through GPRSDebug
+#define GPRS_ERR        0x01  // report an error, default value for GPRSDebug
+#define GPRS_OK         0x02  // report a succesful outcome
+#define GPRS_CHECK_FAIL 0x04  // report that a condition check has failed
+#define GPRS_CHECK_OK   0x08  // report that a condition check has passed
+#define GPRS_LOOP       0x10  // print debug information in loops
+#define GPRS_MSG        0x20  // report sending/receiving of messages
+
+#define IS_SET_GPRSDEBUG(bitmask) (GPRS::GPRSDebug & (bitmask))
+
+#define PS_LOG(level,bitmask) if (IS_SET_GPRSDEBUG(bitmask) && IS_LOG_LEVEL(level)) \
+	_LOG(level) << ": "
+
+#define GPRSLOG(level,bitmask) PS_LOG(level,bitmask) << "GPRS::gBSNNext=" << GPRS::gBSNNext << ": "
+
+
+#define LOGWATCHF(...) if (GPRS::gGprsWatch&1) printf(__VA_ARGS__); GPRSLOG(INFO,GPRS_MSG)<<"watch:"<<format(__VA_ARGS__);
 
 // If gprs debugging is on, print these messages regardless of Log.Level.
-#define GLOG(wLevel) if (GPRSDebug || IS_LOG_LEVEL(wLevel)) _LOG(wLevel) << " "<<timestr()<<","<<GPRS::gBSNNext<<":"
+#define GLOG(wLevel) if (GPRS::GPRSDebug || IS_LOG_LEVEL(wLevel)) _LOG(wLevel) << " "<<timestr()<<","<<GPRS::gBSNNext<<":"
 
 // Like assert() but dont core dump unless we are testing.
 #define devassert(code) {if (GPRS::GPRSDebug||IS_LOG_LEVEL(DEBUG)) {assert(code);} else if (!(code)) {LOG(ERR)<<"assertion failed:"<< #code;}}
