@@ -887,6 +887,28 @@ bool bladeRFDevice::runCustom(const std::string &command)
             LOG(ERR) << "Error writing " << val << " to LMS register " << reg << ": " << bladerf_strerror(status);
 	}
     }
+    else if (command.substr(0,7) == "rx freq") {
+	unsigned int freq = 0;
+        if (::sscanf(command.c_str(),"%*s %*s %u",&freq) != 1)
+            return false;
+	if (freq < 380000000 || freq > 3800000000)
+	    return false;
+	int status = bladerf_set_frequency(bdev, BLADERF_MODULE_RX, freq);
+	if (status < 0) {
+            LOG(ERR) << "Error setting RX frequency " << freq << ": " << bladerf_strerror(status);
+	}
+    }
+    else if (command.substr(0,7) == "tx freq") {
+	unsigned int freq = 0;
+        if (::sscanf(command.c_str(),"%*s %*s %u",&freq) != 1)
+            return false;
+	if (freq < 380000000 || freq > 3800000000)
+	    return false;
+	int status = bladerf_set_frequency(bdev, BLADERF_MODULE_TX, freq);
+	if (status < 0) {
+            LOG(ERR) << "Error setting TX frequency " << freq << ": " << bladerf_strerror(status);
+	}
+    }
     else if (command == "rx show on")
         rxShowInfo = -1;
     else if (command == "rx show off")
