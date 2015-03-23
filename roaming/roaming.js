@@ -281,7 +281,7 @@ function addAuthParams(sr,msg,imsi,tmsi,autz)
     if (msg["auth.response"]!="") {
 	sr[autz] = 'Digest ' + tempinfo[key]["realm"] + 'uri="' + key + '", nonce="' + tempinfo[key]["nonce"] + '", response="' + msg["auth.response"] + '", algorithm=AKAv1-MD5';
     } else if (msg["auth.auts"]!="") {
-	sr[autz] = 'Digest ' + tempinfo[key]["realm"] + 'uri="' + key + '", nonce="' + tempinfo[key]["nonce"] + '", auts="' + msg["auth.auts"] + '", algorithm=AKAv1-MD5';
+	sr[autz] = 'Digest ' + tempinfo[key]["realm"] + 'uri="' + key + '", nonce="' + tempinfo[key]["nonce"] + '", auts="' + Engine.htoa(msg["auth.auts"]) + '", algorithm=AKAv1-MD5';
     } else if (msg.error!="") {
 	Engine.debug(Engine.DebugWarn, "Authentication failed for imsi/tmsi: "+key+", error: "+msg.error);
 	return false;
