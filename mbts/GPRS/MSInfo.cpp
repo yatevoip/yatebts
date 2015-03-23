@@ -780,6 +780,7 @@ void SignalQuality::dumpSignalQuality(std::ostream&os) const
 	os << LOGVAR2("RXQual",msRXQual);
 	os << LOGVAR2("SigVar",msSigVar);
 	os << LOGVAR2("ChCoding",msChannelCoding);
+	os << LOGVAR2("RXLev",msRXLev);
 	os.flags(savedfoobarflags);		// What were these guys thinking?
 
 	//ChannelCodingType ccup = msGetChannelCoding(RLCDir::Up);

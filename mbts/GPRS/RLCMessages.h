@@ -795,6 +795,112 @@ struct RLCMsgPacketUplinkDummyControlBlock : public RLCUplinkMessage
 	*/
 #endif
 
+#define MIN_RXLEV -111 // minimum level for RXLEV in dBm
+
+// PacketMeasurementReport Neighbour cell measurement
+// see TS 44.060 version 12.3.0 Release 12, section 11.2.9
+struct NCMeasurement
+{
+	Field<6> Frequency_N;
+	Bool_z BSICPres;
+	Field<6> BSIC;
+	Field<6> RXLEV;
+	int RXLEVdBm;
+
+	void writeBody(MsgCommon &dst) const
+	{
+		std::ostream *os  = dst.getStream();
+		if (!os)
+			return;
+		dst.WRITE_ITEM(Frequency_N);
+		if (dst.write01(BSICPres))
+			dst.WRITE_ITEM(BSIC);
+		*os << " RXLEV=" << RXLEV << "(" << RXLEVdBm << "dBm) ";
+	}
+
+	void parseBody(const BitVector &src, size_t &rp)
+	{
+		Frequency_N = src.readField(rp,6);
+		if ((BSICPres = src.readField(rp,1)))
+			BSIC = src.readField(rp,6);
+		RXLEV = src.readField(rp,6);
+		RXLEVdBm = MIN_RXLEV + RXLEV;
+	}
+};
+
+// PacketMeasurementReport
+// see TS 44.060 version 12.3.0 Release 12, section 11.2.9
+struct RLCMsgPacketMeasurementReport : public RLCUplinkMessage
+{
+	Field<32> mTLLI;
+	Bool_z m_PSI5ChangeMarkPresent;
+	Field<2> m_PSI5ChangeMark;
+	Field<1> m_NCMode;
+	Field<6> m_RXLEV_ServingCell;
+	int m_RXLEV_ServingCelldBm;
+	Field<3> m_no_NCMeasurements;
+	NCMeasurement m_NCMeasurements[7]; // no_NCMmeasurements is encoded on 3 bits => max 7 measurements.
+	Bool_z m_Rel99AdditionsPresent;
+	BitVector m_Rel99Additions;
+
+	RLCMsgPacketMeasurementReport(const RLCRawBlock *src) { parse(src); }
+
+	// Return the MSInfo identified by the contents of this message.
+	MSInfo *getMS(PDCHL1FEC *chan);
+
+	void parseBody(const BitVector &src, size_t &rp);
+	void writeBody(MsgCommon &dst) const;
+};
+
+#if RLCMESSAGES_IMPLEMENTATION
+	void RLCMsgPacketMeasurementReport::parseBody(const BitVector &src, size_t &rp)
+	{
+		// TLLI
+		mTLLI = src.readField(rp,32);
+		// PSI5_CHANGE_MARK
+		if ((m_PSI5ChangeMarkPresent = src.readField(rp,1)))
+			{ m_PSI5ChangeMark = src.readField(rp,2); }
+		 // This bit should be 0 always
+		if (src.readField(rp,1))
+			GPRSLOG(INFO,GPRS_ERR) << "Found bit set to 1 when it should be 0";
+		// NS Measurement Report
+		m_NCMode = src.readField(rp,1);
+		m_RXLEV_ServingCell = src.readField(rp,6);
+		m_RXLEV_ServingCelldBm = MIN_RXLEV + (int) m_RXLEV_ServingCell;
+		// This bit was 1 in previous releases
+		if (src.readField(rp,1))
+			GPRSLOG(INFO,GPRS_ERR) << "Found bit that should be 0";
+		m_no_NCMeasurements = src.readField(rp,3);
+		for (unsigned int i = 0; i < m_no_NCMeasurements && i < 7; i++) {
+			m_NCMeasurements[i].parseBody(src,rp);
+		}
+		// Rel 99 Additions
+		if (m_Rel99AdditionsPresent = src.readField(rp,1))
+		    m_Rel99Additions = src.tail(rp);
+	}
+
+	void RLCMsgPacketMeasurementReport::writeBody(MsgCommon &dst) const
+	{
+		std::ostream *os = dst.getStream();
+		if (!os)
+			return;
+		dst.writeField(mTLLI,32,"TLLI",tohex);
+		if (dst.write01(m_PSI5ChangeMarkPresent))
+			dst.WRITE_ITEM(m_PSI5ChangeMark);
+
+		dst.WRITE_ITEM(m_NCMode);
+		*os << " m_RXLEV_ServingCell=" << m_RXLEV_ServingCell << "(" << m_RXLEV_ServingCelldBm << "dBm)";
+		dst.WRITE_ITEM(m_no_NCMeasurements);
+		for (unsigned int i = 0; i < m_no_NCMeasurements; i++) {
+			*os << " NCMeasurement[" << i <<"]=(";
+			m_NCMeasurements[i].writeBody(dst);
+			*os << ")";
+		}
+		if (dst.write01(m_Rel99AdditionsPresent))
+			*os << " m_Rel99Additions=0x" << m_Rel99Additions.hexstr();
+	}
+
+#endif
 
 // GSM04.60 12.12
 struct RLCMsgPacketTimingAdvanceIE : public RLCMsgDownlinkIE

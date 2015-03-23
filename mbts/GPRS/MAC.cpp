@@ -1883,7 +1883,7 @@ static void processDownlinkAckNack(PDCHL1FEC *pdch,RLCMsgPacketDownlinkAckNack* 
 	}
 }
 
-static void uplinkCommon(uint32_t tlli, RadData &rd, const char *culprit)
+static MSInfo* uplinkCommon(uint32_t tlli, RadData &rd, const char *culprit)
 {
 	MSInfo *ms = gL2MAC.macFindMSByTlli(tlli,false);
 	if (ms) {
@@ -1892,6 +1892,7 @@ static void uplinkCommon(uint32_t tlli, RadData &rd, const char *culprit)
 	} else {
 		GLOG(ERR) << "TLLI"<<LOGHEX(tlli)<<" in "<<culprit<<" message not found";
 	}
+	return ms;
 }
 
 static void processControlAcknowledgement(PDCHL1FEC*pdch, RLCMsgPacketControlAcknowledgement*rmsg,RadData &rd)
@@ -1908,6 +1909,16 @@ static void processUplinkDummy(PDCHL1FEC *pdch, RLCMsgPacketUplinkDummyControlBl
 {
 	GPRSLOG(DEBUG,GPRS_MSG) << "processDummyUplink "<<rmsg->str();
 	uplinkCommon(rmsg->mTLLI,rd,"DummyUplinkControl");
+}
+
+static void processMeasurementReport(PDCHL1FEC *pdch, RLCMsgPacketMeasurementReport* rmsg, RadData &rd)
+{
+	GPRSLOG(INFO,GPRS_MSG|GPRS_OK) << "Received "<< rmsg;
+	MSInfo* ms = uplinkCommon(rmsg->mTLLI,rd,"PacketMeasurementReport");
+	if (!ms)
+		// Error message was printed by uplinkCommon;
+		return;
+	ms->msRXLev.addPoint(rmsg->m_RXLEV_ServingCelldBm);
 }
 
 // The src block is the decoded uplink BitVector from the radio.
@@ -1970,6 +1981,9 @@ static void processUplinkBlock(PDCHL1FEC *pdch, RLCRawBlock *src)
 				break;
 			case RLCUplinkMessage::PacketUplinkDummyControlBlock:
 				processUplinkDummy(pdch,(RLCMsgPacketUplinkDummyControlBlock*)msg,src->mRD);
+				break;
+			case RLCUplinkMessage::PacketMeasurementReport:
+				processMeasurementReport(pdch,(RLCMsgPacketMeasurementReport*)msg,src->mRD);
 				break;
 			default: // Just ignore unrecognized messages.
 				GLOG(INFO) << "GPRS: Ignoring UplinkMessage:"

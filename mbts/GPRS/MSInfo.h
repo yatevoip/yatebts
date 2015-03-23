@@ -143,6 +143,7 @@ struct SignalQuality {
 	Statistic<int> msILevel;
 	Statistic<int> msRXQual;
 	Statistic<int> msSigVar;
+	Statistic<int> msRXLev; // save RXLEV information received in measurement reports
 	void setRadData(RadData &rd);
 	void setRadData(float wRSSI,float wTimingError);
 	void dumpSignalQuality(std::ostream &os) const;

@@ -181,6 +181,9 @@ RLCUplinkMessage* RLCUplinkMessageParse(RLCRawBlock *src)
 				break;
 			// case PacketMobileTBFStatus:
 			// case AdditionalMSRadioAccessCapabilities:
+			case RLCUplinkMessage::PacketMeasurementReport:
+				result = new RLCMsgPacketMeasurementReport(src);
+				break;
 			default:
 				GLOG(INFO) << "unsupported RLC uplink message, type=" << mMessageType;
 				//result = new RLCMsgPacketUplinkDummyControlBlock(src);
