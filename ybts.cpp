@@ -2490,6 +2490,24 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
     return 0;
 }
 
+// Replace LF with CR/LF
+static void lf2crlf(String& buf, bool addEnd = false)
+{
+    int i = 0;
+    if (buf.at(0) == '\n') {
+	buf = "\r" + buf;
+	i = 1;
+    }
+    while ((i = buf.find('\n',i + 1)) >= 0) {
+	if (buf.at(i - 1) != '\r') {
+	    buf = buf.substr(0,i) + "\r" + buf.substr(i);
+	    i++;
+	}
+    }
+    if (addEnd && !buf.endsWith("\n"))
+	buf << "\r\n";
+}
+
 static inline unsigned int getPagingTout(const NamedList& list, const String& param,
     unsigned int defVal = YBTS_PAGING_TIMEOUT_DEF)
 {
@@ -3850,13 +3868,7 @@ void YBTSLog::processLoop()
 		    break;
 	    }
 	    String tmp(buffer);
-	    // LF -> CR LF
-	    for (int i = 0; (i = tmp.find('\n',i + 1)) >= 0; ) {
-		if (tmp.at(i - 1) != '\r') {
-		    tmp = tmp.substr(0,i) + "\r" + tmp.substr(i);
-		    i++;
-		}
-	    }
+	    lf2crlf(tmp);
 	    if (level >= 0) {
 		if (alrm)
 		    Alarm(this,level,"%s",tmp.c_str());
@@ -3969,15 +3981,13 @@ bool YBTSCommand::sendRecv(String& str, bool ignoreError, DebugEnabler* enabler,
     bool ok = send(str,ignoreError) && recv(str,ignoreError);
     if (!c)
 	return ok;
-    if (str[0] != '\r' && str[0] != '\n')
-	str = "\r\n" + str;
-    if (str.endsWith("\n"))
-	str = str.substr(0,str.length() - 1);
-    else if (str.endsWith("\r\n"))
-	str = str.substr(0,str.length() - 2);
-    if (ok)
+    if (ok) {
+	lf2crlf(str,true);
+	if (!str.startsWith("\r\n",false))
+	    str = "\r\n" + str;
 	Debug(enabler,level,
-	    "'%s' command result:\r\n-----%s\r\n-----",c.c_str(),str.safe());
+	    "'%s' command result:\r\n-----%s-----",c.c_str(),str.safe());
+    }
     else
 	Debug(enabler,DebugNote,"'%s' command failed",c.c_str());
     return ok;
@@ -10453,15 +10463,7 @@ bool YBTSDriver::commandExecute(String& retVal, const String& line)
 	    return false;
 	if (!m_command->sendRecv(tmp))
 	    return false;
-	// LF -> CR LF
-	for (int i = 0; (i = tmp.find('\n',i + 1)) >= 0; ) {
-	    if (tmp.at(i - 1) != '\r') {
-		tmp = tmp.substr(0,i) + "\r" + tmp.substr(i);
-		i++;
-	    }
-	}
-	if (!tmp.endsWith("\n"))
-	    tmp << "\r\n";
+	lf2crlf(tmp,true);
 	retVal = tmp;
 	return true;
     }
