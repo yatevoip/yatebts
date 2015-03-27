@@ -84,6 +84,8 @@ namespace { // anonymous
 
 #define YBTS_SET_REASON_BREAK(s) { reason = s; break; }
 
+#define NO_CONN_ID 0xffff
+
 // Constant strings
 static const String s_message = "Message";
 static const String s_type = "type";
@@ -209,7 +211,7 @@ static inline const String& index2str(int index, const String* array)
 class YBTSConnIdHolder
 {
 public:
-    inline YBTSConnIdHolder(uint16_t connId = 0)
+    inline YBTSConnIdHolder(uint16_t connId = NO_CONN_ID)
 	: m_connId(connId)
 	{}
     inline uint16_t connId() const
@@ -315,7 +317,7 @@ protected:
 class YBTSMessage : public GenObject, public YBTSConnIdHolder
 {
 public:
-    inline YBTSMessage(uint8_t pri = 0, uint8_t info = 0, uint16_t cid = 0,
+    inline YBTSMessage(uint8_t pri = 0, uint8_t info = 0, uint16_t cid = NO_CONN_ID,
 	XmlElement* xml = 0)
         : YBTSConnIdHolder(cid),
         m_primitive(pri), m_info(info), m_xml(xml), m_error(false)
@@ -912,7 +914,7 @@ public:
     // Drop SS session
     inline void dropSS(YBTSConn* conn, YBTSTid* tid, bool toMs, bool toNetwork,
 	const char* reason = 0)
-	{ dropSS(conn ? conn->connId() : 0,tid,toMs && conn,toNetwork,reason); }
+	{ dropSS(conn ? conn->connId() : NO_CONN_ID,tid,toMs && conn,toNetwork,reason); }
     // Drop SS session
     void dropAllSS(const char* reason = "net-out-of-order");
     // Increase/decrease connection usage. Update its timeout
@@ -2860,7 +2862,7 @@ void YBTSConnAuth::authEnd(bool ok, const char* error, const String* rsp,
     if (!m_authSent)
 	return;
     Debug(&__plugin,DebugAll,"Auth ended conn=%u ok=%u error=%s rsp=%s ext=%s",
-	(m_conn ? m_conn->connId() : 0),ok,error,
+	(m_conn ? m_conn->connId() : NO_CONN_ID),ok,error,
 	TelEngine::c_str(rsp),TelEngine::c_str(rspExt));
     m_authOk = ok;
     m_authNeedResync = false;
@@ -2871,7 +2873,7 @@ void YBTSConnAuth::authEnd(bool ok, const char* error, const String* rsp,
 	    m_authRsp << *rsp << TelEngine::c_str(rspExt);
 	else {
 	    Debug(&__plugin,DebugNote,"Missing RES in auth response on conn %u",
-		m_conn ? m_conn->connId() : 0);
+		m_conn ? m_conn->connId() : NO_CONN_ID);
 	    m_authOk = false;
 	}
     }
@@ -2884,7 +2886,7 @@ void YBTSConnAuth::authEnd(bool ok, const char* error, const String* rsp,
 	    else {
 		m_authNeedResync = false;
 		Debug(&__plugin,DebugNote,"Missing AUTS in auth response on conn %u",
-		    m_conn ? m_conn->connId() : 0);
+		    m_conn ? m_conn->connId() : NO_CONN_ID);
 	    }
 	}
     }
@@ -3254,6 +3256,11 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 {
     uint8_t b[4] = {(uint8_t)msg.primitive(),msg.info()};
     if (msg.hasConnId()) {
+	if (msg.connId() == NO_CONN_ID) {
+	    Debug(sender,DebugGoOn,"Failed to build %s (%u): No connection ID [%p]",
+		msg.name(),msg.primitive(),sender);
+	    return false;
+	}
 	uint8_t* p = b;
 	*(uint16_t*)(p + 2) = htons(msg.connId());
 	buf.append(b,4);
@@ -3496,7 +3503,7 @@ void YBTSConnAuthThread::notify(bool final, bool ok)
     if (final && !Engine::exiting())
 	Alarm(&__plugin,"system",DebugWarn,
 	    "MT auth thread conn=%u abnormally terminated [%p]",
-	    (m_conn ? m_conn->connId() : 0),this);
+	    (m_conn ? m_conn->connId() : NO_CONN_ID),this);
     if (__plugin.mm() && isValidStartTime(m_msg.msgTime()))
 	__plugin.mm()->mtAuthTerminated(m_ue,m_conn,ok);
     m_ue = 0;
@@ -4595,7 +4602,8 @@ void YBTSSignalling::dropSS(uint16_t connId, YBTSTid* ss, bool toMs, bool toNetw
 // Send a message
 bool YBTSSignalling::sendInternal(YBTSMessage& msg)
 {
-    YBTSMessage::build(this,msg.m_data,msg);
+    if (!YBTSMessage::build(this,msg.m_data,msg))
+	return false;
     if (m_printMsg && debugAt(DebugInfo))
 	printMsg(msg,false);
     if (!m_transport.send(msg.m_data))
@@ -6551,7 +6559,7 @@ void YBTSCallDesc::serialize(String& str)
 // YBTSConnChan
 //
 YBTSConnChan::YBTSConnChan(YBTSConnIdHolder* conn, bool outgoing)
-    : Channel(__plugin,0,outgoing), YBTSConnIdHolder(conn ? conn->connId() : 0xffff)
+    : Channel(__plugin,0,outgoing), YBTSConnIdHolder(conn ? conn->connId() : NO_CONN_ID)
 {
 }
 
@@ -8076,7 +8084,7 @@ void YBTSDriver::handleSmsPDU(YBTSMessage& m, YBTSConn* conn)
     bool tiFlag = false;
     if (!getTID(*m.xml(),callRef,tiFlag)) {
 	Debug(this,DebugNote,"SMS %s conn=(%p,%u) with missing transaction identifier",
-	    type->c_str(),conn,conn ? conn->connId() : 0);
+	    type->c_str(),conn,conn ? conn->connId() : NO_CONN_ID);
 	return;
     }
     if (*type == YSTRING("CP-Data"))
@@ -8087,7 +8095,7 @@ void YBTSDriver::handleSmsPDU(YBTSMessage& m, YBTSConn* conn)
 	handleSmsCPRsp(m,conn,*callRef,tiFlag,*xml,false);
     else
 	Debug(this,DebugNote,"Unhandled SMS %s conn=(%p,%u)",
-	    type->c_str(),conn,conn ? conn->connId() : 0);
+	    type->c_str(),conn,conn ? conn->connId() : NO_CONN_ID);
 }
 
 // Handle SS PDUs
@@ -8107,7 +8115,7 @@ void YBTSDriver::handleSSPDU(YBTSMessage& m, YBTSConn* conn)
     bool tiFlag = false;
     if (!getTID(*m.xml(),callRef,tiFlag)) {
 	Debug(this,DebugNote,"SS %s conn=(%p,%u) with missing transaction identifier",
-	    type->c_str(),conn,conn ? conn->connId() : 0);
+	    type->c_str(),conn,conn ? conn->connId() : NO_CONN_ID);
 	return;
     }
     if (!conn)
@@ -8120,7 +8128,7 @@ void YBTSDriver::handleSSPDU(YBTSMessage& m, YBTSConn* conn)
 	handleSS(m,conn,*callRef,tiFlag,*xml,false);
     else
 	Debug(this,DebugNote,"Unhandled SS %s conn=(%p,%u)",
-	    type->c_str(),conn,conn ? conn->connId() : 0);
+	    type->c_str(),conn,conn ? conn->connId() : NO_CONN_ID);
 }
 
 // Check and start pending MT services for new connection
@@ -8506,7 +8514,7 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
 	startPaging = false;
     }
     Debug(this,DebugAll,"Processing MT USSD to '%s' conn=%u",
-	dest.c_str(),(conn ? conn->connId() : 0));
+	dest.c_str(),(conn ? conn->connId() : NO_CONN_ID));
     // Authenticate connection
     if (s_authMtUssd && conn && !conn->authenticated()) {
 	const char* error = authConnMt(conn,false,maxPdd);
