@@ -32,8 +32,6 @@
 
 #include <Globals.h>
 
-extern bool gLogToConsole;
-
 namespace GPRS {
 
 struct TFIList *gTFIs;
@@ -338,7 +336,6 @@ void L2MAC::macConfigInit()
 {
 	GPRSSetDebug(configGetNumQ("GPRS.Debug",GPRS_ERR));
 	gGprsWatch = configGetNumQ("GPRS.WATCH",0);
-	gLogToConsole = configGetNumQ("Log.ToConsole",0);
 
 	GPRSCellOptions_t& gco = GPRSGetCellOptions();
 	// BEGINCONFIG

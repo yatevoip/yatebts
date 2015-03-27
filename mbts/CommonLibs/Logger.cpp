@@ -69,7 +69,6 @@ const char *levelNames[] = {
 	"EMERG", "ALERT", "CRIT", "ERR", "WARNING", "NOTICE", "INFO", "DEBUG"
 };
 int numLevels = 8;
-bool gLogToConsole = 0;
 FILE *gLogToFile = NULL;
 Mutex gLogToLock;
 
@@ -204,17 +203,10 @@ Log::~Log()
 	// So just log.
 	if (!(gHook && gHook(mPriority,mStream.str().c_str(),mPrefixLen)))
 		syslog(mPriority, "%s", mStream.str().c_str());
-	// pat added for easy debugging.
-	if (gLogToConsole||gLogToFile) {
+	if (gLogToFile) {
 		int mlen = mStream.str().size();
 		int neednl = (mlen==0 || mStream.str()[mlen-1] != '\n');
 		gLogToLock.lock();
-		if (gLogToConsole) {
-			// The COUT() macro prevents messages from stomping each other but adds uninteresting thread numbers,
-			// so just use std::cout.
-			std::cout << mStream.str();
-			if (neednl) std::cout<<"\n";
-		}
 		if (gLogToFile) {
 			fputs(mStream.str().c_str(),gLogToFile);
 			if (neednl) {fputc('\n',gLogToFile);}

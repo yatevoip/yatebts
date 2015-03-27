@@ -571,9 +571,6 @@ static int gprsSet(int argc, char **argv, int argi, ostream&os)
 	if (strmatch(what,"clock") || strmatch(what,"sync")) {
 		if (val) { gFixSyncUseClock = atoi(val); }
 		os << LOGVAR(gFixSyncUseClock) << "\n";
-	} else if (strmatch(what,"console")) {
-		if (val) { gLogToConsole = atoi(val); }
-		os << LOGVAR(gLogToConsole) << "\n";
 	} else {
 		os << "gprs set: unrecognized argument: " << what << "\n";
 	}
@@ -590,14 +587,6 @@ static int gprsStep(int argc, char **argv, int argi, ostream&os)
 	// might result in messages from the channel service routines.
 	++gBSNNext;
 	gL2MAC.macServiceLoop();
-	return 0;
-}
-
-static int gprsConsole(int argc, char **argv, int argi, ostream&os)
-{
-	gLogToConsole = !gLogToConsole;		// Default: toggle.
-	if (argi < argc) { gLogToConsole = atoi(argv[argi++]); }
-	os << "LogToConsole=" << gLogToConsole << "\n";
 	return 0;
 }
 
@@ -621,7 +610,6 @@ static struct GprsSubCmds {
 #if INTERNAL_SGSN==0
 	{ "testul",gprsTestUl,	"testul [-r]   # Send a test PDU through the RLCEngine; -r => randomize order " },
 #endif
-	{ "console",gprsConsole, "console [0|1]  # Send messages to console as well as /var/log/OpenBTS.log;\n\t\t (default=1 for debugging)" },
 	{ "mem",gprsMem,	"mem   # Memory leak detector - print numbers of structs in use" },
 	{ "test",gprsTest,	"test   # Temporary test" },
 	// Dont have the source code for pinghttp linked in yet.

@@ -121,7 +121,6 @@ class Log {
 
 	static bool (*gHook)(int,const char*,int);
 };
-extern bool gLogToConsole;	// Pat added for easy debugging.
 
 
 
