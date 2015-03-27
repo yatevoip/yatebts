@@ -243,6 +243,10 @@ class PdpContext
 
 	void PdpContext::pdpWriteLowSide(ByteVector &payload) {
 		SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"SNDCP","pdpWriteLowSide"<<LOGVAR2("packetlen",payload.size()));
+		if (!this->mgp) {
+			SGSNLOGF(NOTICE,GPRS_ERR,"SNDCP","Cannot transmit PDU, no IP allocated");
+			return;
+		}
 		PdpPdu *newpdu = new PdpPdu(payload,this->mgp);
 		gGgsn.mTxQ.write(newpdu);
 	}
