@@ -1000,7 +1000,7 @@ Radio.C0=
 ; Example: my_sip=198.168.1.168
 ;my_sip=
 
-; gstn_location: string: unique number associated 
-;  to each base station by the network operator.
+; gstn_location: string: unique number that identies the cell in the national database
+;  associated to each base station by the network operator.
 ; REQUIRED!
 ;gstn_location=
