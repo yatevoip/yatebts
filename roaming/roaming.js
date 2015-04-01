@@ -354,7 +354,7 @@ function onDisconnected(msg)
 	msg.error = "noauth";
 	return true;
     } else 
-	Engine.debug(Engine.DebugWarn,"Invalid header: "+auth);
+	Engine.debug(Engine.DebugWarn,"Invalid header 'www-authenticate': "+auth);
 
     return false;
 }
@@ -429,7 +429,7 @@ function reqResponse(request_type,sr,msi,msg,server)
 		} else
 		    msg["auth.rand"] = rand;
 	    } else 
-		Engine.debug(Engine.DebugWarn,"Invalid header: "+auth);
+		Engine.debug(Engine.DebugWarn,"Invalid header 'www-authenticate': "+auth);
 
 	    msg.error = "noauth";
 	    if (request_type=="auth")
