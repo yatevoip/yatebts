@@ -366,7 +366,22 @@ void RLCUpEngine::addUpPDU(BitVector& seg)
 	}
 	// Do not use str() here, because it tries to print the pdu contents,
 	// but the pdu is incomplete.
-	mUpPDU->append(seg);
+	/* 3GPP TS 44.060 version 12.3.0, 9.1.12: In A/Gb mode, the size of the upper layer PDU delivered to 
+		the higher layer shall not exceed 1560 octets. Any octet received beyond this maximum limit and until the
+		next identified upper layer PDU boundary shall be discarded.
+	  Drop what exceeds 1560 octets.
+	*/
+	size_t restLen = (mUpPDU->sizeRemaining() << 3); //mUpPDU size is in bytes, seg in bits
+	if (!restLen) {
+		GLOG(NOTICE) << "Maximum PDU size reached, dropping " << seg.size() << " bits " << getTBF();
+		return;
+	}
+	if (restLen < seg.size()) { //mUpPDU size is in bytes, seg in bits
+		mUpPDU->append(seg.head(restLen));
+		GLOG(NOTICE) << "Maximum PDU size reached, dropping " << (seg.size() - restLen) << " bits " << getTBF();
+	}
+	else
+		mUpPDU->append(seg);
 	GPRSLOG(DEBUG,GPRS_MSG) << "addUpPDU:after="<<mUpPDU->hexstr();
 }
 
