@@ -499,7 +499,7 @@ protected:
     String m_lai;                        // Concatenated mcc_mnc_lac
 };
 
-class YBTSTid : public String
+class YBTSTid : public RefObject
 {
 public:
     enum Type {
@@ -509,13 +509,21 @@ public:
     };
     inline YBTSTid(Type t, const String& callRef, bool incoming, uint8_t sapi,
 	const char* id = 0)
-	: String(id),
+	: m_ssId(id),
 	m_type(t), m_callRef(callRef), m_incoming(incoming), m_sapi(sapi),
-	m_timeout(0), m_pddTout(0), m_connId(-1), m_paging(false), m_cid(-1)
+	m_timeout(0), m_pddTout(0), m_connId(-1), m_paging(false), m_cid(-1),
+	m_waiting(0)
 	{}
     ~YBTSTid();
-    inline  const char* typeName() const
+    inline const char* c_str() const
+	{ return m_ssId; }
+    inline const char* typeName() const
 	{ return typeName(m_type); }
+    // Wait for termination. Finalize if thread is cancelled
+    void wait();
+    // Finalize the session if waiting
+    void finalize(const char* localError, const char* cause = 0,
+	const String* facilityIE = 0);
     // Set connection id, reset conn usage of old connection
     // Increase conn usage on new connection if valid
     void setConnId(int connId);
@@ -527,6 +535,8 @@ public:
 		return ++m_cid;
 	    return (m_cid = 0);
 	}
+    virtual const String& toString() const
+	{ return m_ssId; }
     static inline ObjList* findObj(ObjList& list, const String& callRef, bool incoming) {
 	    for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
 		YBTSTid* i = static_cast<YBTSTid*>(o->get());
@@ -548,7 +558,9 @@ public:
     static inline const char* typeName(int t, const char* defVal = "unknown")
 	{ return lookup(t,s_typeName,defVal); }
     static const TokenDict s_typeName[];
+    static Mutex s_mutex;
 
+    String m_ssId;
     Type m_type;
     String m_callRef;                    // TID: Call reference
     bool m_incoming;                     // Transaction direction
@@ -563,6 +575,10 @@ public:
     String m_peerId;                     // SS session peer id
     String m_startCID;                   // SS start component CID
     int8_t m_cid;                        // Subsequent SS component CID
+    // Sync process
+    int m_waiting;                       // Waiting flag: don't auto terminate
+    String m_error;                      // Result: error string
+    String m_facility;                   // Result: facility IE
 };
 
 // A logical connection
@@ -666,19 +682,19 @@ public:
 	}
     // Retrieve an SS TID
     inline YBTSTid* findSSTid(const String& ssId) {
-	    if (m_ss && ssId == *m_ss)
+	    if (m_ss && ssId == m_ss->m_ssId)
 		return m_ss;
 	    return 0;
 	}
     // Take (remove) an SS TID
     inline YBTSTid* takeSSTid(const String& callRef, bool incoming) {
-	    if (m_ss && m_ss->m_incoming == incoming &&	m_ss->m_callRef == callRef)
+	    if (m_ss && m_ss->m_incoming == incoming && m_ss->m_callRef == callRef)
 		return takeSS();
 	    return 0;
 	}
     // Take (remove) an SS TID
     inline YBTSTid* takeSSTid(const String& ssId) {
-	    if (m_ss && ssId == *m_ss)
+	    if (m_ss && ssId == m_ss->m_ssId)
 		return takeSS();
 	    return 0;
 	}
@@ -1800,7 +1816,7 @@ public:
     // Handle USSD execute messages
     bool handleUssdExecute(Message& msg, String& dest);
     bool getUssdFacility(NamedList& list, String& buf, String& reason, YBTSTid* ss = 0,
-	bool update = true);
+	bool update = true, int* oper = 0);
     // Start an MT USSD. Consume ss on success, might consume it on error
     const char* startMtSs(YBTSConn* conn, YBTSTid*& ss);
     // Radio ready notification. Return false if state is invalid
@@ -1849,6 +1865,9 @@ public:
     // Don't enqueue facility messages if decode fails
     bool enqueueSS(Message* m, const String* facilityIE, bool facility,
 	const char* error = 0);
+    // Decode SS facility. Fill parameters
+    bool fillFacility(NamedList& m, const String& str, String* error,
+	const String& prefix = String::empty());
     // Decode MAP content
     XmlElement* mapDecode(const String& buf, String* error = 0, bool decodeUssd = true);
     // Encode MAP content
@@ -2143,6 +2162,8 @@ const TokenDict YBTSTid::s_typeName[] = {
     YBTS_MAKENAME(Ussd),
     {0,0}
 };
+
+Mutex YBTSTid::s_mutex(false,"YBTSTid");
 
 const TokenDict YBTSCallDesc::s_stateName[] =
 {
@@ -2549,6 +2570,13 @@ static inline void setListParams(NamedList& list, const String& p1, const String
 {
     list.setParam(p1,value);
     list.setParam(p2,value);
+}
+
+// Set a non empty parameter, clear existing
+static inline void setValidParam(NamedList& list, const String& param, const char* value)
+{
+    list.clearParam(param);
+    list.addParam(param,value,false);
 }
 
 static void clearListParams(NamedList& list, const String& p1,
@@ -4596,7 +4624,7 @@ void YBTSSignalling::dropSS(uint16_t connId, YBTSTid* ss, bool toMs, bool toNetw
     if (toMs)
 	sendSS(false,connId,ss->m_callRef,ss->m_incoming,ss->m_sapi,reason);
     if (toNetwork)
-	__plugin.enqueueSS(ss->ssMessage(false),0,false,reason);
+	ss->finalize(reason);
 }
 
 // Send a message
@@ -5588,6 +5616,33 @@ YBTSTid::~YBTSTid()
     if (m_paging && m_ue)
 	m_ue->stopPaging();
     setConnId(-1);
+}
+
+// Wait for termination. Finalize if thread is cancelled
+void YBTSTid::wait()
+{
+    while (m_waiting > 0) {
+	if (Thread::check(false)) {
+	    finalize("cancelled");
+	    break;
+	}
+	Thread::msleep(3 * Thread::idleMsec());
+    }
+}
+
+// Finalize the session
+void YBTSTid::finalize(const char* error, const char* cause, const String* facilityIE)
+{
+    if (!m_waiting) {
+	__plugin.enqueueSS(ssMessage(false),facilityIE,false,error ? error : cause);
+	return;
+    }
+    Lock lck(s_mutex);
+    if (m_waiting < 0)
+	return;
+    m_facility = facilityIE;
+    m_error = error ? error : cause;
+    m_waiting = -1;
 }
 
 // Build SS message (Facility or Release Complete)
@@ -8392,7 +8447,7 @@ void YBTSDriver::connReleased(uint16_t connId, YBTSConn* conn)
 	for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
 	    YBTSTid* ss = static_cast<YBTSTid*>(o->get());
 	    Debug(this,DebugNote,"Idle MT USSD '%s' failed to start paging",ss->c_str());
-	    enqueueSS(ss->ssMessage(false),0,false,"failure");
+	    ss->finalize("failure");
 	}
     }
 }
@@ -8474,10 +8529,7 @@ bool YBTSDriver::handleUssd(Message& msg, bool update)
     lck.drop();
     if (!update)
 	TelEngine::destruct(ss);
-    if (ok)
-	msg.clearParam(s_error);
-    else
-	msg.setParam(s_error,error);
+    setValidParam(msg,s_error,error);
     return ok;
 }
 
@@ -8497,7 +8549,8 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
     }
     String facility;
     String reason;
-    if (!getUssdFacility(msg,facility,reason)) {
+    int oper = USSDMapOperUnknown;
+    if (!getUssdFacility(msg,facility,reason,0,false,&oper)) {
 	Debug(this,DebugNote,"MT USSD to '%s' failed: %s",
 	    dest.c_str(),reason.safe("empty text"));
 	msg.setParam(s_error,"failure");
@@ -8513,8 +8566,9 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
 	conn = 0;
 	startPaging = false;
     }
-    Debug(this,DebugAll,"Processing MT USSD to '%s' conn=%u",
-	dest.c_str(),(conn ? conn->connId() : NO_CONN_ID));
+    bool sync = msg.getBoolValue(YSTRING("wait"),oper == Ussn);
+    Debug(this,DebugAll,"Processing MT USSD to '%s' conn=%u wait='%s'",
+	dest.c_str(),(conn ? conn->connId() : NO_CONN_ID),String::boolText(sync));
     // Authenticate connection
     if (s_authMtUssd && conn && !conn->authenticated()) {
 	const char* error = authConnMt(conn,false,maxPdd);
@@ -8530,6 +8584,9 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
     String ssId;
     ssId << ssIdPrefix() << ssIndex();
     YBTSTid* ss = new YBTSTid(YBTSTid::Ussd,"0",false,0,ssId);
+    RefPointer<YBTSTid> wait = sync ? ss : 0;
+    if (wait)
+	wait->m_waiting = 1;
     ss->m_pddTout = ss->m_timeout = Time::now();
     ss->m_timeout += (uint64_t)tout * 1000;
     ss->m_pddTout += (uint64_t)maxPdd * 1000;
@@ -8564,12 +8621,22 @@ bool YBTSDriver::handleUssdExecute(Message& msg, String& dest)
 	    return false;
 	}
     }
-    msg.setParam("peerid",ssId);
+    if (wait) {
+	wait->wait();
+	YBTSTid::s_mutex.lock();
+	setValidParam(msg,s_error,wait->m_error);
+	if (msg.getBoolValue(YSTRING("result")))
+	    fillFacility(msg,wait->m_facility,0,"result.");
+	YBTSTid::s_mutex.unlock();
+	wait = 0;
+    }
+    else
+	msg.setParam(YSTRING("peerid"),ssId);
     return true;
 }
 
 bool YBTSDriver::getUssdFacility(NamedList& list, String& buf, String& reason,
-    YBTSTid* ss, bool update)
+    YBTSTid* ss, bool update, int* operation)
 {
     buf = list[YSTRING("component")];
     if (buf)
@@ -8613,8 +8680,11 @@ bool YBTSDriver::getUssdFacility(NamedList& list, String& buf, String& reason,
     x->addChildSafe(txt);
     String error;
     mapEncodeComp(x,buf,&error);
-    if (buf)
+    if (buf) {
+	if (operation)
+	    *operation = op;
 	return true;
+    }
     reason << "encode failed";
     reason.append(error," error=");
     return false;
@@ -8648,7 +8718,7 @@ const char* YBTSDriver::startMtSs(YBTSConn* conn, YBTSTid*& ss)
     }
     conn->m_ss = ss;
     uint64_t tout = ss->m_timeout;
-    String ssId = *ss;
+    String ssId = ss->m_ssId;
     String callRef = ss->m_callRef;
     uint8_t sapi = ss->m_sapi;
     String facility = ss->m_data;
@@ -8718,37 +8788,47 @@ bool YBTSDriver::enqueueSS(Message* m, const String* facilityIE, bool facility,
 	return false;
     if (!facility)
 	m->addParam(s_error,error);
-    XmlElement* xml = 0;
     String e;
-    if (!TelEngine::null(facilityIE))
-	xml = mapDecode(*facilityIE,&e);
-    if (xml) {
-	XmlElement* comp = xml->findFirstChild(&s_mapComp);
-	const String* oper = comp ? comp->getAttribute(s_mapOperCode) : 0;
-	if (!TelEngine::null(oper)) {
-	    int op = ussdMapOper(*oper);
-	    m->addParam("operation_type",ussdOperName(op),false);
+    bool filled = !TelEngine::null(facilityIE) && fillFacility(*m,*facilityIE,&e);
+    if (!filled) {
+	if (facility) {
+	    Debug(this,DebugNote,
+		"Can't enqueue '%s': failed to decode facility '%s' error='%s'",
+		m->c_str(),TelEngine::c_safe(facilityIE),e.safe());
+	    TelEngine::destruct(m);
+	    return false;
 	}
-	XmlElement* textXml = comp->findFirstChild(&s_mapUssdText);
-	const String& text = textXml ? textXml->getText() : String::empty();
-	if (text) {
-	    m->addParam("text",text);
-	    textXml->copyAttributes(*m,"text.");
-	}
-	exportXml(*m,xml);
+	if (!TelEngine::null(facilityIE))
+	    Debug(this,DebugNote,
+		"Enqueueing '%s', failed to decode facility '%s' error='%s'",
+		m->c_str(),facilityIE->c_str(),e.safe());
     }
-    else if (facility) {
-	Debug(this,DebugNote,
-	    "Can't enqueue '%s': failed to decode facility '%s' error='%s'",
-	    m->c_str(),TelEngine::c_safe(facilityIE),e.safe());
-	TelEngine::destruct(m);
-	return false;
-    }
-    else if (!TelEngine::null(facilityIE))
-	Debug(this,DebugNote,
-	    "Enqueueing '%s', failed to decode facility '%s' error='%s'",
-	    m->c_str(),facilityIE->c_str(),e.safe());
     return Engine::enqueue(m);
+}
+
+// Decode facility. Fill parameters
+bool YBTSDriver::fillFacility(NamedList& m, const String& str, String* error,
+    const String& prefix)
+{
+    if (!str)
+	return false;
+    XmlElement* xml = mapDecode(str,error);
+    if (!xml)
+	return false;
+    XmlElement* comp = xml->findFirstChild(&s_mapComp);
+    const String* oper = comp ? comp->getAttribute(s_mapOperCode) : 0;
+    if (!TelEngine::null(oper)) {
+	int op = ussdMapOper(*oper);
+	m.addParam(prefix + "operation_type",ussdOperName(op),false);
+    }
+    XmlElement* tmp = comp->findFirstChild(&s_mapUssdText);
+    const String& text = tmp ? tmp->getText() : String::empty();
+    if (text) {
+	m.addParam(prefix + "text",text);
+	tmp->copyAttributes(m,prefix + "text.");
+    }
+    exportXml(m,xml);
+    return true;
 }
 
 // Decode MAP content
@@ -9057,10 +9137,8 @@ void YBTSDriver::checkMtSs(YBTSConn* conn)
 	    ss->m_paging = false;
 	}
 	const char* reason = startMtSs(conn,ss);
-	if (!reason)
-	    continue;
 	if (ss) {
-	    enqueueSS(ss->ssMessage(false),0,false,reason);
+	    ss->finalize(reason);
 	    TelEngine::destruct(ss);
 	}
     }
@@ -9077,7 +9155,7 @@ void YBTSDriver::dropAllSS(const char* reason)
     for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
 	YBTSTid* ss = static_cast<YBTSTid*>(o->remove(false));
 	Debug(this,DebugInfo,"Dropping idle MT USSD '%s' reason=%s",ss->c_str(),reason);
-	enqueueSS(ss->ssMessage(false),0,false,reason);
+	ss->finalize(reason);
     }
 }
 
@@ -9182,11 +9260,34 @@ void YBTSDriver::handleSS(YBTSMessage& m, YBTSConn* conn, const String& callRef,
 	    signalling()->sendSS(false,conn,callRef,!tiFlag,m.info(),"invalid-callref");
 	return;
     }
-    Message* msg = ss->ssMessage(facility);
-    lck.drop();
-    if (!facility)
+    RefPointer<YBTSTid> waiting;
+    Message* msg = 0;
+    if (ss->m_waiting) {
+	// Facility: take the SS from connection (we already took it otherwise)
+	if (facility) {
+	    ss = conn->getSSTid(callRef,!tiFlag,true);
+	    if (!ss)
+		return;
+	}
+	waiting = ss;
 	TelEngine::destruct(ss);
-    enqueueSS(msg,xml.childText(s_facility),facility);
+    }
+    else
+	msg = ss->ssMessage(facility);
+    lck.drop();
+    const String* facilityIE = facility ? xml.childText(s_facility) : 0;
+    if (waiting) {
+	// NOTE: We should propagate the proper release cause
+	waiting->finalize(0,facility ? 0 : "failure",facilityIE);
+	if (facility)
+	    signalling()->dropSS(conn,waiting,true,false);
+	waiting = 0;
+    }
+    else {
+	if (!facility)
+	    TelEngine::destruct(ss);
+	enqueueSS(msg,facilityIE,facility);
+    }
 }
 
 void YBTSDriver::handleSSRegister(YBTSMessage& m, YBTSConn* conn, const String& callRef,
@@ -9333,7 +9434,7 @@ void YBTSDriver::checkMtSsTout(const Time& time)
     for (ObjList* o = list.skipNull(); o; o = o->skipNext()) {
 	YBTSTid* ss = static_cast<YBTSTid*>(o->get());
 	Debug(this,DebugInfo,"Idle MT USSD '%s' timed out",ss->c_str());
-	enqueueSS(ss->ssMessage(false),0,false,"postdialdelay");
+	ss->finalize("postdialdelay");
     }
 }
 
