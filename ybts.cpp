@@ -20,7 +20,7 @@
  */
 
 #include <yatephone.h>
-#include <yategsm.h>
+#include <yateradio.h>
 
 #ifdef _WINDOWS
 #error This module is not for Windows

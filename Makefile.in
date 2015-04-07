@@ -187,7 +187,7 @@ revision: check-topdir
 	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS) $(YATELIBS)
 
 ybts.yate: ybts.cpp ybts.h
-ybts.yate: LOCALLIBS = -lyategsm
+ybts.yate: LOCALLIBS = -lyateradio
 
 @srcdir@/configure: @srcdir@/configure.ac
 	cd @srcdir@ && autoconf

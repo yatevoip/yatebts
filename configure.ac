@@ -97,7 +97,7 @@ else
 if [[ "x$ac_cv_use_yate" != "xyes" ]]; then
     dir=`cd "$ac_cv_use_yate"; pwd`
     yc="$dir/$yc"
-    YATE_DEF="-I$dir -I$dir/libs/ygsm"
+    YATE_DEF="-I$dir -I$dir/libs/yradio"
     YATE_LIB="-L$dir"
 fi
 AC_MSG_CHECKING([for Yate using $yc])
