@@ -37,7 +37,7 @@
 namespace SGSN {
 
 extern bool enableMultislot();
-extern void sendImplicitlyDetached(SgsnInfo *si);
+extern void sendImplicitlyDetached(SgsnInfo *si, unsigned type = 1, unsigned cause = 0);
 
 // 10.5.5.2 AttachType can take all 3 values.
 // 10.5.5.1 Attach Result can only be GPRS or Combined, not value 2.

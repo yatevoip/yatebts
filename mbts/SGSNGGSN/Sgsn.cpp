@@ -747,7 +747,7 @@ void AttachInfo::copyFrom(AttachInfo &other)
 	}
 }
 
-void sendImplicitlyDetached(SgsnInfo *si)
+void sendImplicitlyDetached(SgsnInfo *si, unsigned type, unsigned cause)
 {
 	GmmInfo* gmm = si->getGmm();
 	if (gmm && gmm->isRegistered() && (gmm->getSI() == si))
@@ -761,7 +761,7 @@ void sendImplicitlyDetached(SgsnInfo *si)
 	// sending 'invalid mandatory information'.
 	// The only reason obvious to send that is in 24.008 8.5 is an unexpected IE,
 	// so maybe it is the cause.  But it did not help.
-	L3GmmMsgDetachRequest dtr(1,0);
+	L3GmmMsgDetachRequest dtr(type,cause);
 	si->sgsnWriteHighSideMsg(dtr);
 }
 
@@ -1358,10 +1358,9 @@ void SgsnConn::detach(SgsnInfo* si, const char* text)
 	GmmInfo *gmm = si->getGmm();
 	if (gmm)
 		gmm->setGmmState(GmmState::GmmDeregistered);
-	L3GmmMsgDetachRequest dtr(toInteger(getPrefixed("type=",text),1),
+	sendImplicitlyDetached(si,toInteger(getPrefixed("type=",text),1),
 		toInteger(getPrefixed("error=",text),0));
-	si->sgsnWriteHighSideMsg(dtr);
-	sendImplicitlyDetached(si);
+	si->sgsnReset();
 }
 
 // PDP activation response or Network requested PDP activation
