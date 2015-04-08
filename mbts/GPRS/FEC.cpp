@@ -871,6 +871,35 @@ int GetPowerGamma()
 	return RN_BOUND(gamma,0,31);		// Bound to allowed values, 5 bits.
 }
 
+int GetPowerGammaAdjust(int rssi, int gamma)
+{
+	int tolerance = GetTargetRSSIInterval();
+	if (tolerance) {
+		int targetRSSI = GetGprsTargetRSSI();
+		int step = 0;
+		if (rssi > (targetRSSI + tolerance))
+			step = (rssi - targetRSSI) / tolerance;
+		else if (rssi < (targetRSSI - tolerance))
+			step -= (targetRSSI - rssi) / tolerance;
+		GPRSLOG(DEBUG,GPRS_MSG) << "adjust " << LOGVAR(gamma) << " with" << LOGVAR(step) << LOGVAR(rssi)
+			<< LOGVAR(targetRSSI) << LOGVAR(tolerance);
+		gamma += step;
+	}
+	return RN_BOUND(gamma,0,31);
+}
+
+int GetGprsTargetRSSI()
+{
+	int rssi = gConfig.getNum("GPRS.MS.Power.RSSITarget");
+	return RN_BOUND(rssi,-75,-5);
+}
+
+int GetTargetRSSIInterval()
+{
+	int tolerance = gConfig.getNum("GPRS.MS.Power.RSSIInterval");
+	return RN_BOUND(tolerance,0,10);
+}
+
 int GetTimingAdvance(float timingError)
 {
 	int initialTA = (int)(timingError + 0.5F);

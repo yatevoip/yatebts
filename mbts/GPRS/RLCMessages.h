@@ -1467,6 +1467,9 @@ class RLCMsgPacketUplinkAckNack : public RLCDownlinkMessage
 	{
 		assert(wtbf->mtDir == RLCDir::Up);
 		setTimingAdvance(wtbf->mtMS->msGetTA());
+		// set Power Control parameters only if control loop active
+		if ((mHavePowerControlParameters = !!GetTargetRSSIInterval()))
+			mPowerControlParameters.setFrom(wtbf);
 	}
 	void RLCMsgPacketUplinkAckNack::writeBody(MsgCommon &dst) const {
 		dst.write0();	// two extra 0 after PAGE_MODE.
@@ -1547,6 +1550,9 @@ class RLCMsgPacketPowerControlTimingAdvance : public RLCDownlinkMessage
 		assert(wtbf->mtTFI >= 0);
 		setGlobalTFI(wtbf->mtDir == RLCDir::Down,wtbf->mtTFI);
 		setTimingAdvance(wtbf->mtMS->msGetTA());
+		// set Power Control parameters only if control loop active
+		if ((mHavePowerControlParameters = !!GetTargetRSSIInterval()))
+			mPowerControlParameters.setFrom(wtbf);
 	}
 
 	void setTimingAdvance(int ta) {

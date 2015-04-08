@@ -115,6 +115,7 @@ int configGprsChannelsMax() { return gConfig.getNum("GPRS.Channels.Max"); }
 int configGprsMultislotMaxUplink() { return gConfig.getNum("GPRS.Multislot.Max.Uplink"); }
 int configGprsMultislotMaxDownlink() { return gConfig.getNum("GPRS.Multislot.Max.Downlink"); }
 
+
 //struct GPRSConfig GPRSConfig; not needed.
 unsigned GPRSDebug = 0;
 unsigned gGprsWatch = 0;
@@ -1529,7 +1530,7 @@ void RachInfo::serviceRach()
 		// We dont know what MS we are talking to, so set the power params to global defaults.
 		// We could fiddle with the power gamma based on RSSI, but not implemented,
 		// and probably unnecessary.  It is not really necessary to change these at all here.
-		pa->setPacketPowerOptions(GetPowerAlpha(),GetPowerGamma());
+		pa->setPacketPowerOptions(GetPowerAlpha(),GetPowerGammaAdjust(mRadData.mRSSI,GetPowerGamma()));
 
 		GPRSLOG(DEBUG,GPRS_MSG) << "GPRS serviceRACH sending L3ImmediateAssignment:" << result;
 		AGCH->send(result);

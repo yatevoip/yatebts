@@ -134,6 +134,10 @@ class MSStopCause {
 };
 
 
+#ifndef POWER_TIMER
+#define POWER_TIMER 1000 // miliseconds.
+#endif
+
 struct SignalQuality {
 	// TODO: Get the Channel Quality Report from packet downlink ack/nack GSM04.60 11.2.6
 	Statistic<float> msTimingError;
@@ -144,8 +148,25 @@ struct SignalQuality {
 	Statistic<int> msRXQual;
 	Statistic<int> msSigVar;
 	Statistic<int> msRXLev; // save RXLEV information received in measurement reports
+	UInt16_z mLastAlpha; // last sent alpha value
+	UInt16_z mLastGamma; // last sent gamma value
+	UInt16_z mGamma; // current calculated gamma, might not have been sent
+	GprsTimer mTimer;
 	void setRadData(RadData &rd);
 	void setRadData(float wRSSI,float wTimingError);
+	inline int msGetAlpha(bool transmit = true)
+		 { return transmit ? (mLastAlpha = GetPowerAlpha(),mLastAlpha) : mLastAlpha; }
+	inline int msGetGamma(bool transmit = true)
+	{
+		if (!GetTargetRSSIInterval())
+			mGamma = GetPowerGamma();
+		else if (transmit && !mTimer.valid())
+			mTimer.setFuture(POWER_TIMER);
+		if (transmit)
+			mLastGamma = mGamma;
+		return mGamma;
+	}
+	void adjustPowerParams(int wRSSI);
 	void dumpSignalQuality(std::ostream &os) const;
 };
 
@@ -566,9 +587,6 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 	//void msRestart();
 	ChannelCodingType msGetChannelCoding(RLCDirType wdir) const;
 	int msGetTA() const { return GetTimingAdvance(msTimingError.getCurrent()); }
-	// All MS use the same power params at the moment.
-	int msGetAlpha() const { return GetPowerAlpha(); }
-	int msGetGamma() const { return GetPowerGamma(); }
 	void msDump(std::ostream&os, SGSN::PrintOptions options);
 	void msDumpCommon(std::ostream&os) const;
 	void msDumpChannels(std::ostream&os) const;

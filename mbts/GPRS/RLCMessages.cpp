@@ -146,10 +146,12 @@ void RLCMsgPowerControlParametersIE::setFrom(TBF *tbf)
 	MSInfo *ms = tbf->mtMS;
 	setAlpha(ms->msGetAlpha());
 	PDCHL1Downlink *down;
+	int gamma = ms->msGetGamma();
 	RN_FOR_ALL(PDCHL1DownlinkList_t,ms->msPCHDowns,down) {
 		int tn = down->TN();
-		setGamma(tn,ms->msGetGamma());
+		setGamma(tn,gamma);
 	}
+	GPRSLOG(DEBUG,GPRS_OK|GPRS_MSG) << "Setting power control parameters alpha=" << ms->msGetAlpha() << " gamma=" << ms->msGetGamma();
 }
 
 

@@ -503,7 +503,7 @@ void sendAssignmentCcch(
 		L3IAPacketAssignment *pa = amsg.packetAssign();
 		// DEBUG: I tried taking out power:
 		// 12-16: Put power back in:
-		pa->setPacketPowerOptions(GetPowerAlpha(),GetPowerGamma());
+		pa->setPacketPowerOptions(ms->msGetAlpha(),ms->msGetGamma());
 		if (gFixIAUsePoll) {
 			pa->setPacketPollTime(resBSN.FN());
 		}

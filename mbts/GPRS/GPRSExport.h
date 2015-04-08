@@ -80,6 +80,9 @@ extern void GPRSProcessRACH(unsigned RA, const GSM::Time &when, float RSSI, floa
 
 extern int GetPowerAlpha();
 extern int GetPowerGamma();
+extern int GetPowerGammaAdjust(int rssi, int gamma);
+extern int GetGprsTargetRSSI();
+extern int GetTargetRSSIInterval();
 extern unsigned GPRSDebug;
 extern void GPRSSetDebug(int value);
 extern void GPRSNotifyGsmActivity(const char *imsi);

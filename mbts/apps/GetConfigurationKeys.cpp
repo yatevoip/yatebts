@@ -626,6 +626,32 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
+	tmp = new ConfigurationKey("GPRS.MS.Power.RSSITarget","-25",
+		"dB",
+		ConfigurationKey::CUSTOMERTUNE,
+		ConfigurationKey::VALRANGE,
+		"-75:-5",
+		false,
+		"Target uplink RSSI for the MS GPRS power control loop. "
+			"Expressed in dB wrt to the receiver's A/D convertor full scale. "
+			"Gamma will be ajusted for the MS in order to reach the target RSSI."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
+	tmp = new ConfigurationKey("GPRS.MS.Power.RSSIInterval","3",
+		"dB",
+		ConfigurationKey::CUSTOMERTUNE,
+		ConfigurationKey::VALRANGE,
+		"0:10",
+		false,
+		"Interval around MS.Power.RSSITarget for which Gamma will not be ajusted. "
+			"Interval will be (MS.Power.RSSITarget - MS.Power.RSSIInterval,MS.Power.RSSITarget + MS.Power.RSSIInterval)"
+			"Setting it to 0 deactivates the power control loop."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
 	tmp = new ConfigurationKey("GPRS.MS.Power.T_AVG_T","15",
 		"",
 		ConfigurationKey::DEVELOPER,

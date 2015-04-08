@@ -545,6 +545,18 @@ Radio.C0=
 ; Valid range is 0...31 for gamma values of 0...62 dB. See GSM 05.08 10.2.1. 
 ;MS.Power.Gamma=31
 
+; MS.Power.RSSITarget: integer: Target uplink RSSI for the MS GPRS power control loop if active.
+; Expressed in dB wrt to the receiver's A/D convertor full scale.
+; Gamma will be ajusted for the MS in order to reach the target RSSI
+; Valid range -75...-5
+;MS.Power.RSSITarget=-25
+
+; MS.Power.RSSIInterval: integer: Interval around MS.Power.RSSITarget for which Gamma will not be ajusted
+; Interval for accepted RSSI values will be (MS.Power.RSSITarget - MS.Power.RSSIInterval,MS.Power.RSSITarget + MS.Power.RSSIInterval)
+; Setting it to 0 will deactivate the power control loop.
+; Valid range is 0...10
+;MS.Power.RSSIInterval=3
+
 ; MS.Power.T_AVG_T: integer: MS power control parameter; see GSM 05.08 10.2.1
 ; Valid range is 0...25.
 ;MS.Power.T_AVG_T=15

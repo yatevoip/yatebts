@@ -129,6 +129,7 @@ MSInfo::MSInfo(uint32_t tlli)
 {
 	gReports.incr("GPRS.MSInfo");
 	gL2MAC.macAddMS(this);
+	mGamma = GetPowerGamma();
 }
 
 bool MSInfo::msIsSuspended()
@@ -781,6 +782,9 @@ void SignalQuality::dumpSignalQuality(std::ostream&os) const
 	os << LOGVAR2("SigVar",msSigVar);
 	os << LOGVAR2("ChCoding",msChannelCoding);
 	os << LOGVAR2("RXLev",msRXLev);
+	os << LOGVAR(mLastAlpha);
+	os << LOGVAR(mLastGamma);
+	os << LOGVAR(mGamma);
 	os.flags(savedfoobarflags);		// What were these guys thinking?
 
 	//ChannelCodingType ccup = msGetChannelCoding(RLCDir::Up);
@@ -795,16 +799,25 @@ void SignalQuality::dumpSignalQuality(std::ostream&os) const
 }
 
 
+void SignalQuality::adjustPowerParams(int rssi)
+{
+	if (mTimer.expired()) {
+		mGamma = GetPowerGammaAdjust(rssi,mGamma);
+		GPRSLOG(DEBUG,GPRS_MSG) << "adjustPowerParams:"  << LOGVAR(rssi) << LOGVAR(mGamma);
+		mTimer.setInvalid();
+	}
+}
+
 void SignalQuality::setRadData(RadData &rd)
 {
-	msRSSI.addPoint((int)rd.mRSSI);
-	msTimingError.addPoint(rd.mTimingError);
+	setRadData(rd.mRSSI,rd.mTimingError);
 }
 
 void SignalQuality::setRadData(float wRSSI,float wTimingError)
 {
 	msRSSI.addPoint((int)wRSSI);
 	msTimingError.addPoint(wTimingError);
+	adjustPowerParams((int)wRSSI);
 }
 
 // Determine whether we should use slow or fast channel coding for the specified direction.
