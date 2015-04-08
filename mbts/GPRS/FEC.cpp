@@ -208,15 +208,6 @@ void PDCHL1Downlink::transmit(RLCBSN_t bsn, BitVector *mI, const int *qbits, int
 		mchBurst.Hu(qbits[qi++]);
 		// Send it to the radio.
 		//OBJLOG(DEBUG) << "transmit mchBurst=" << mchBurst;
-		if (gConfig.getBool("Control.GSMTAP.GPRS")) {
-			// Send to GSMTAP.
-			gWriteGSMTAP(ARFCN(),TN(),gBSNNext.FN(),
-					TDMA_PDCH,
-					false,	// not SACCH
-					false,	// this is a downlink
-					mchBurst,
-					GSMTAP_TYPE_UM_BURST);
-		}
 #if FEC_DEBUG
 		if (1) {
 			// Try decoding the frame we just encoded to see if it is correct.
