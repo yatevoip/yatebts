@@ -629,8 +629,8 @@ bool MSInfo::msAssignChannels()
 
 		msAssignChannels2(maxdown,maxup,slots.mMultislotSum);
 
-		LOGWATCHF("Channel Assign, max:down/up=%d/%d ch down/up=%d/%d\n",
-			maxdown,maxup,msPCHDowns.size(),msPCHUps.size());
+		LOGWATCHF("Channel Assign, max:down/up=%d/%d ch down/up=%u/%u\n",
+			maxdown,maxup,(unsigned int)msPCHDowns.size(),(unsigned int)msPCHUps.size());
 
         // If we are multislot, log a message:
         if (msPCHDowns.size() > 1) {

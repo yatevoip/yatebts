@@ -758,9 +758,9 @@ void TBF::mtSetState(TBFState::type wstate)
 		}
 
 		if (mtState == TBFState::DataTransmit) {
-			LOGWATCHF("%s Start%s bytes=%d down/up=%d/%d\n", tbfid(1),
-				mtAssignmentOnCCCH ? " CCCH" : "",
-				engineGetBytesPending(), mtMS->msPCHDowns.size(),mtMS->msPCHUps.size());
+			LOGWATCHF("%s Start%s bytes=%d down/up=%u/%u\n", tbfid(1),
+				mtAssignmentOnCCCH ? " CCCH" : "",engineGetBytesPending(),
+				(unsigned int)mtMS->msPCHDowns.size(),(unsigned int)mtMS->msPCHUps.size());
 			// FIXME:
 			// There is some housekeeping to do.
 			// If a previous uplink TBF died for this MS, and then the MS was issued
