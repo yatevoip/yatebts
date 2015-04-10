@@ -21,26 +21,16 @@
 
 UDPSocket GSMTAPSocket;
 
-void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
-                  GSM::TypeAndOffset to, bool is_saach,
-				  bool ul_dln,	// (pat) This flag means uplink
-                  const BitVector& frame,
-				  unsigned wType)	// Defaults to GSMTAP_TYPE_UM
+
+unsigned int buildHeader(char* buffer, unsigned int len,
+				unsigned ARFCN, unsigned TS, unsigned FN,
+				GSM::TypeAndOffset to, bool is_saach,
+				bool ul_dln, unsigned wType, unsigned int defSCN = 0)
 {
-	char buffer[MAX_UDP_LENGTH];
-	int ofs = 0;
-
-	// Check if GSMTap is enabled
-	if (!gConfig.defines("Control.GSMTAP.TargetIP")) return;
-
-	// Port configuration
-	unsigned port = GSMTAP_UDP_PORT;	// default port for GSM-TAP
-	if (gConfig.defines("Control.GSMTAP.TargetPort"))
-		port = gConfig.getNum("Control.GSMTAP.TargetPort");
-
-	// Set socket destination
-	GSMTAPSocket.destination(port,gConfig.getStr("Control.GSMTAP.TargetIP").c_str());
-
+	if (len < sizeof(struct gsmtap_hdr)) {
+		LOG(NOTICE) << "Not enough space to build GSMTAP header";
+		return 0;
+	}
 	// Decode TypeAndOffset
 	uint8_t stype, scn;
 
@@ -100,9 +90,8 @@ void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
 			scn = 0;
 			break;
 		default:
-			LOG(NOTICE) << "GSMTAP unsupported type-and-offset " << to;
 			stype = GSMTAP_CHANNEL_UNKNOWN;
-			scn = 0;
+			scn = defSCN;
 			break;
 	}
 
@@ -129,10 +118,41 @@ void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
 	header->sub_type		= stype;
 	header->antenna_nr		= 0;
 	header->sub_slot		= scn;
-	header->res				= 0;
+	header->res			= 0;
 
-	ofs += sizeof(*header);
+	return sizeof(*header);
+}
 
+bool socketActive()
+{
+	// Check if GSMTap is enabled
+	if (!gConfig.defines("Control.GSMTAP.TargetIP")) 
+		return false;
+	// Port configuration
+	unsigned port = GSMTAP_UDP_PORT;	// default port for GSM-TAP
+	if (gConfig.defines("Control.GSMTAP.TargetPort"))
+		port = gConfig.getNum("Control.GSMTAP.TargetPort");
+
+	// Set socket destination
+	GSMTAPSocket.destination(port,gConfig.getStr("Control.GSMTAP.TargetIP").c_str());
+	return true;
+}
+
+void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
+                  GSM::TypeAndOffset to, bool is_saach,
+				  bool ul_dln,	// (pat) This flag means uplink
+                  const BitVector& frame,
+				  unsigned wType)	// Defaults to GSMTAP_TYPE_UM
+{
+	// Check if GSMTap is enabled
+	if (!socketActive()) return;
+
+	char buffer[MAX_UDP_LENGTH];
+	int ofs = 0;
+	
+	if (!(ofs = buildHeader(buffer,MAX_UDP_LENGTH,ARFCN,TS,FN,
+					to,is_saach,ul_dln,wType,0)))
+		return;
 	// Add frame data
 	frame.pack((unsigned char*)&buffer[ofs]);
 	ofs += (frame.size() + 7) >> 3;
@@ -141,6 +161,26 @@ void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
 	GSMTAPSocket.write(buffer, ofs);
 }
 
+void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
+                  GSM::TypeAndOffset to, bool is_saach, bool ul_dln,
+                  const char* data, unsigned int len,
+		  unsigned wType, unsigned int defSCN)
+{
+	if (!(data && len && socketActive()))
+		return;
+	char buffer[MAX_UDP_LENGTH];
+	int ofs = 0;
+	if (!(ofs = buildHeader(buffer,MAX_UDP_LENGTH,ARFCN,TS,FN,
+					to,is_saach,ul_dln,wType,defSCN)))
+		return;
+
+	// Add frame data
+	::memcpy(&buffer[ofs],data,len);
+	ofs += len;
+
+	// Write the GSMTAP packet
+	GSMTAPSocket.write(buffer, ofs);
+}
 
 
 // vim: ts=4 sw=4

@@ -19,6 +19,7 @@
 #include "Sgsn.h"
 #include "Ggsn.h"
 #include "LLC.h"
+#include "GSMTAPDump.h"
 #define CASENAME(x) case x: return #x;
 
 namespace SGSN {
@@ -263,9 +264,19 @@ void LlcEngine::llcWriteHighSide(ByteVector &sdu,int nsapi)
 	}
 }
 
+#define LLC_GSMTAP_DUMP(buff,len,uplink) \
+	if (gConfig.getBool("Control.GSMTAP.GPRS")) { \
+		gWriteGSMTAP(0,255,0,GSM::TDMA_MISC, \
+			false, \
+			uplink, \
+			buff,len, \
+			GSMTAP_TYPE_GB_LLC,255); \
+	}
+
 void LlcEngine::llcWriteLowSide(ByteVector &bv,SgsnInfo *si)
 {
 	if (bv.size() < 2) { return; }
+	LLC_GSMTAP_DUMP((const char*)bv.begin(),bv.size(),true);
 	LlcFrame lframe(bv);
 	int llcsapi = lframe.getSapi();
 	SGSNLOGF(DEBUG,GPRS_MSG|GPRS_LOOP,"LLC","llcWriteLowSide sapi="<<llcsapi);
@@ -306,6 +317,7 @@ void LlcEntity::lleWriteLowSide(LlcFrame &frame)
 void LlcEntity::lleWriteRaw(ByteVector &frame, const char *descr)
 {
 	gLlcParity.appendFCS(frame);
+	LLC_GSMTAP_DUMP((const char*)frame.begin(),frame.size(),false);
 	mSI->sgsnSend2MsHighSide(frame,descr,0);
 	//GPRS::DownlinkQPdu *dlpdu = new GPRS::DownlinkQPdu();
 	//dlpdu->mDlData = uiframe;
@@ -313,6 +325,8 @@ void LlcEntity::lleWriteRaw(ByteVector &frame, const char *descr)
 	//dlpdu->mDescr = std::string(descr);
 	//mSI->getMS()->msDownlinkQueue.write(dlpdu);
 }
+
+#undef LLC_GSMTAP_DUMP
 
 // Write a UI frame for unacknowledged information.
 void LlcEntity::lleWriteHighSide(LlcDlFrame &frame, bool isCmd, const char *descr)

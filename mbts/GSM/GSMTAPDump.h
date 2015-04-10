@@ -26,6 +26,13 @@ void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
                   GSM::TypeAndOffset to, bool is_sacch, bool ul_dln,
                   const BitVector& frame,
 				  unsigned wType = GSMTAP_TYPE_UM);
+
+
+void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
+                  GSM::TypeAndOffset to, bool is_sacch, bool ul_dln,
+                  const char* data, unsigned int len,
+		  unsigned wType = GSMTAP_TYPE_UM, unsigned int defSCN = 255);
+
 #endif
 
 // vim: ts=4 sw=4
