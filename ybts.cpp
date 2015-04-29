@@ -1704,6 +1704,7 @@ protected:
     unsigned char m_cause;
     unsigned char m_auth;
     bool m_started;
+    bool m_dead;
     bool m_pwrOff;
 };
 
@@ -7637,7 +7638,7 @@ void YBTSChanThread::notify(const char* error)
 YBTSGprsChan::YBTSGprsChan(YBTSGprsConn* conn)
     : YBTSConnChan(conn),
       m_conn(conn), m_cause(0), m_auth(0),
-      m_started(false), m_pwrOff(false)
+      m_started(false), m_dead(false), m_pwrOff(false)
 {
     int sep = id().find('/');
     if (sep >= 0)
@@ -7653,6 +7654,7 @@ YBTSGprsChan::~YBTSGprsChan()
 
 void YBTSGprsChan::destroyed()
 {
+    m_dead = true;
     if (m_conn) {
 	BtsPrimitive prim = SigConnRelease;
 	if (m_cause)
@@ -7683,6 +7685,7 @@ void YBTSGprsChan::disconnected(bool final, const char* reason)
 
 void YBTSGprsChan::sendReject(unsigned char cause, BtsPrimitive prim)
 {
+    m_dead = true;
     RefPointer<YBTSGprsConn> conn = m_conn;
     m_conn = 0;
     m_address.clear();
@@ -7695,7 +7698,6 @@ void YBTSGprsChan::statusParams(String& str)
     YBTSConnChan::statusParams(str);
     if (m_imsi)
 	str << ",imsi=" << m_imsi;
-    str << ",ref=" << refcount(); // TODO: fix & remove
 }
 
 void YBTSGprsChan::pickParams(const NamedList& msg)
@@ -7721,6 +7723,8 @@ bool YBTSGprsChan::callRouted(Message& msg)
 
 void YBTSGprsChan::callAccept(Message& msg)
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::callAccept(%p) ref=%d peer=%p [%p]",
+	&msg,refcount(),getPeer(),this);
     pickParams(msg);
     XmlElement* xml = new XmlElement("GprsAttachAccept");
     if (m_newPtmsi)
@@ -7738,6 +7742,8 @@ void YBTSGprsChan::callAccept(Message& msg)
 
 void YBTSGprsChan::callRejected(const char* error, const char* reason, const Message* msg)
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::callRejected('%s','%s',%p) ref=%d peer=%p [%p]",
+	error,reason,msg,refcount(),getPeer(),this);
     YBTSConnChan::callRejected(error,reason,msg);
     if (msg) {
 	pickParams(*msg);
@@ -7789,6 +7795,8 @@ void YBTSGprsChan::callRejected(const char* error, const char* reason, const Mes
 	Debug(this,DebugInfo,"Connection continuing locally in mbts");
 	m_cause = 0;
 	sendReject(0,SigGprsAttachLBO);
+	DDebug(this,DebugAll,"YBTSGprsChan::callRejected() post LBO ref=%d peer=%p [%p]",
+	    refcount(),getPeer(),this);
 	return;
     }
     m_cause = lookup(error,GSML3Codec::s_mmRejectCause,0x6f); // Protocol error, unspecified
@@ -7796,6 +7804,10 @@ void YBTSGprsChan::callRejected(const char* error, const char* reason, const Mes
 
 bool YBTSGprsChan::msgDrop(Message& msg, const char* reason)
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::msgDrop(%p,'%s') dead=%s ref=%d peer=%p [%p]",
+	&msg,reason,String::boolText(m_dead),refcount(),getPeer(),this);
+    if (m_dead)
+	return false;
     bool idle = !getPeer();
     if (!YBTSConnChan::msgDrop(msg,reason))
 	return false;
@@ -7829,16 +7841,25 @@ bool YBTSGprsChan::msgControl(Message& msg)
 
 void YBTSGprsChan::handleDisconnect()
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::handleDisconnect() dead=%s ref=%d peer=%p [%p]",
+	String::boolText(m_dead),refcount(),getPeer(),this);
+    if (m_dead)
+	return;
+    m_dead = true;
     bool idle = m_conn && !getPeer();
     m_conn = 0;
     disconnect();
     m_address.clear();
     if (idle)
 	deref();
+    DDebug(this,DebugAll,"YBTSGprsChan::handleDisconnect() post idle=%s ref=%d [%p]",
+	String::boolText(idle),refcount(),this);
 }
 
 void YBTSGprsChan::handleGprsAttach(YBTSMessage& m)
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::handleGprsAttach(%p) ref=%d peer=%p [%p]",
+	&m,refcount(),getPeer(),this);
     const XmlElement* xml = m.xml();
     if (!xml)
 	return;
@@ -7903,6 +7924,11 @@ void YBTSGprsChan::handleGprsAttachOk(YBTSMessage& m)
 
 void YBTSGprsChan::handleGprsDetach(YBTSMessage& m)
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::handleGprsDetach(%p) dead=%s ref=%d peer=%p [%p]",
+	&m,String::boolText(m_dead),refcount(),getPeer(),this);
+    if (m_dead)
+	return;
+    m_dead = true;
     bool idle = !getPeer();
     m_conn = 0;
     if (m.info() & 0x08)
@@ -7915,6 +7941,8 @@ void YBTSGprsChan::handleGprsDetach(YBTSMessage& m)
 
 void YBTSGprsChan::handleGprsPdp(YBTSMessage& m)
 {
+    DDebug(this,DebugAll,"YBTSGprsChan::handleGprsPdp(%p) ref=%d peer=%p [%p]",
+	&m,refcount(),getPeer(),this);
     if (m.primitive() != SigPdpDeactivate) {
 	if (!getSource(s_pdpMedia))
 	    __plugin.media()->setSource(this,s_pdpFormat,s_pdpMedia);
