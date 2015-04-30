@@ -1016,3 +1016,7 @@ Radio.C0=
 ;  associated to each base station by the network operator.
 ; REQUIRED!
 ;gstn_location=
+
+; text_sms: boolean: If possible decode and send the SMS as text/plain SIP MESSAGE body.
+; By default the binary type application/vnd.3gpp.sms is used.
+;text_sms=no

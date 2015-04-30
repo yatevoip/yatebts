@@ -9753,9 +9753,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	return false;
     }
     NamedString* rpdu = msg.getParam(YSTRING("rpdu"));
-    if (!rpdu)
-	rpdu = msg.getParam(YSTRING("xsip_body"));
-    NamedString tmpRpdu(rpdu ? rpdu->name().c_str() : "rpdu");
+    NamedString tmpRpdu("rpdu");
     while (TelEngine::null(rpdu)) {
 	const String& type = msg[YSTRING("operation")];
 	if (type && type != YSTRING("deliver")) {

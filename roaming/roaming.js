@@ -526,6 +526,17 @@ function routeSMS(msg)
     }
     else {
 	// MT SMS
+	switch (msg.xsip_type) {
+	    case "application/vnd.3gpp.sms":
+		msg.rpdu = msg.xsip_body;
+		break;
+	    case "text/plain":
+		msg.text = msg.xsip_body;
+		break;
+	    default:
+		msg.error = "nomedia";
+		return false;
+	}
 	imsi = getIMSI(null, msg.called);
 	if (imsi=="" || subscribers[imsi]==undefined) {
 	    msg.error = "offline";
@@ -539,7 +550,6 @@ function routeSMS(msg)
 	}
 
 	msg["sms.caller"] = caller;
-	msg.rpdu = msg.xsip_body;
 	addRoutingParams(msg,imsi);
 	msg.retValue("ybts/IMSI"+imsi);
     }
@@ -591,13 +601,21 @@ function onMoSMS(msg)
 
     var m = new Message("xsip.generate");
     m.method = "MESSAGE";
-    m.uri = "sip:" + msg.called  + "@" + sip_server;
     m.user = msisdn_caller; 
-    m.sip_To = "<sip:" + msg.called + "@" + sip_server + ">";
     m["sip_P-Called-Party-ID"] = "<tel:" + dest + ">";
-    m.xsip_type = "application/vnd.3gpp.sms";
-    m.xsip_body_encoding = "hex";
-    m.xsip_body = msg.rpdu;
+    if (text_sms && msg.text != "") {
+	m.xsip_type = "text/plain";
+	m.xsip_body = msg.text;
+	var called = dest; // send to destination
+    }
+    else {
+	m.xsip_type = "application/vnd.3gpp.sms";
+	m.xsip_body_encoding = "hex";
+	m.xsip_body = msg.rpdu;
+	var called = msg.called; // send to SMSC
+    }
+    m.uri = "sip:" + called  + "@" + sip_server;
+    m.sip_To = "<sip:" + called + "@" + sip_server + ">";
     m["sip_P-Access-Network-Info"] = accnet_header;
     if (msg.phy_info)
 	m["sip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
@@ -934,6 +952,7 @@ function readYBTSConf()
 	Engine.alarm(alarm_conf,"Please configure gstn_location parameter in section [roaming] from ybts.conf.");
 
     accnet_header = "3GPP-GERAN; cgi-3gpp="+mcc+mnc+hex_lac+hex_ci+"; gstn-location=\""+gstn_location+"\"";
+    text_sms = roaming_section.getBoolValue("text_sms");
 }
 
 /*
