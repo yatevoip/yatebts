@@ -6780,13 +6780,11 @@ bool YBTSChan::initOutgoing(Message& msg)
 	return false;
     m_pending = new ObjList;
     const String& caller = msg[YSTRING("caller")];
-    if (!msg.getBoolValue(YSTRING("privacy"))) {
-	if (caller) {
-	    XmlElement* x = new XmlElement("CallingPartyBCDNumber",caller);
-	    x->setAttributeValid(YSTRING("plan"),msg.getValue(YSTRING("callernumplan")));
-	    x->setAttributeValid(YSTRING("nature"),msg.getValue(YSTRING("callernumtype")));
-	    m_pending->append(x);
-	}
+    if (isE164(caller) && !msg.getBoolValue(YSTRING("privacy"))) {
+	XmlElement* x = new XmlElement("CallingPartyBCDNumber",caller);
+	x->setAttributeValid(YSTRING("plan"),msg.getValue(YSTRING("callernumplan")));
+	x->setAttributeValid(YSTRING("nature"),msg.getValue(YSTRING("callernumtype")));
+	m_pending->append(x);
     }
     Message* s = message("chan.startup");
     s->addParam("caller",caller,false);
