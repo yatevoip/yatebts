@@ -831,31 +831,89 @@ TBF *PDCHCommon::getTFITBF(int tfi, RLCDirType dir)
 	return tbf;
 }
 
-// Return the RF Power Control alpha and gamma value.
-// ---------- From GSM05.08 10.2.1 ----------
-// MS RF output power Pch is:
-// Pch = min(Gamma0 - GammaCh - Alpha * (C + 48), PMAX)
-// Alpha is a system param or optionally sent to MS in RLC messages (we dont.)
-// C represents CCCH power measured inside the MS.
-// Gamma0 = 39 dBm for GSM400, GSM900, GSM850, or 36 dBm for DCS1800 and PCS1900
-// PMAX is MS_TXPWR_MAX_CCH if no PBCCH exists (our case.)
-// ------------------------------------------
-// The alpha value represents how much the MS should turn down its output
-// power in response to its own measurement of CCCH input power.
-// This alpha value is sent in the Packet Uplink/Downlink Assignment messages.
-// The gamma value is subtracted from the max power.
-// Basically, the BTS can take complete control of power by setting alpha to 0
-// and using gamma, or let the MS take complete control by setting gamma to 0 and alpha to 1,
-// or anything in between.
-// TODO: Once we start talking to the MS, it will be RACHing to us on a regular basis,
-// and will also be reporting lost bursts, so we could be fiddling with the power parameters 
-// on a per-MS basis.  However, this function returns the default gamma alpha
-// to be used for the initial single-block downlink assignment when we dont
-// know what MS we are talking to yet.
-// BEGINCONFIG
-// 'GPRS.MS.Power.Alpha',10,1,0,'MS power control parameter; see GSM 05.08 10.2.1'
-// 'GPRS.MS.Power.Gamma',31,1,0,'MS power control parameter; see GSM 05.08 10.2.1'
-// ENDCONFIG
+/**
+ * Return the RF Power Control Alpha and Gamma Values
+ * ------- From ETSI TS 145 008 V12.3.0 ------------
+ *  According to section 10.2.1 (MS output power) is determined by:
+ *
+ *     Pch = min(Gamma0 - GammaCh - Alpha * (C + 48), PMAX)
+ *
+ * According to Annex B, all power calculations are in dBm.
+ * Parameters:
+ *    - PMAX is -> GPRS_MS_TXPWR_MAX_CCH if PBCCH is present
+ *              -> MS_TXPWR_MAX_CCH, if no PBCCH is present (current case)
+ *              -> values range between 5-43 dBm (see Table 1 is spec)
+ *    - Gamma0 is -> 39 dBm for GSM400, GSM850, GSM900
+ *                -> 36 dBm for DCS1800 and PCS1900
+ *    - C is -> the normalised received signal level at the MS (section 10.2.3.1)
+ *           -> C value is reported to the network on a range between 0...63,
+ *               corresponding to a signal level between -111dBm...-48dBm
+ *           -> similar to RXLEV (see section 8.1)
+ *    - Alpha is -> a system parameter broadcast on PBCCH (if present), and given
+ *                  in several downlink RLC control messages.
+ *               -> encoded on range of 0...10 coresponding to values of 0.1...1.0
+ *                  in 0.1 steps
+ *               -> a factor which decides the weight of the measured level of the 
+ *                  received signal in the output power
+ *    - GamaCh is -> a MS (our case) and channel specific parameter sent to the MS
+ *                   in several downlink RLC control messages
+ *                -> encoded on a range of 0...31 corresponding to 0...62dB, in 2dBm steps
+ *                -> a parameter which tells the MS by how much to turn down the power.
+ *
+ * Looking closely at the formula, by knowing the the MS usually measures received
+ * signal levels (the C value) between -111dBm...-48dBm, it follows that the whole
+ * (C + 48) expression is negative. Combined with the negative sign in front of
+ * Alpha, results that ALPHA DECIDES BY HOW MUCH THE MS SHOULD TURN UP ITS POWER.
+ *
+ * Because it is always positive, GAMMA DECIDES BY HOW MUCH THE MS SHOULD TURN
+ * DOWN ITS POWER.
+ *
+ * Setting ALPHA to 1 will allow the MS to increase its power with the difference
+ * between the received signal and the -48 dBm threshold. In theory, if GammaCh is 
+ * also set to 0, the power control is given completely to the MS. But, as PMAX =
+ * MS_TXPWR_MAX_CCH is usually +33 / +30dBm (equivalent to 2/1W transmit power),
+ * setting GammaCh to 0, will have no effect, as Gamma0 is already 6dBm greater
+ * than PMAX, so the transmit power will always be PMAX.
+ * Setting ALPHA to 0 and network adjusting of GammaCh based on the MS received
+ * signal strength allows the network to take control of the power loop for the MS.
+ *
+ * Case study 1: For Alpha = 10 and GammaCh = 31
+ *    Pch = 39 - 2 * 31 - 1.0 * (C + 48) (dBm) = -23 - (C + 48) (dBm)
+ *        = -71 - C (dBm)
+ *    For:
+ *        C = -111 dBm -> Pch = 40 dBm, but PMAX = 33/30 dBm so it will trasmit with PMAX
+ *        C = -104 dBm -> Pch = 33 dBm (same as PMAX = 33 dBm for a 2W MS in GSM850/GSM900)
+ *        C = -101 dBm -> Pch = 30 dBm (same as PMAX = 30 dBm for a 1W MS in DCS1800/PCS1900)
+ *        C = -76 dBm -> Pch = 5 dBm (usually the minimum transmit power of 3mW)
+ *        C = -48 dBm -> Pch = -23 dBm (but limited by the minimum 5 dBm transmit power)
+ *    So, Pch varies only for value of C in range -104...-76 dBm for GSM850/GSM900,
+ *    -101...-76 dBm for DCS1800/PCS1900.
+ *
+ * Case study 2: For Alpha = 10 and GammaCh = 17
+ *    Pch = 5 - 1.0 (C + 48) (dBm) = -43 -C (dBm)
+ *    For:
+ *        C = -76 dBm -> Pch = 33 dBm (same as PMAX in GSM850/GSM900)
+ *        C = -73 dBm -> Pch = 30 dBm (same as PMAX in DCS1800/PCS1900)
+ *        C = -48 dBm -> Pch = 5 dBm ( minimum of 3mW transmit power)
+ *    So Pch varies only for values of C in range -76...-48 dbm for GSM850/GSM900,
+ *    -73...-48 dBm for DCS1800/PCS1900.
+ *
+ * Case study 3: Covering the entire range of C with adjustments of Pch
+ *    C has a range of 62dB and Pch has a typical range of 28 or 25 dB.
+ *    That gives Alpha = 4 and GammaCh = 17.
+ *    Pch = 5 - 0.4 (C + 48) (dBm) = -14 -0.4*C (dBm)
+ *        C = -111 dBm -> Pch = 30 dBm
+ *        C = -48 dBm -> Pch = 5 dBm
+ *    For GSM850 and GSM900 it makes sense to set Alpha = 5 to be able to exploit
+ *    the larger MS_TXPWR_MAX_CCH.
+ *
+ * See ETSI TS 145 008 V12.3.0, Annex B for further explanations.
+ *
+ * BEGINCONFIG
+ * 'GPRS.MS.Power.Alpha',10,1,0,'MS power control parameter; see GSM 05.08 10.2.1'
+ * 'GPRS.MS.Power.Gamma',31,1,0,'MS power control parameter; see GSM 05.08 10.2.1'
+ * ENDCONFIG
+ */
 int GetPowerAlpha()
 {
 	// God only knows what this should be.

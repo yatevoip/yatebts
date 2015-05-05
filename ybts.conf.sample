@@ -535,8 +535,8 @@ Radio.C0=
 ;Debug=1
 
 ; MS.Power.Alpha: integer: MS power control parameter, unitless, in steps of 0.1, so a parameter of 5 is an alpha value of 0.5.
-; Determines the sensitivity of the MS to variations in downlink RSSI.
-; Valid range is 0...10 for alpha values of 0.0 ... 1.0. See GSM 05.08 10.2.1.  
+; Determines by how much the MS should turn up its power in relation with the measurement of BTS signal stregth.
+; Valid range is 0...10 for alpha values of 0.0 ... 1.0. See GSM 05.08 10.2.1.
 ; MS.Power.Alpha=10
 
 ; MS.Power.Gamma: integer: MS power control parameter, in 2 dB steps.
