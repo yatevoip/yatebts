@@ -60,15 +60,28 @@ void MediaConnection::process(const unsigned char* data, size_t len)
 
 void MediaConnection::process(unsigned int id, const unsigned char* data, size_t len)
 {
+#ifdef XDEBUG
+    Timeval timer;
+#endif
     TCHFACCHLogicalChannel* tch = gConnMap.findMedia(id);
     if (tch) {
 	// TODO: check frame size and blocking operation
 	tch->sendTCH(data);
+#ifdef XDEBUG
+	long ms = timer.elapsed();
+	if (ms > 50)
+	    LOG(ERR) << "connection " << id << " sent " << len << " bytes voice frame in " << ms << " ms";
+#endif
 	return;
     }
     SgsnInfo* si = gGprsMap.find(id);
     if (si) {
 	SgsnConn::userData(si,data,len);
+#ifdef XDEBUG
+	long ms = timer.elapsed();
+	if (ms > 250)
+	    LOG(ERR) << "connection " << id << " sent " << len << " bytes of data in " << ms << " ms";
+#endif
 	return;
     }
     LOG(ERR) << "received media frame for unmapped id " << id;
