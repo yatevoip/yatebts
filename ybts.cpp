@@ -5065,7 +5065,7 @@ void YBTSMedia::addSource(YBTSDataSource* src)
 	    append = o;
 	    continue;
 	}
-	if (src->connId() > src->connId()) {
+	if (crt->connId() > src->connId()) {
 	    o->insert(src)->setDelete(false);
 	    DDebug(this,DebugInfo,"Inserted data source (%p,%u) [%p]",
 		src,src->connId(),this);
@@ -5074,7 +5074,7 @@ void YBTSMedia::addSource(YBTSDataSource* src)
 	    o->set(src,false);
 	    o->setDelete(false);
 	    Debug(this,DebugInfo,"Replaced data source id=%u (%p) with (%p) [%p]",
-		src->connId(),crt,src,this);
+		crt->connId(),crt,src,this);
 	}
 	return;
     }
