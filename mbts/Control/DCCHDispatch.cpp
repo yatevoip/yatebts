@@ -146,6 +146,7 @@ static void connDispatchLoop(LogicalChannel* chan, unsigned int id)
 					gSigConn.send(SigEstablishSAPI,sapi,id);
 					continue;
 				}
+				chan->send(GSM::RELEASE);
 				// fall through
 			default:
 				LOG(ERR) << "unexpected primitive " << frame->primitive();
