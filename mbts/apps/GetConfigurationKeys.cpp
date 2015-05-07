@@ -820,6 +820,17 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
+	tmp = new ConfigurationKey("GPRS.LLC.PDUExpire","60000",
+		"milliseconds",
+		ConfigurationKey::DEVELOPER,
+		ConfigurationKey::VALRANGE,
+		"",
+		false,
+		"After how much time to give up on transmitting a downlink PDU."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
 	tmp = new ConfigurationKey("GPRS.TBF.Downlink.Poll1","10",
 		"blocks",
 		ConfigurationKey::DEVELOPER,

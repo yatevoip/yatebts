@@ -800,6 +800,11 @@ RLCMsgPacketUplinkAckNack * RLCUpEngine::engineUpAckNack()
 // placing them in the mSt.TxQ.  They will be physically sent by the serviceloop.
 void RLCDownEngine::engineWriteHighSide(SGSN::GprsSgsnDownlinkPdu *dlmsg)
 {
+	if (dlmsg->mDlTime.elapsed() > gConfig.getNum("GPRS.LLC.PDUExpire")) {
+		GPRSLOG(WARNING,GPRS_ERR) << "Dropping PDU '"<< dlmsg->mDescr << "' " <<hex << dlmsg << dec << ", too old";
+		delete dlmsg;
+		return;
+	}
 #if FAST_TBF
 	// We dont do the pdus one at a time.  Just leave the PDU on the queue and the
 	// engine will pull it off.

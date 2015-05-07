@@ -609,6 +609,9 @@ Radio.C0=
 ; TBF.Retry: integer: If 0, no TBF retry, otherwise if a TBF fails, it will be retried with this codec, numbered 1..4.
 ;TBF.Retry=1
 
+; LLC.PDUExpire: integer: Time, in miliseconds after which to give up on transmitting a downlink PDU.
+;LLC.PDUExpire=60000
+
 ; advanceblocks: integer: Number of advance blocks to use in the CCCH. reservation.; Allowed interval 5:15. 
 ; Defaults to 10.
 ;advanceblocks=10

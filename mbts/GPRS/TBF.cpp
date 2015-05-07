@@ -172,9 +172,14 @@ TBF::TBF(MSInfo *wms, RLCDirType wdir)
 	// Reset these counts just to validate them.
 	//mtPersistLastUse.setNow();
 	//mtPersistKeepAlive.setNow();
+	GPRSLOG(DEBUG,GPRS_MSG) << "Creating TBF " << this << " " << hex << (void*)this;
 }
 
-TBF::~TBF() { RN_MEMCHKDEL(TBF) }		// housekeeping handled by mtDelete()
+TBF::~TBF() 
+{
+     RN_MEMCHKDEL(TBF)
+     GPRSLOG(DEBUG,GPRS_MSG) << "Destroying TBF " << this << " " << hex << (void*)this;
+}		// housekeeping handled by mtDelete()
 
 const char *TBF::tbfid(bool verbose)
 {
@@ -830,6 +835,12 @@ void MSInfo::msRestart()
 
 static RLCDownEngine *createDownlinkTbf(MSInfo *ms, DownlinkQPdu *dlmsg, bool isRetry, ChannelCodingType codingMax)
 {
+	if (dlmsg->mDlTime.elapsed() > gConfig.getNum("GPRS.LLC.PDUExpire")) {
+		GPRSLOG(WARNING,GPRS_ERR) << "Not creating DL TBF for'"<< dlmsg->mDescr << "' [" <<hex << dlmsg << dec 
+			<< "] PDU, it's too old";
+		delete dlmsg;
+		return 0;
+	}
 	ms->msStalled = 0;
 	GPRSLOG(DEBUG,GPRS_MSG) << "<---- downlink PDU";
 	RLCDownEngine *engine = new RLCDownEngine(ms);
@@ -839,6 +850,7 @@ static RLCDownEngine *createDownlinkTbf(MSInfo *ms, DownlinkQPdu *dlmsg, bool is
 	tbf->mtTlli = dlmsg->mTlli;	// Dont think mtTlli is used in a downlink TBF.
 	tbf->mtChannelCodingMax = codingMax;
 	//tbf->mtIsRetry = isRetry;
+	GPRSLOG(DEBUG,GPRS_MSG)  << "Creating TBF " << tbf << "for " << dlmsg->mDescr << "[" << hex << (void*)dlmsg << dec <<"]";
 	engine->engineWriteHighSide(dlmsg);
 	engine->mtSetState(TBFState::DataReadyToConnect);
 	return engine;
@@ -867,11 +879,6 @@ void MSInfo::msService()
 			msDelete();
 			return;
 		}
-	}
-
-	if (msCountTbfNoConnect > 5) {
-	    msDelete();
-	    return;
 	}
 
 	// If MS running, check for counter expiration and stop if necessary.
