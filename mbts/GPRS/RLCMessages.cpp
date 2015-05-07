@@ -151,7 +151,7 @@ void RLCMsgPowerControlParametersIE::setFrom(TBF *tbf)
 		int tn = down->TN();
 		setGamma(tn,gamma);
 	}
-	GPRSLOG(DEBUG,GPRS_OK|GPRS_MSG) << "Setting power control parameters alpha=" << ms->msGetAlpha() << " gamma=" << ms->msGetGamma();
+	GPRSLOG(DEBUG,GPRS_OK|GPRS_MSG) << "Setting power control parameters alpha=" << ms->msGetAlpha(false) << " gamma=" << ms->msGetGamma(false);
 }
 
 
