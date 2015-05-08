@@ -130,6 +130,8 @@ MSInfo::MSInfo(uint32_t tlli)
 	gReports.incr("GPRS.MSInfo");
 	gL2MAC.macAddMS(this);
 	mGamma = GetPowerGamma();
+	mLastTA = 0;
+	mNextTA = -1;
 }
 
 bool MSInfo::msIsSuspended()
@@ -774,7 +776,8 @@ void SignalQuality::dumpSignalQuality(std::ostream&os) const
 	ios_base::fmtflags savedfoobarflags = os.flags();
 	os.precision(2);
 	os << "\t" << fixed;
-	os << LOGVAR2("TimingError",msTimingError);
+	os << LOGVAR2("TA",mLastTA);
+	os << LOGVAR2("TE",msTimingError);
 	os << LOGVAR2("RSSI",msRSSI);
 	os << LOGVAR2("CV",msCValue);
 	os << LOGVAR2("ILev",msILevel);
@@ -808,6 +811,26 @@ void SignalQuality::adjustPowerParams(int rssi)
 	}
 }
 
+void SignalQuality::adjustTimingAdvance(float wTimingError)
+{
+	if (mNextTA < 0)
+		mNextTA = mLastTA = GetTimingAdvance(wTimingError);
+	else if (mTimerTA.expired()) {
+		int TA = mLastTA;
+		if (wTimingError > 1.0f && TA < 62)
+			TA++;
+		else if (wTimingError < -1.0f && TA > 0)
+			TA--;
+		if (TA == mLastTA)
+			return;
+		mNextTA = TA;
+	}
+	else
+		return;
+	GPRSLOG(DEBUG,GPRS_MSG) << "adjustTimingAdvance TA=" << mNextTA;
+	mTimerTA.setInvalid();
+}
+
 void SignalQuality::setRadData(RadData &rd)
 {
 	setRadData(rd.mRSSI,rd.mTimingError);
@@ -818,6 +841,7 @@ void SignalQuality::setRadData(float wRSSI,float wTimingError)
 	msRSSI.addPoint((int)wRSSI);
 	msTimingError.addPoint(wTimingError);
 	adjustPowerParams((int)wRSSI);
+	adjustTimingAdvance(wTimingError);
 }
 
 // Determine whether we should use slow or fast channel coding for the specified direction.

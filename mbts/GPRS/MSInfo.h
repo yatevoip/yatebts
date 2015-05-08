@@ -138,6 +138,10 @@ class MSStopCause {
 #define POWER_TIMER 1000 // miliseconds.
 #endif
 
+#ifndef TA_TIMER
+#define TA_TIMER 5000
+#endif
+
 struct SignalQuality {
 	// TODO: Get the Channel Quality Report from packet downlink ack/nack GSM04.60 11.2.6
 	Statistic<float> msTimingError;
@@ -151,7 +155,10 @@ struct SignalQuality {
 	UInt16_z mLastAlpha; // last sent alpha value
 	UInt16_z mLastGamma; // last sent gamma value
 	UInt16_z mGamma; // current calculated gamma, might not have been sent
+	int mNextTA; // next TA to send
+	int mLastTA; // last TA sent
 	GprsTimer mTimer;
+	GprsTimer mTimerTA;
 	void setRadData(RadData &rd);
 	void setRadData(float wRSSI,float wTimingError);
 	inline int msGetAlpha(bool transmit = true)
@@ -166,7 +173,18 @@ struct SignalQuality {
 			mLastGamma = mGamma;
 		return mGamma;
 	}
+	int msGetTA(bool transmit = true)
+	{
+		if (transmit) {
+			if (!mTimerTA.valid())
+				mTimerTA.setFuture(TA_TIMER);
+			if (mNextTA >= 0)
+				mLastTA = mNextTA;
+		}
+		return mLastTA;
+	}
 	void adjustPowerParams(int wRSSI);
+	void adjustTimingAdvance(float wTimingError);
 	void dumpSignalQuality(std::ostream &os) const;
 };
 
@@ -586,7 +604,6 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 	MSStopCause::type msStopCause;
 	//void msRestart();
 	ChannelCodingType msGetChannelCoding(RLCDirType wdir) const;
-	int msGetTA() const { return GetTimingAdvance(msTimingError.getCurrent()); }
 	void msDump(std::ostream&os, SGSN::PrintOptions options);
 	void msDumpCommon(std::ostream&os) const;
 	void msDumpChannels(std::ostream&os) const;
