@@ -9,7 +9,7 @@ if echo "$ac_confdir/$ac_pwd" | grep -q '[[[:space:]\\\$\"'\'']]'; then
 fi
 
 PACKAGE_RELEASE="1"
-PACKAGE_STATUS="devel"
+PACKAGE_STATUS=""
 
 PACKAGE_REVISION=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`
 test -z "$PACKAGE_REVISION" && PACKAGE_REVISION=`cat "$srcdir/revision.txt" 2>/dev/null`
