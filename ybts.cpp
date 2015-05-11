@@ -2396,6 +2396,7 @@ static int decodeRP(uint8_t*& b, unsigned int& len, uint8_t& rpMsgType,
 	    return -2;
     }
     unsigned int destLen = *b++;
+    len--;
     if (destLen) {
 	if (destLen <= len)
 	    decodeBCDNumber(b,destLen,*bcd,plan,type);
@@ -2475,8 +2476,9 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
 	len--;
 	if (!len)
 	    return 0;
-	// Data Coding scheme, handle only GSM 7bit
-	if (*b)
+	// Data Coding scheme, handle only GSM 7bit and UCS-2
+	bool ucs2 = (*b == 0x08);
+	if (*b && !ucs2)
 	    return 0;
 	b++;
 	len--;
@@ -2504,12 +2506,18 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
 	    Debug(&__plugin,DebugNote,"Can't decode SMS text with header");
 	    return 0;
 	}
-	GSML3Codec::decodeGSM7Bit(b,len,*smsText);
-	if (smsText->length() > l)
-	    *smsText = smsText->substr(0,l);
-	// Remove
+	if (ucs2) {
+	    while (len > 1) {
+		UChar c(((uint16_t)b[0]) << 8 | b[1]);
+		*smsText << c;
+		b += 2;
+		len -= 2;
+	    }
+	}
+	else
+	    GSML3Codec::decodeGSM7Bit(b,len,*smsText,l);
 	if (smsTextEnc)
-	    *smsTextEnc = "gsm7bit";
+	    *smsTextEnc = ucs2 ? "ucs2" : "gsm7bit";
     }
     return 0;
 }
@@ -9759,7 +9767,9 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    break;
 	}
 	String enc = msg[YSTRING("text.encoding")];
-	if (enc && enc.toLower() != YSTRING("gsm7bit")) {
+	enc.toLower();
+	bool ucs2 = (enc == YSTRING("ucs2"));
+	if (enc && !(ucs2 || (enc == YSTRING("gsm7bit")))) {
 	    Debug(this,DebugNote,"MT SMS: unknown encoding '%s'",enc.c_str());
 	    break;
 	}
@@ -9818,11 +9828,35 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	orig[0] = nDigits;
 	tpdu.append(orig,origLen + 1);
 	delete[] orig;
+	// Build TP-User-Data
+	DataBlock sms;
+	uint8_t smsLen = 0;
+	if ((!ucs2) && GSML3Codec::encodeGSM7Bit(text,sms))
+	    smsLen = sms.length() * 8 / 7;
+	else {
+	    sms.clear();
+	    const char* str = text.c_str();
+	    UChar chr;
+	    while (chr.decode(str,0xffff) && chr.code()) {
+		uint8_t buf[2];
+		buf[0] = (uint8_t)(chr.code() >> 8);
+		buf[1] = (uint8_t)chr.code();
+		sms.append(buf,2);
+		smsLen += 2;
+	    }
+	    ucs2 = true;
+	}
+	if (!sms.length()) {
+	    Debug(this,DebugNote,"MT SMS: text leads to empty SMS content");
+	    break;
+	}
 	// TP-Protocol-Identifier + TP-Coding-Scheme + TP-Service-Centre-Time-Stamp
-	uint8_t extra[9] = {0,0,0,0,0,0,0,0,0};
+	uint8_t extra[9] = {0,ucs2 ? 8 : 0,0,0,0,0,0,0,0};
 	// TP-Service-Centre-Time-Stamp
 	unsigned int smscTs = msg.getIntValue(YSTRING("smsc.timestamp"),Time::secNow(),0);
-	extra[8] = (uint8_t)msg.getIntValue(YSTRING("smsc.tz"));
+	int tz = msg.getIntValue(YSTRING("smsc.tz"),0,-79,79);
+	if (tz < 0)
+	    tz = 80 - tz;
 	int year = 0;
 	unsigned int month = 0;
 	unsigned int day = 0;
@@ -9837,16 +9871,10 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    setHalfByteDigits(ts,hour);
 	    setHalfByteDigits(ts,minute);
 	    setHalfByteDigits(ts,sec);
+	    setHalfByteDigits(ts,tz);
 	}
 	tpdu.append(extra,9);
 	// TP-User-Data-Length + TP-User-Data
-	DataBlock sms;
-	GSML3Codec::encodeGSM7Bit(text,sms);
-	if (!sms.length()) {
-	    Debug(this,DebugNote,"MT SMS: text leads to empty SMS content");
-	    break;
-	}
-	uint8_t smsLen = sms.length() * 8 / 7;
 	tpdu.append(&smsLen,1);
 	tpdu += sms;
 	// TS 124.011: RP-User-Data IE max len in RP-DATA is 233
