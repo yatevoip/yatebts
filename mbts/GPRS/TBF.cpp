@@ -940,14 +940,16 @@ void MSInfo::msService()
 		bool stallOnlyForActiveTBF = configGetNumQ("GPRS.TBF.StallOnlyForActive",0);
 		TBF *blockingtbf;
 		if (! msCountTBF2(RLCDir::Down,stallOnlyForActiveTBF ? TbfMActive : TbfMAny,&blockingtbf)) {
-			DownlinkQPdu *dlmsg = msDownlinkQueue.read();
+			DownlinkQPdu *dlmsg = msDownlinkQueue.readNoBlock();
+			if (!dlmsg)
+				break;
 			// Because the message is queued for this MS, it means the tlli
 			// is equal to either msTlli or msOldTlli.  The SGSN tells us which
 			// one to use.  Make sure it is the current one.
 			// The tlli is changed on the next message after an attach procedure.
 			msChangeTlli(dlmsg->mTlli);
 			createDownlinkTbf(this,dlmsg,false,ChannelCodingMax);
-		} else {
+		} else if (msDownlinkQueue.size()) {
 			// This code just prints a nice message:
 			devassert(blockingtbf);
 			// stalltype is 1 for stalled by active, 2 for stalled by dead tbf.
