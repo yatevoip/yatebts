@@ -112,7 +112,7 @@ class GmmInfo
 
 	bool isRegistered() {
 		return mState == GmmState::GmmRegisteredNormal ||
-		       mState == GmmState::GmmRegisteredSuspsended;
+		       mState == GmmState::GmmRegisteredSuspended;
 	}
 
 	void setGmmState(GmmState::state newstate) { mState = newstate; }

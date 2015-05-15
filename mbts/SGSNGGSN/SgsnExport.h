@@ -43,7 +43,7 @@ class GmmState
 		GmmDeregistered,	// Tlli was assigned by us, but not registered yet.
 		GmmRegistrationPending,
 		GmmRegisteredNormal,		// aka "GPRS Attached"
-		GmmRegisteredSuspsended
+		GmmRegisteredSuspended
 	};
 	static const char *GmmState2Name(state);
 };
@@ -104,9 +104,12 @@ class MSUEAdapter {
 	public:
 	// The rbid is used only by UMTS.
 	void sgsnWriteLowSide(ByteVector &payload,uint32_t handle, unsigned rbid=0);
-	GmmState::state sgsnGetRegistrationState(uint32_t mshandle);
+	// return associated GmmInfo in outGmm if given pointer is valid
+	GmmState::state sgsnGetRegistrationState(uint32_t mshandle, GmmInfo** outGmm = 0);
 	void sgsnPrint(uint32_t mshandle, int options, std::ostream &os);
 	void sgsnFreePdpAll(uint32_t mshandle);
+	GmmState::state suspend();
+	GmmState::state resume();
 
 	//MSUEAdapter() {}
 	//virtual ~MSUEAdapter() {}

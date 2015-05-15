@@ -137,7 +137,7 @@ MSInfo::MSInfo(uint32_t tlli)
 bool MSInfo::msIsSuspended()
 {
 	SGSN::GmmState::state state = sgsnGetRegistrationState(this->msTlli);
-	return state == SGSN::GmmState::GmmRegisteredSuspsended;
+	return state == SGSN::GmmState::GmmRegisteredSuspended;
 }
 
 // Extended dynamic mode means # channels up > # channels down.
@@ -156,7 +156,7 @@ bool MSInfo::msIsRegistered()
 {
 	SGSN::GmmState::state state = sgsnGetRegistrationState(this->msTlli);
 	return state == SGSN::GmmState::GmmRegisteredNormal ||
-		       state == SGSN::GmmState::GmmRegisteredSuspsended;
+		       state == SGSN::GmmState::GmmRegisteredSuspended;
 }
 
 void MSInfo::msCountUSFGrant(bool penalize)

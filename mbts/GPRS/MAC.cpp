@@ -1945,6 +1945,7 @@ static void processUplinkBlock(PDCHL1FEC *pdch, RLCRawBlock *src)
 		if (usfms) {
 			usfms->msN3101 = 0;
 			usfms->talkedUp();
+			usfms->resume();
 		}
 	}
 

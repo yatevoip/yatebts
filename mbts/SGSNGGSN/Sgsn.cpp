@@ -1161,7 +1161,13 @@ bool Sgsn::handleGprsSuspensionRequest(uint32_t wTlli,
 	const ByteVector &wraid)	// The Routing Area id.
 {
 	SGSNLOGF(INFO,GPRS_MSG,"SGSN","Received GPRS SuspensionRequest for"<<LOGHEX2("tlli",wTlli));
-	return false;	// Not handled yet.
+	MSUEAdapter* ms = SgsnAdapter::findMs(wTlli);
+	if (!ms) {
+		GLOG(NOTICE) << "Received GPRS suspension request for unknown TLLI=" << LOGVALHEX(wTlli);
+		return false;
+	}
+	GmmState::state tlliState = ms->suspend();
+	return tlliState == GmmState::GmmRegisteredSuspended;
 	// TODO:
 	// if sgsn not enabled, return false.
 	// save the channel?
@@ -1895,15 +1901,36 @@ bool MSUEAdapter::sgsnGetGeranFeaturePackI(uint32_t mshandle)
 }
 #endif
 
-GmmState::state MSUEAdapter::sgsnGetRegistrationState(uint32_t mshandle)
+GmmState::state MSUEAdapter::sgsnGetRegistrationState(uint32_t mshandle, GmmInfo** outGmm)
 {
 	SgsnInfo *si = sgsnGetSgsnInfoByHandle(mshandle,false);
 	if (!si) { return GmmState::GmmDeregistered; }
 	GmmInfo *gmm = si->getGmm();	// Must be non-null or we would not be here.
 	if (!gmm) { return GmmState::GmmDeregistered; }
+	if (outGmm) *outGmm = gmm;
 	return gmm->getGmmState();
 }
 
+GmmState::state MSUEAdapter::suspend()
+{
+	GmmInfo* gmm = 0;
+	GmmState::state state = sgsnGetRegistrationState(msGetHandle(),&gmm);
+	if (state == GmmState::GmmRegisteredNormal && gmm)
+		gmm->setGmmState((state = GmmState::GmmRegisteredSuspended));
+	return state;
+}
+
+GmmState::state MSUEAdapter::resume()
+{
+	GmmInfo* gmm = 0;
+  	GmmState::state state = sgsnGetRegistrationState(msGetHandle(),&gmm);
+	if (!(state == SGSN::GmmState::GmmRegisteredSuspended && gmm))
+		return state;
+	GLOG(INFO) << "Resuming GPRS for " << msid();
+	state = GmmState::GmmRegisteredNormal;
+	gmm->setGmmState(state);
+	return state;
+}
 
 #if RN_UMTS
 //void MSUEAdapter::sgsnHandleRabSetupResponse(unsigned rabId, bool success)
@@ -1936,7 +1963,7 @@ const char *GmmState::GmmState2Name(GmmState::state state)
 	CASENAME(GmmDeregistered)
 	CASENAME(GmmRegistrationPending)
 	CASENAME(GmmRegisteredNormal)
-	CASENAME(GmmRegisteredSuspsended)
+	CASENAME(GmmRegisteredSuspended)
 	}
 	return "";
 }
