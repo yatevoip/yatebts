@@ -545,7 +545,7 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 	// This queue is not between separate threads for BSSG,
 	// and it is no longer for the internal sgsn either.
 	//InterthreadQueue<BSSG::BSSGMsgDLUnitData> msDownlinkQueue;
-	InterthreadQueue2<SGSN::GprsSgsnDownlinkPdu,SingleLinkList<> > msDownlinkQueue;
+	InterthreadQueue2<SGSN::GprsSgsnDownlinkPdu,SortedSingleLinkList<SGSN::GprsSgsnDownlinkPdu> > msDownlinkQueue;
 	Statistic<unsigned> msDownlinkQStat;
 	Statistic<double> msDownlinkQDelay;
 	Timeval msDownlinkQOldest;			// The timeval from the last guy in the queue.

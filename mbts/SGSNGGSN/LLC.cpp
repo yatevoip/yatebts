@@ -168,7 +168,7 @@ static void handleXid(LlcEntity *lle, ByteVector &xids)
 	}
 	// Send it.
 	SGSNLOGF(INFO,GPRS_MSG|GPRS_OK,"LLC","Sending XID command:"<<uframe.hexstr());
-	lle->lleWriteRaw(uframe,"xid cmd");
+	lle->lleWriteRaw(uframe,"xid cmd",lle->getLlcSapi());
   } catch (ByteVectorError) {
 	SGSNLOGF(WARNING,GPRS_ERR,"LLC","over-run error parsing LLC XID command");
   }
@@ -314,11 +314,11 @@ void LlcEntity::lleWriteLowSide(LlcFrame &frame)
 }
 
 
-void LlcEntity::lleWriteRaw(ByteVector &frame, const char *descr)
+void LlcEntity::lleWriteRaw(ByteVector &frame, const char *descr, unsigned int sapi)
 {
 	gLlcParity.appendFCS(frame);
 	LLC_GSMTAP_DUMP((const char*)frame.begin(),frame.size(),false);
-	mSI->sgsnSend2MsHighSide(frame,descr,0);
+	mSI->sgsnSend2MsHighSide(frame,descr,0,sapi);
 	//GPRS::DownlinkQPdu *dlpdu = new GPRS::DownlinkQPdu();
 	//dlpdu->mDlData = uiframe;
 	//LLCDEBUG("llewriteHighSide:"<<(ByteVector)frame);
@@ -337,7 +337,7 @@ void LlcEntity::lleWriteHighSide(LlcDlFrame &frame, bool isCmd, const char *desc
 	//LlcFrameUI uiframe(frame.begin());
 	LlcFrameUI uiframe(frame);
 	uiframe.writeUIHeader(mVU++);
-	lleWriteRaw(frame,descr);
+	lleWriteRaw(frame,descr,getLlcSapi());
 
 }
 

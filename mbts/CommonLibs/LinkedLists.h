@@ -111,6 +111,13 @@ class SingleLinkListNode
 	virtual unsigned size() { return 0; }
 };
 
+// A sortable single link list node
+class SingleLinkListCompNode : public SingleLinkListNode
+{
+	public:
+	virtual int compare(const SingleLinkListCompNode* other) = 0;
+};
+
 // A single-linked lists of elements with internal pointers.
 // The methods must match those from SingleLinkListNode.
 // This class also assumes the Node has a size() method, and accumulates
@@ -118,6 +125,7 @@ class SingleLinkListNode
 template<class Node=SingleLinkListNode>
 class SingleLinkList
 {
+	protected:
 	Node *mHead, *mTail;
 	unsigned mSize;			// Number of elements in list.
 	unsigned mTotalSize;	// Total of size() method of elements in list.
@@ -133,7 +141,7 @@ class SingleLinkList
 	{
 		if (!mHead) return NULL;
 		Node *result = mHead;
-		mHead = mHead->next();
+		mHead = static_cast<Node*>(mHead->next());
 		if (mTail == result) { mTail = NULL; assert(mHead == NULL); }
 		result->setNext(NULL);	// be neat
 		mSize--;
@@ -163,13 +171,42 @@ class SingleLinkList
 	Node *back() { return mTail; }
 
 	// Interface to InterthreadQueue so it can used SingleLinkList as the Fifo.
-	void put(void *val) { push_back((Node*)val); }
+	virtual void put(void *val) { push_back((Node*)val); }
 	void *get() { return pop_front(); }
 };
 
 
-
-
+// A sorted single linked list
+template <class Node=SingleLinkListCompNode>
+class SortedSingleLinkList : public SingleLinkList<Node>
+{
+	public:
+	void put(void *val) { insert(static_cast<Node*>(val)); }
+	
+	void insert(Node* node)
+	{
+		if (!node)
+			return;
+		Node* crtNode = SingleLinkList<Node>::mHead;
+		Node* prevNode = 0;
+		while (crtNode) {
+			int comp = node->compare(crtNode);
+			if (comp < 0)
+				break;
+			prevNode = crtNode;
+			crtNode = static_cast<Node*>(crtNode->next());
+		}
+		if (prevNode)
+			prevNode->setNext(node);
+		else
+			SingleLinkList<Node>::mHead = node;
+		node->setNext(crtNode);
+		if (!crtNode)
+			SingleLinkList<Node>::mTail = node;
+		SingleLinkList<Node>::mSize++;
+		SingleLinkList<Node>::mTotalSize += node->size();
+	}
+};
 
 #endif
 // vim: ts=4 sw=4

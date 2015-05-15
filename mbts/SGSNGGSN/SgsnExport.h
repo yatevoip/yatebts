@@ -60,17 +60,27 @@ struct SgsnDownlinkMsg
 	//SgsnDownlinkPdu(SgsnDownlinkPdu&other) { *this = other; }
 };
 
-struct GprsSgsnDownlinkPdu : public SingleLinkListNode, public SgsnDownlinkMsg
+struct GprsSgsnDownlinkPdu : public SingleLinkListCompNode, public SgsnDownlinkMsg
 {
 	uint32_t mTlli;		// For gprs: the TLLI of the MS to receive the message.
 						// (In gprs NSAPI is encoded in the LLC message in the data.)
 	uint32_t mAliasTlli;// Another TLLI that the SGSN knows refers to the same MS as the above.
 	Timeval mDlTime;
+	unsigned int mSapi;
 	bool isKeepAlive() { return false; }	// Is this is a dummy message?
 	unsigned size() { return mDlData.size(); }	// Decl must exactly match SingleLinkListNode
-	GprsSgsnDownlinkPdu(ByteVector a, uint32_t wTlli, uint32_t wAliasTlli, std::string descr) :
-		SgsnDownlinkMsg(a,descr), mTlli(wTlli), mAliasTlli(wAliasTlli)
+	GprsSgsnDownlinkPdu(ByteVector a, uint32_t wTlli, uint32_t wAliasTlli, std::string descr, unsigned int sapi = 0) :
+		SgsnDownlinkMsg(a,descr), mTlli(wTlli), mAliasTlli(wAliasTlli), mSapi(sapi)
 		{}
+	int compare(const SingleLinkListCompNode* other)
+	{
+		if (!other)
+			return -1; // put valid elements before null ones
+		const GprsSgsnDownlinkPdu* pdu = static_cast<const GprsSgsnDownlinkPdu*>(other);
+		if (!pdu)
+			return -1;
+		return mSapi - pdu->mSapi;
+	}
 };
 
 struct UmtsSgsnDownlinkPdu : public SgsnDownlinkMsg

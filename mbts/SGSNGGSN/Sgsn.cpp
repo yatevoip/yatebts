@@ -390,7 +390,7 @@ void SgsnInfo::sgsnSend2PdpLowSide(int nsapi, ByteVector &packet)
 }
 
 // The rbid is not used by GPRS, and is just 0.
-void SgsnInfo::sgsnSend2MsHighSide(ByteVector &pdu,const char *descr, int rbid)
+void SgsnInfo::sgsnSend2MsHighSide(ByteVector &pdu,const char *descr, int rbid, unsigned int sapi)
 {
 		MSUEAdapter *ms = getMS();
 #if RN_UMTS
@@ -422,7 +422,7 @@ void SgsnInfo::sgsnSend2MsHighSide(ByteVector &pdu,const char *descr, int rbid)
 			LOG(WARNING) << "no corresponding MS for" << this;
 			return;
 		}
-		GprsSgsnDownlinkPdu *dlpdu = new GprsSgsnDownlinkPdu(pdu,tlli,aliasTlli,descr);
+		GprsSgsnDownlinkPdu *dlpdu = new GprsSgsnDownlinkPdu(pdu,tlli,aliasTlli,descr,sapi);
 		//ms->msWriteHighSide(dlpdu);
 		// This is thread safe:
 		// Go ahead and enqueue it even if there is no MS

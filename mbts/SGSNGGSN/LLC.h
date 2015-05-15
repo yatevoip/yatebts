@@ -347,7 +347,7 @@ struct LlcEntity
 	void lleWriteLowSide(LlcFrame &frame);
 	void lleWriteHighSide(LlcDlFrame &frame, bool isCmd, const char *descr);
 	void lleWriteHighSide(L3GprsDlMsg &msg);
-	void lleWriteRaw(ByteVector &frame, const char *descr);
+	void lleWriteRaw(ByteVector &frame, const char *descr, unsigned int sapi);
 };
 #if LLC_IMPLEMENTATION
 	//SgsnInfo *LlcEntity::getSgsnInfo() { return mSI; }

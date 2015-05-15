@@ -302,7 +302,7 @@ class SgsnInfo
 
 	// After packet has been processed by LLC or PDCP, this sends it to the correct PdpContext.
 	void sgsnSend2PdpLowSide(int nsapi, ByteVector &packet);
-	void sgsnSend2MsHighSide(ByteVector &pdu,const char *descr, int rbid);
+	void sgsnSend2MsHighSide(ByteVector &pdu,const char *descr, int rbid, unsigned int sapi);
 
 	void sgsnWriteHighSide(ByteVector &sdu,int nsapi);
 
