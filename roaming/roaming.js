@@ -1183,6 +1183,13 @@ function completeCommand(msg,line,part)
 	case "roaming":
 	   if (neighbors)
 		oneCompletion(msg,"neighbors",part);
+	   oneCompletion(msg,"list",part);
+	   oneCompletion(msg,"forget",part);
+	   break;
+	case "roaming forget":
+	   oneCompletion(msg,"all",part);
+	   for (var imsi in subscribers)
+		oneCompletion(msg,imsi,part);
 	   break;
     }
 }
@@ -1228,7 +1235,41 @@ function onCommand(msg)
 	    }
 	    msg.retValue(tmp);
 	    return true;
+
+	case "roaming list":
+	    var tmp = "IMSI            TMSI     MSISDN         IMEI            Expire time\r\n";
+	    tmp +=    "--------------- -------- -------------- --------------- ----------\r\n";
+	    if (subscribers) {
+		for (var imsi in subscribers) {
+	 	    subscriber = subscribers[imsi];
+		    tmp += strFix(imsi,15) + " " + strFix(subscriber.tmsi,8) + " " + strFix(subscriber.msisdn,14) + " " + strFix(subscriber.imei,15) + " "+ strFix(subscriber.expires,10) + "\r\n";
+		}
+	    }
+	    msg.retValue(tmp);
+	    return true;
+
+	case "roaming forget all":
+	    for (var imsi in subscribers) {
+	    	Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
+	    	delete subscribers[imsi];
+	    	saveUE(imsi);
+	    }
+	    Engine.debug(Engine.DebugInfo, "Finished expiring subscribers");
+	    return true;
     }
+
+    var command = msg.line;
+    if (command.substr(0,15)=="roaming forget ") {
+	    var imsi = command.substr(15);
+	    if (subscribers[imsi]!="") {
+		Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
+		delete subscribers[imsi];
+		saveUE(imsi);
+	    } else 
+		Engine.debug("Invalid subscriber '"+imsi+"'");
+	    return true;
+    }
+
     return false;
 }
 
