@@ -231,8 +231,10 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		    else
 			LOG(INFO) << "received SigConnRelease for unmapped id " << id;
 		}
-		else if (info)
+		else if (info & 0x80)
 		    ch->send(HARDRELEASE);
+		else
+		    ch->send(L3ChannelRelease(info));
 	    }
 	    break;
 	case SigStartMedia:

@@ -922,10 +922,10 @@ public:
     bool start();
     void stop();
     // Drop a connection
-    void dropConn(uint16_t connId, bool notifyPeer);
-    inline void dropConn(YBTSConn* conn, bool notifyPeer) {
+    void dropConn(uint16_t connId, bool notifyPeer, uint8_t rrCause = 0);
+    inline void dropConn(YBTSConn* conn, bool notifyPeer, uint8_t rrCause = 0) {
 	    if (conn)
-		dropConn(conn->connId(),notifyPeer);
+		dropConn(conn->connId(),notifyPeer,rrCause);
 	}
     // Drop SS session
     inline void dropSS(YBTSConn* conn, YBTSTid* tid, bool toMs, bool toNetwork,
@@ -4317,7 +4317,7 @@ void YBTSSignalling::stop()
 }
 
 // Drop a connection
-void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
+void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer, uint8_t rrCause)
 {
     RefPointer<YBTSConn> conn;
     Lock lck(m_connsMutex);
@@ -4363,7 +4363,11 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer)
 	    TelEngine::destruct(ss);
 	}
 	if (notifyPeer) {
-	    YBTSMessage m(SigConnRelease,conn->hardRelease(),connId);
+	    if (conn->hardRelease())
+		rrCause |= 0x80;
+	    else
+		rrCause &= 0x7f;
+	    YBTSMessage m(SigConnRelease,rrCause,connId);
 	    send(m);
 	}
     }
