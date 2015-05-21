@@ -1092,6 +1092,11 @@ function onAuth(msg)
 	Engine.debug(Engine.DebugWarn,"Got auth with empty imsi and tmsi.");
 	return false;
     }
+    var ki = subscribers[imsi].ki;
+    if (ki=="*") {
+	Engine.debug(Engine.DebugWarn, "MT auth is set, but IMSI "+imsi+" doesn't use authentication.");
+	return true;
+    }
 
     if (msg["auth.response"]=="" && msg["error"]=="" && msg["auth.auts"]=="") {
 	return startAuth(msg,imsi,true);
@@ -1148,19 +1153,22 @@ function onRegister(msg)
 
 	msisdn = getSubscriberMsisdn(imsi);
 	if (subscribers[imsi] != "") {
-	    // start authentication procedure if it was not started
-	    if (msg["auth.response"]=="" && msg["error"]=="" && msg["auth.auts"]=="") {
-		return startAuth(msg,imsi);
-	    }
-	    else if (msg["auth.response"]!="") {
-		if (checkAuth(msg,imsi)==false)
+	    var ki = subscribers[imsi].ki;
+	    if (ki!="*") {
+		// start authentication procedure if it was not started
+		if (msg["auth.response"]=="" && msg["error"]=="" && msg["auth.auts"]=="") {
+		    return startAuth(msg,imsi);
+		}
+		else if (msg["auth.response"]!="") {
+		    if (checkAuth(msg,imsi)==false)
+			return false;
+	    	} 
+		else if (msg["auth.auts"]) {
+		    return authResync(msg,imsi);
+		}
+		else
 		    return false;
-	    } 
-	    else if (msg["auth.auts"]) {
-		return authResync(msg,imsi);
 	    }
-	    else
-		return false;
 	}
 	if (msisdn==null || msisdn=="") {
 	    // check if imsi is already registered so we don't allocate a new number

@@ -395,7 +395,7 @@ function edit_subscriber($error=null,$error_fields=array())
 		"short_number" => array("value" => get_param($subscriber,"short_number"),"comment"=>"Short number that can be used to call this subscriber."),
 		"active" => array("value"=>$active, "display"=>"checkbox"),
 		"imsi_type" => array($imsi_type, "display"=>"select", "column_name"=>"IMSI Type", "required"=>true, "comment"=> "Type of SIM associated to the IMSI", "javascript" => 'onclick="show_hide_op()"'),
-		"ki" => array("value"=>get_param($subscriber,"ki"), "comment"=>"Card secret", "required"=>true),
+		"ki" => array("value"=>get_param($subscriber,"ki"), "comment"=>"Card secret. You can use * to disable authentication for this subscriber.", "required"=>true),
 		"op" => array("value"=>$op, "triggered_by"=>"imsi_type", "comment"=>"Operator secret. Empty for 2G IMSIs.<br/>00000000000000000000000000000000 for 3G IMSIs.")
 	);
 	
@@ -433,7 +433,7 @@ function edit_subscriber_write_file()
 		return edit_subscriber("Please set 'imsi'",array("imsi"));
 	if (strlen($imsi)!=14 && strlen($imsi)!=15)
 		return edit_subscriber("Invalid IMSI $imsi. IMSI length must be 14 or 15 digits long.",array("imsi"));
-	if (!preg_match('/^[0-9a-fA-F]{32}$/i', getparam("ki")))
+	if (getparam("ki")!="*" && !preg_match('/^[0-9a-fA-F]{32}$/i', getparam("ki")))
 		return edit_subscriber("Invalid KI:".getparam("ki").". KI needs to be 128 bits, in hex format.");
 	
 
