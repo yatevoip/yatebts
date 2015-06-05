@@ -410,6 +410,27 @@ function reqResponse(request_type,sr,msi,msg,server)
 	    if (res)
 		realm = 'realm="' + res[1] + '", ';
 
+	    var alg = null;
+	    res = auth.match(/algorithm *= *?([^ "]+)?/);
+	    if (res && res[1]!="") {
+		alg = res[1];
+		alg = alg.toLowerCase();
+	    }
+
+	    if (alg!="akav1-md5") {
+		Engine.debug(Engine.DebugWarn,"Invalid algorithm in header 'www-authenticate': "+auth);
+		switch (request_type) {
+		    case "register":
+		    case "auth":
+			msg.error = register_translations["503"];
+			break;
+		    case "mosms":
+			msg.error = mosms_translations["502"];
+			break;
+		}
+		return false;
+	    }
+
 	    var res = auth.match(/nonce *= *"?([^ "]+)"?/);
 	    if (res) {
 		var nonce = res[1];
@@ -1346,7 +1367,7 @@ mosms_translations = {
 	"480":"41"	// Temporarily Unavailable => Temporary failure
 };
 
-roamingHelp = "  roaming [neighbors]\r\n";
+roamingHelp = "  roaming {neighbors|list|forget all/IMSI}\r\n";
 
 Engine.debugName("roaming");
 Message.trackName(Engine.debugName());
