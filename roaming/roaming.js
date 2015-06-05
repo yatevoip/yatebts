@@ -338,7 +338,19 @@ function onDisconnected(msg)
     if (res)
 	realm = 'realm="' + res[1] + '", ';
 
-    var res = auth.match(/nonce *= *"?([^ "]+)"?/);
+    var alg = null;
+    res = auth.match(/algorithm *= *?([^ "]+)?/);
+    if (res && res[1]!="") {
+	alg = res[1];
+	alg = alg.toLowerCase();
+    }
+
+    if (alg!="akav1-md5") {
+	res = null;
+	msg.reason = "net-out-of-order";
+    } else
+	res = auth.match(/nonce *= *"?([^ "]+)"?/);
+
     if (res) {
 	var nonce = res[1];
 	tempinfo[msi] = { "nonce":nonce,"realm":realm };
