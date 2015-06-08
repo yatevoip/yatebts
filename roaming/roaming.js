@@ -297,10 +297,13 @@ function addAuthParams(sr,msg,imsi,tmsi,autz)
  * @param msg Object represent the routing message
  * @param imsi String
  */
-function addRoutingParams(msg,imsi)
+function addRoutingParams(msg,imsi,prefix)
 {
-    msg.imsi = imsi;
-    msg.tmsi = subscribers[imsi]["tmsi"];
+    if (!prefix)
+	prefix = "";
+
+    msg[prefix+"imsi"] = imsi;
+    msg[prefix+"tmsi"] = subscribers[imsi]["tmsi"];
 }
 
 /**
@@ -622,7 +625,7 @@ function onMoSMS(msg)
 	return false;
     }
 
-    addRoutingParams(msg,imsi);
+    addRoutingParams(msg,imsi,"i");
 
     var dest = msg["sms.called"];
     if (msg["sms.called.nature"]=="international" && dest.substr(0,1)!="+")
@@ -764,7 +767,7 @@ function onRoute(msg)
 	}
 
 	current_calls[msg.id] = imsi;
-	addRoutingParams(msg,imsi);
+	addRoutingParams(msg,imsi,"i");
 	// call from inside that must be routed to VLR/MSC if we are online
 	if (msg.callednumtype=="international")
 	    msg.called = "+"+msg.called;
