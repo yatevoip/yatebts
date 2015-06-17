@@ -355,6 +355,8 @@ class ByteVector //: public Vector<ByteType>
 
 	std::string str() const;
 	std::string hexstr() const;
+	bool fromHexa(const std::string& str);
+	bool fromBcd(const std::string& str);
 };
 
 class ByteVectorTemp : public ByteVector

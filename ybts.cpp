@@ -665,8 +665,14 @@ public:
 	    Lock lck(this);
 	    m_phyInfo = info;
 	}
+    inline const String& extraRelease() const
+	{ return m_extraRelease; }
+    inline void extraRelease(const char* hexa)
+	{ m_extraRelease = hexa; }
     inline int hoReference() const
 	{ return m_reference; }
+    inline bool isCSFB() const
+	{ return m_csfb; }
     inline bool hasSS()
 	{ return m_ss != 0; }
     inline YBTSTid* takeSS() {
@@ -738,6 +744,8 @@ public:
     // Set the handover reference for this connection
     inline void setHandover(uint8_t reference)
 	{ m_reference = reference; }
+    // Set CSFB flag
+    void setCSFB(const XmlElement* xml);
     // Handle Handover Required
     void gotHoRequired(const String& info);
     // Serialize into a String
@@ -750,10 +758,12 @@ protected:
     YBTSSignalling* m_owner;
     bool m_removed;                      // Removed from owner
     bool m_hardRelease;                  // Should hard release (after handover)
+    bool m_csfb;                         // Connection caused by CSFB
     XmlElement* m_xml;
     RefPointer<YBTSUE> m_ue;
     ObjList m_sms;                       // Pending sms
     YBTSTid* m_ss;                       // Pending non call related SS transaction
+    String m_extraRelease;               // Extra octets for Channel Release
     String m_phyInfo;                    // Latest physical channel information
     String m_savedState;                 // GSM state prepared for Handover
     uint8_t m_traffic;                   // Traffic channel available (mode)
@@ -1227,7 +1237,7 @@ protected:
 class YBTSSubmit : public YBTSGlobalThread, public YBTSConnIdHolder, public YBTSConnAuth
 {
 public:
-    YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue, const char* callRef);
+    YBTSSubmit(YBTSTid::Type t, YBTSConn* conn, const char* callRef);
     ~YBTSSubmit()
 	{ notify(); }
     inline Message& msg()
@@ -3343,10 +3353,13 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 		buf.append(tmp);
 	    }
 	    return true;
+	case SigConnRelease:
+	    if (msg.xml())
+		buf.append(msg.xml()->getText());
+	    return true;
 	case SigHeartbeat:
 	case SigHandshake:
 	case SigHandoverRequest:
-	case SigConnRelease:
 	case SigStartMedia:
 	case SigStopMedia:
 	case SigAllocMedia:
@@ -3580,6 +3593,7 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     m_owner(owner),
     m_removed(false),
     m_hardRelease(false),
+    m_csfb(false),
     m_xml(0),
     m_ss(0),
     m_traffic(0),
@@ -3765,6 +3779,20 @@ bool YBTSConn::setUE(YBTSUE* ue)
 	connId(),(YBTSUE*)m_ue,m_ue->tmsi().c_str(),m_ue->imsi().c_str(),
 	ue,ue->tmsi().c_str(),ue->imsi().c_str(),this);
     return false;
+}
+
+// Set the CSFB flag from received message
+void YBTSConn::setCSFB(const XmlElement* xml)
+{
+    if (!xml)
+	return;
+    m_csfb = false;
+    const XmlElement* aup = xml->findFirstChild(YSTRING("AdditionalUpdateParameters"));
+    if (!aup)
+	return;
+    ObjList* l = aup->getText().split(',',false);
+    m_csfb = l->find(YSTRING("CSMO")) || l->find(YSTRING("CSMT"));
+    TelEngine::destruct(l);
 }
 
 
@@ -4367,7 +4395,10 @@ void YBTSSignalling::dropConn(uint16_t connId, bool notifyPeer, uint8_t rrCause)
 		rrCause |= 0x80;
 	    else
 		rrCause &= 0x7f;
-	    YBTSMessage m(SigConnRelease,rrCause,connId);
+	    XmlElement* xml = 0;
+	    if (conn->extraRelease())
+		xml = new XmlElement("Extra",conn->extraRelease());
+	    YBTSMessage m(SigConnRelease,rrCause,connId,xml);
 	    send(m);
 	}
     }
@@ -5317,6 +5348,8 @@ YBTSLocationUpd::YBTSLocationUpd(YBTSConn& conn)
     m_startTime(Time::now())
 {
     conn.addPhyInfo(m_msg);
+    if (conn.isCSFB())
+	m_msg.addParam("csfb",String::boolText(true));
 }
 
 #define YBTS_LOCUPD_CHECK_STOP { \
@@ -5421,21 +5454,22 @@ void YBTSLocationUpd::notify(bool final, bool ok)
 //
 // YBTSSubmit
 //
-YBTSSubmit::YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue,
-    const char* callRef)
+YBTSSubmit::YBTSSubmit(YBTSTid::Type t, YBTSConn* conn, const char* callRef)
     : YBTSGlobalThread("YBTSSubmit"),
-    YBTSConnIdHolder(connid),
-    YBTSConnAuth(connid,0),
+    YBTSConnIdHolder(conn->connId()),
+    YBTSConnAuth(conn->connId(),0),
     m_type(t),
     m_callRef(callRef),
     m_msg("call.route"),
     m_ok(false),
     m_cause(111),
-    m_ue(ue)
+    m_ue(conn->ue())
 {
     if (!m_ue)
 	return;
     m_msg.addParam("module",__plugin.name());
+    if (conn->isCSFB())
+	m_msg.addParam("csfb",String::boolText(true));
     switch (t) {
 	case YBTSTid::Sms:
 	    m_msg.addParam("route_type","msg");
@@ -5450,8 +5484,8 @@ YBTSSubmit::YBTSSubmit(YBTSTid::Type t, uint16_t connid, YBTSUE* ue,
 	    return;
     }
     Lock lck(m_ue);
-    ue->addCaller(m_msg);
-    ue->addParams(m_msg);
+    m_ue->addCaller(m_msg);
+    m_ue->addParams(m_msg);
 }
 
 void YBTSSubmit::run()
@@ -5740,6 +5774,7 @@ void YBTSMM::locUpdTerminated(uint64_t startTime, YBTSUE* ue, uint16_t connId,
         __plugin.signalling()->findConn(conn,connId,false);
     if (!conn)
 	return;
+    conn->extraRelease(params.getValue(YSTRING("iextra_rel")));
     if (ue != conn->ue()) {
 	__plugin.signalling()->dropConn(connId,true);
 	return;
@@ -6044,8 +6079,10 @@ bool YBTSMM::handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rs
     Debug(this,DebugAll,"PagingResponse with %s=%s conn=%u [%p]",
 	type.c_str(),ident.c_str(),m.connId(),this);
     int auth = 0;
-    if (conn)
+    if (conn) {
+	conn->setCSFB(&rsp);
 	auth = __plugin.havePagingMtService(ue,s_authMtCall,s_authMtSms,s_authMtUssd);
+    }
     if (auth) {
 	YBTSConnAuthThread* th = new YBTSConnAuthThread(conn->connId(),ue,auth);
 	if (th->startup())
@@ -6141,6 +6178,7 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement* xml, YBTSCon
 	sendLocationUpdateReject(m,0,CauseProtoError);
 	return;
     }
+    conn->setCSFB(xml);
     RefPointer<YBTSUE> ue = conn->ue();
     if (!ue) {
 	XmlElement* laiXml = 0;
@@ -6278,6 +6316,7 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	sendCMServiceRsp(m,0,CauseProtoError);
 	return;
     }
+    conn->setCSFB(&xml);
     RefPointer<YBTSUE> ue = conn->ue();
     bool isSms = false;
     if (!ue) {
@@ -6756,6 +6795,8 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
     if (!call)
 	return false;
     m_route = message("call.preroute");
+    if (m_conn->isCSFB())
+	m_route->addParam("csfb",String::boolText(true));
     // Keep the channel alive if not routing
     if (m_waitForTraffic)
 	m_route->userData(this);
@@ -7366,6 +7407,7 @@ bool YBTSChan::callRouted(Message& msg)
     Lock lck(m_mutex);
     if (!m_conn)
 	return false;
+    m_conn->extraRelease(msg.getValue(YSTRING("iextra_rel")));
     return true;
 }
 
@@ -8999,7 +9041,7 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	    Debug(this,DebugNote,
 		"SMS CP-DATA conn=%u: unable to retrieve SMSC number, %s",
 		m.connId(),res ? "empty destination address" : "invalid RP-DATA");
-	YBTSSubmit* th = new YBTSSubmit(YBTSTid::Sms,conn->connId(),conn->ue(),callRef);
+	YBTSSubmit* th = new YBTSSubmit(YBTSTid::Sms,conn,callRef);
 	if (called) {
 	    th->msg().addParam("called",called);
 	    th->msg().addParam("callednumplan",plan,false);
@@ -9434,7 +9476,7 @@ bool YBTSDriver::submitUssd(YBTSConn* conn, const String& callRef, const String&
 	    reason = "empty USSD string";
 	    break;
 	}
-	YBTSSubmit* th = new YBTSSubmit(YBTSTid::Ussd,conn->connId(),conn->ue(),callRef);
+	YBTSSubmit* th = new YBTSSubmit(YBTSTid::Ussd,conn,callRef);
 	th->msg().addParam("called",text);
 	th->msg().addParam("id",ssId);
 	th->msg().addParam("operation_type",ussdOperName(Pssr));

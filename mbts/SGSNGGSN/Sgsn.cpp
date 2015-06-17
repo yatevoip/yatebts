@@ -1237,43 +1237,13 @@ inline static bool toBoolean(const std::string& str, bool defVal = false)
 	return toBoolean(str.c_str(),defVal);
 }
 
-// Utility function to build a ByteVector from a hexadecimal string
-static bool fromHexa(ByteVector& vect, const std::string& str)
-{
-	size_t len = str.length();
-	if (len & 1)
-		return false;
-	len /= 2;
-	ByteVector buf(len);
-	for (size_t i = 0; i < len; i++) {
-		char* eptr = 0;
-		long int val = ::strtol(str.substr(2*i,2).c_str(),&eptr,16);
-		if (!eptr || *eptr)
-			return false;
-		buf.setByte(i,val);
-	}
-	vect = buf;
-	return true;
-}
-
-// Utility function to build a ByteVector from a swapped BCD string
-static bool fromBcd(ByteVector& vect, const std::string& str)
-{
-    bool odd = (str.length() & 1) != 0;
-    if (!fromHexa(vect,(odd ? (str + "f") : str)))
-	return false;
-    if (odd)
-	vect.shrinkBits(4);
-    return true;
-}
-
 // Utility function to pick IMSI and P-TMSI and attach a new GmmInfo if needed
 void setMsi(SgsnInfo* si, const char* text)
 {
 	GmmInfo *gmm = si->getGmm();
 	if (!gmm) {
 		ByteVector imsi;
-		fromBcd(imsi,getPrefixed("imsi=",text));
+		imsi.fromBcd(getPrefixed("imsi=",text));
 		if (imsi.size()) {
 			gmm = findGmmByImsi(imsi,si,si->mtAttachInfo.mAttachReqPTmsi);
 			adjustConnectionId(si);
@@ -1315,18 +1285,18 @@ void SgsnConn::authRequest(SgsnInfo* si, const char* text)
 			handleAttachRequestLocally(si,si->getGmm());
 		return;
 	}
-	fromHexa(si->mRAND,getPrefixed("rand=",text));
+	si->mRAND.fromHexa(getPrefixed("rand=",text));
 	if (!si->mRAND.size()) {
 		SGSNLOGF(ERR,GPRS_ERR,"SGSN","Missing RAND for" << si);
 		return;
 	}
-	fromHexa(si->mSRES,getPrefixed("sres=",text));
-	fromHexa(si->mKc,getPrefixed("kc=",text));
-	fromHexa(si->mCk,getPrefixed("ck=",text));
-	fromHexa(si->mIk,getPrefixed("ik=",text));
+	si->mSRES.fromHexa(getPrefixed("sres=",text));
+	si->mKc.fromHexa(getPrefixed("kc=",text));
+	si->mCk.fromHexa(getPrefixed("ck=",text));
+	si->mIk.fromHexa(getPrefixed("ik=",text));
 	GmmInfo *gmm = si->getGmm();
 	L3GmmMsgAuthentication amsg(si->mRAND,(!gmm || gmm->mImei.empty()));
-	fromHexa(amsg.mAutn,getPrefixed("autn=",text));
+	amsg.mAutn.fromHexa(getPrefixed("autn=",text));
 	si->sgsnWriteHighSideMsg(amsg);
 }
 
@@ -1395,15 +1365,15 @@ void SgsnConn::pdpActivate(SgsnInfo* si, bool reply, const char* text)
 		pdp->mWaitUpstream = false;
 		L3SmMsgActivatePdpContextAccept pdpa(pdp->mTransactionId);
 		pdpa.mLlcSapi = pdp->mLlcSapi;
-		fromHexa(pdpa.mQoS,getPrefixed("qos=",text));
+		pdpa.mQoS.fromHexa(getPrefixed("qos=",text));
 		if (pdpa.mQoS.size() < 3) {
 			SmQoS resultQoS(12);
 			resultQoS.defaultPS(pdp->mRabStatus.mRateDownlink,pdp->mRabStatus.mRateUplink);
 			pdpa.mQoS = resultQoS;
 		}
 		pdpa.mRadioPriority = toInteger(getPrefixed("priority=",text),2);
-		fromHexa(pdpa.mPco,getPrefixed("pco=",text));
-		fromHexa(pdpa.mPdpAddress,getPrefixed("pdpaddr=",text));
+		pdpa.mPco.fromHexa(getPrefixed("pco=",text));
+		pdpa.mPdpAddress.fromHexa(getPrefixed("pdpaddr=",text));
 		si->sgsnWriteHighSideMsg(pdpa);
 	}
 	else {
@@ -1439,7 +1409,7 @@ void SgsnConn::pdpDeactivate(SgsnInfo* si, const char* text)
 	si->freePdp(nsapi);
 	L3SmMsgDeactivatePdpContextRequest deact(ti,(SmCauseType)err,
 		toBoolean(getPrefixed("teardown=",text)),sense);
-	fromHexa(deact.mPco,getPrefixed("pco=",text));
+	deact.mPco.fromHexa(getPrefixed("pco=",text));
 	si->sgsnWriteHighSideMsg(deact);
 }
 

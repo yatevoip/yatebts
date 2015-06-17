@@ -370,6 +370,26 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int id, const unsigned char* data, size_t len)
 {
     switch (prim) {
+	case SigConnRelease:
+	    {
+		LogicalChannel* ch = gConnMap.unmap(id);
+		if (!ch) {
+		    SgsnInfo* sgsn = gGprsMap.unmap(id);
+		    if (sgsn)
+			SgsnConn::detach(sgsn, (const char*)data);
+		    else
+			LOG(INFO) << "received SigConnRelease for unmapped id " << id;
+		}
+		else if (info & 0x80)
+		    ch->send(HARDRELEASE);
+		else {
+		    ByteVector extra;
+		    if (!extra.fromHexa((const char*)data))
+			LOG(ERR) << "received invalid Channel Release extra bytes on id " << id;
+		    ch->send(L3ChannelRelease(info,extra));
+		}
+	    }
+	    break;
 	case SigL3Message:
 	    {
 		LogicalChannel* ch = gConnMap.find(id);

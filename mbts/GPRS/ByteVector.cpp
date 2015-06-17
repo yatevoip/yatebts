@@ -24,6 +24,9 @@
 */
 #include "ByteVector.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 // Set the char[2] array at ip to a 16-bit int value, swizzling bytes as needed for network order.
 void sethtons(ByteType *cp,unsigned value)
 {
@@ -413,6 +416,36 @@ std::ostream& operator<<(std::ostream&os, const ByteVector&vec)
 	}
 	os <<")";
 	return os;
+}
+
+// Fill a ByteVector from a hexadecimal string
+bool ByteVector::fromHexa(const std::string& str)
+{
+	size_t len = str.length();
+	if (len & 1)
+		return false;
+	len /= 2;
+	ByteVector buf(len);
+	for (size_t i = 0; i < len; i++) {
+		char* eptr = 0;
+		long int val = ::strtol(str.substr(2*i,2).c_str(),&eptr,16);
+		if (!eptr || *eptr)
+			return false;
+		buf.setByte(i,val);
+	}
+	*this = buf;
+	return true;
+}
+
+// Fill a ByteVector from a swapped BCD string
+bool ByteVector::fromBcd(const std::string& str)
+{
+    bool odd = (str.length() & 1) != 0;
+    if (!fromHexa(odd ? (str + "f") : str))
+	return false;
+    if (odd)
+	shrinkBits(4);
+    return true;
 }
 
 static ByteType bitMasks[8] = { 0x80, 0x40, 0x20, 0x10, 8, 4, 2, 1 };

@@ -670,22 +670,28 @@ class L3ChannelRelease : public L3RRMessageNRO {
 private:
 
 	L3RRCause mRRCause;
-	// 3GPP 44.018 10.5.2.14c GPRS Resumption.
-	// It is one bit to specify to the MS whether GPRS services should resume.
-	// Kinda important.
-	bool mGprsResumptionPresent;
-	bool mGprsResumptionBit;
+	ByteVector mExtraBytes;
 
 public:
-	
+
 	/** The default cause is 0x0, "normal event". */
 	L3ChannelRelease(const L3RRCause& cause = L3RRCause(0x0))
-		:L3RRMessageNRO(),mRRCause(cause),mGprsResumptionPresent(0)
+		:L3RRMessageNRO(),mRRCause(cause)
 	{}
+
+	/** 3GPP 44.018 10.5.2.14c GPRS Resumption */
+	L3ChannelRelease(const L3RRCause& cause, bool gprsResumed)
+		:L3RRMessageNRO(),mRRCause(cause),mExtraBytes(1)
+	{ mExtraBytes.setByte(0,(gprsResumed ? 0xc1 : 0xc0)); }
+
+	/** Explicit extra bytes containing arbitrary IEs */
+	L3ChannelRelease(const L3RRCause& cause, const ByteVector& wExtraBytes)
+		:L3RRMessageNRO(),mRRCause(cause)
+	{ mExtraBytes.clone(wExtraBytes); }
 
 	int MTI() const { return (int) ChannelRelease; }
 
-	size_t l2BodyLength() const { return mRRCause.lengthV(); }
+	size_t l2BodyLength() const { return mRRCause.lengthV() + mExtraBytes.size(); }
 	void writeBody( L3Frame &dest, size_t &wp ) const; 
 	void text(std::ostream&) const;
 };

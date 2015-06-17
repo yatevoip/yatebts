@@ -558,12 +558,16 @@ void L3ChannelRequest::text(ostream& os) const
 void L3ChannelRelease::writeBody( L3Frame &dest, size_t &wp ) const 
 {
 	mRRCause.writeV(dest, wp);
+	for (unsigned int i = 0; i < mExtraBytes.size(); i++)
+		dest.writeField(wp,mExtraBytes.getByte(i),8);
 }
 
 void L3ChannelRelease::text(ostream& os) const
 {
 	L3RRMessage::text(os);
 	os <<"cause="<< mRRCause;
+	if (mExtraBytes.size())
+		os << " extra=" << mExtraBytes.hexstr();
 }
 
 
