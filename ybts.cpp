@@ -9897,7 +9897,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    break;
 	}
 	// TP-Protocol-Identifier + TP-Coding-Scheme + TP-Service-Centre-Time-Stamp
-	uint8_t extra[9] = {0,ucs2 ? 8 : 0,0,0,0,0,0,0,0};
+	uint8_t extra[9] = {0,(uint8_t)(ucs2 ? 8 : 0),0,0,0,0,0,0,0};
 	// TP-Service-Centre-Time-Stamp
 	unsigned int smscTs = msg.getIntValue(YSTRING("smsc.timestamp"),Time::secNow(),0);
 	int tz = msg.getIntValue(YSTRING("smsc.tz"),0,-79,79);
