@@ -7496,6 +7496,7 @@ bool YBTSChan::msgAnswered(Message& msg)
 
 void YBTSChan::checkTimers(Message& msg, const Time& tmr)
 {
+    Channel::checkTimers(msg,tmr);
     if (!m_haveTout)
 	return;
     Lock lck(m_mutex);
