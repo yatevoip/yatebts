@@ -1077,7 +1077,7 @@ function checkAuth(msg,imsi,is_auth)
 function onAuth(msg)
 {
     if (subscribers==undefined) {
-	Engine.debug(Engine.DebugWarn, "MT auth is set, but subscribers are not defined. You can't authentify MT calls/SMSs when regexp is defined is defined in subscribers.conf.");
+	Engine.debug(Engine.DebugWarn, "MT auth is set, but subscribers are not defined. You can't authentify MT calls/SMSs when regexp is defined in subscribers.conf.");
 	return true;
     }
 
