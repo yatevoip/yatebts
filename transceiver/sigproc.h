@@ -629,6 +629,20 @@ public:
 	{ return length() * sizeof(Obj); }
 
     /**
+     * Retrieve available elements from offset
+     * @param offs Offset
+     * @param nItems Items to check (-1 for all available)
+     * @return Return available elements from given offset
+     */
+    inline unsigned int available(unsigned int offs = 0, int nItems = -1) const {
+	    if (offs < length()) {
+		unsigned int room = length() - offs;
+		return nItems >= 0 ? SigProcUtils::min(room,nItems) : room;
+	    }
+	    return 0;
+	}
+
+    /**
      * Clear the vector
      * @param del Release data
      */
@@ -746,26 +760,19 @@ public:
      */
     virtual unsigned int copySlice(unsigned int fromOffs, unsigned int toOffs,
 	unsigned int len) {
-	    if (!len || fromOffs == toOffs || fromOffs >= length() || toOffs >= length())
-		return 0;
-	    unsigned int restSrc = length() - fromOffs;
-	    if (len > restSrc)
-		len = restSrc;
-	    unsigned int restDest = length() - toOffs;
-	    if (len > restDest)
-		len = restDest;
+	    len = SigProcUtils::min(len,available(fromOffs),available(toOffs));
 	    if (!len)
 		return 0;
 	    // Source and destination don't overlap: just copy data
 	    Obj* src = data() + fromOffs;
+	    Obj* dest = data() + toOffs;
 	    if (fromOffs < toOffs) {
 		if (fromOffs + len < toOffs)
-		    return copy(src,len,toOffs);
+		    return copy(dest,len,src,len);
 	    }
 	    else if (toOffs + len < fromOffs)
-		return copy(src,len,toOffs);
+		return copy(dest,len,src,len);
 	    // Data overlap: use element copy
-	    Obj* dest = data() + toOffs;
 	    if (toOffs < fromOffs) {
 		// Moving backward: start copy from 'src' start
 		for (Obj* last = src + len; src != last; src++, dest++)
@@ -773,9 +780,9 @@ public:
 	    }
 	    else {
 		// Moving forward: start copy from 'src' end
-		Obj* last = src;
-		dest += len;
-		src += len;
+		Obj* last = src - 1;
+		dest += len - 1;
+		src += len - 1;
 		for (; src != last; src--, dest--)
 		    *dest = *src;
 	    }
@@ -789,7 +796,7 @@ public:
      * @return The number of elements reset
      */
     inline unsigned int reset(unsigned int offs = 0, int n = -1)
-	{ return reset(data(),n < 0 ? length() : (unsigned int)n,offs); }
+	{ return reset(data() + offs,available(offs,n)); }
 
     /**
      * Fill this vector
@@ -798,7 +805,7 @@ public:
      * @return The number of elements set
      */
     inline unsigned int fill(const Obj& value, unsigned int offs = 0)
-	{ return fill(data(),length(),value,offs); }
+	{ return fill(data() + offs,available(offs),value); }
 
     /**
      * Take another vector's data

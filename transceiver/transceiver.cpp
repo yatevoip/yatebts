@@ -2591,17 +2591,16 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
     // This shifts the signal so that the max power image is aligned to the expected position.
     // The alignment error is +/- 1/2 symbol period;
     // fractional alignment is corrected by correlation with channel estimate
-    if (toaError < 0) {
-	for (unsigned int i = -toaError; i < b.m_data.length(); i++)
-	    b.m_data[i] = b.m_data[i + toaError];
-	for (int i = 0; i < -toaError; i++)
-	    b.m_data[i].set(0,0);
-    }
-    else if (toaError != 0) {
-	for (unsigned int i = 0; i < b.m_data.length() - toaError; i++)
-	    b.m_data[i] = b.m_data[i + toaError];
-	for (unsigned int i = b.m_data.length() - toaError; i < b.m_data.length(); i++)
-	    b.m_data[i].set(0,0);
+    if (toaError) {
+	if (toaError < 0) {
+	    b.m_data.copySlice(0,-toaError,b.m_data.length() + toaError);
+	    b.m_data.reset(0,-toaError);
+	}
+	else {
+	    unsigned int n = b.m_data.length() - toaError;
+	    b.m_data.copySlice(toaError,0,n);
+	    b.m_data.reset(n);
+	}
     }
     b.m_timingError = toaError;
 
