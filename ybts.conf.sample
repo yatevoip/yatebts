@@ -153,15 +153,6 @@ Radio.C0=
 [transceiver]
 ; This section controls how the radio transceiver is started and operated.
 
-; Path: string: Path to the transceiver relative to where the MBTS is started.
-; Should be one of: ./transceiver-rad1 ./transceiver-usrp1 ./transceiver-uhd
-; Defaults to ./transceiver.
-;Path=./transceiver
-
-; Args: string: Extra arguments passed by MBTS to the executable transceiver.
-; Defaults to no arguments.
-;Args=
-
 ; MinimumRxRSSI: integer: Minimum signal strength (in dB) of acceptable bursts.
 ; Bursts received at the physical layer below this threshold are ignored.
 ; Do not adjust without proper calibration.

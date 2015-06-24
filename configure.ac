@@ -144,119 +144,6 @@ AC_SUBST(INSTALL_D)
 AC_SUBST(INSTALL_L)
 
 
-HAVE_USB=no
-
-
-HAVE_RAD1=no
-AC_ARG_ENABLE(rad1,AC_HELP_STRING([--enable-rad1],[Build RAD1 transceiver if available (default: yes)]),HAVE_RAD1=$enableval,HAVE_RAD1=yes)
-if [[ "x$HAVE_RAD1" != "xno" -a "x$HAVE_USB" = "xno" ]]; then
-HAVE_USB=check
-fi
-AC_SUBST(HAVE_RAD1)
-
-
-HAVE_USRP1=no
-USRP1_INC=""
-USRP1_LIB=""
-AC_ARG_ENABLE(usrp1,AC_HELP_STRING([--enable-usrp1],[Build USRP1 transceiver if available (default: yes)]),want_usrp1=$enableval,want_usrp1=yes)
-if [[ "x$want_usrp1" = "xyes" ]]; then
-AC_MSG_CHECKING([for USRP1 support using pkg-config])
-ver=`(pkgconfig_check --modversion usrp)`
-if [[ "x$ver" != "x" ]]; then
-if [[ x`pkgconfig_check --modversion 'usrp >= 3.3'` != "x" ]]; then
-USRP1_INC=`pkgconfig_check --cflags usrp`
-USRP1_LIB=`pkgconfig_check --libs usrp`
-HAVE_USRP1=yes
-AC_MSG_RESULT([$ver])
-else
-AC_MSG_RESULT([no (old $ver)])
-fi
-else
-AC_MSG_RESULT([no])
-AC_CHECK_HEADERS([usrp/usrp_standard.h], [HAVE_USRP1=yes])
-fi
-if [[ "x$HAVE_USRP1" != "xno" -a "x$HAVE_USB" = "xno" ]]; then
-HAVE_USB=check
-fi
-fi
-if [[ "x$USRP1_LIB" = "x" ]]; then
-USRP1_LIB="-lusrp"
-fi
-AC_SUBST(HAVE_USRP1)
-AC_SUBST(USRP1_INC)
-AC_SUBST(USRP1_LIB)
-
-
-HAVE_UHD=no
-UHD_INC=""
-UHD_LIB=""
-AC_ARG_ENABLE(uhd,AC_HELP_STRING([--enable-uhd],[Build UHD transceiver if available (default: yes)]),want_uhd=$enableval,want_uhd=yes)
-if [[ "x$want_uhd" = "xyes" ]]; then
-AC_MSG_CHECKING([for UHD support using pkg-config])
-ver=`(pkgconfig_check --modversion uhd)`
-if [[ "x$ver" != "x" ]]; then
-if [[ x`pkgconfig_check --modversion 'uhd >= 003.004.000'` != "x" ]]; then
-UHD_INC=`pkgconfig_check --cflags uhd`
-UHD_LIB=`pkgconfig_check --libs uhd`
-HAVE_UHD=yes
-AC_MSG_RESULT([$ver])
-else
-AC_MSG_RESULT([no (old $ver)])
-fi
-else
-AC_MSG_RESULT([no])
-AC_CHECK_HEADERS([uhd/device.h], [HAVE_UHD=yes])
-fi
-fi
-if [[ "x$UHD_LIB" = "x" ]]; then
-UHD_LIB="-luhd"
-fi
-AC_SUBST(HAVE_UHD)
-AC_SUBST(UHD_INC)
-AC_SUBST(UHD_LIB)
-
-
-HAVE_BRF=no
-BRF_INC=""
-BRF_LIB=""
-AC_ARG_ENABLE(bladerf,AC_HELP_STRING([--enable-bladerf],[Build bladeRF transceiver if available (default: yes)]),want_brf=$enableval,want_brf=yes)
-if [[ "x$want_brf" = "xyes" ]]; then
-AC_MSG_CHECKING([for bladeRF support using pkg-config])
-ver=`(pkgconfig_check --modversion libbladeRF)`
-if [[ "x$ver" != "x" ]]; then
-if [[ x`pkgconfig_check --modversion 'libbladeRF >= 0.14.0'` != "x" ]]; then
-BRF_INC=`pkgconfig_check --cflags libbladeRF`
-BRF_LIB=`pkgconfig_check --libs libbladeRF`
-HAVE_BRF=yes
-AC_MSG_RESULT([$ver])
-else
-AC_MSG_RESULT([no (old $ver)])
-fi
-else
-AC_MSG_RESULT([no])
-AC_CHECK_HEADERS([libbladeRF.h], [HAVE_BRF=yes])
-fi
-fi
-if [[ "x$BRF_LIB" = "x" ]]; then
-BRF_LIB="-lbladeRF"
-fi
-AC_SUBST(HAVE_BRF)
-AC_SUBST(BRF_INC)
-AC_SUBST(BRF_LIB)
-
-
-# Check for required libraries
-if [[ "x$HAVE_USB" = "xcheck" ]]; then
-AC_CHECK_HEADERS([libusb-1.0/libusb.h], , [AC_MSG_ERROR([This header file is required.])])
-HAVE_USB=yes
-USB_INC=""
-USB_LIB="-lusb-1.0"
-fi
-AC_SUBST(HAVE_USB)
-AC_SUBST(USB_INC)
-AC_SUBST(USB_LIB)
-
-
 # Check for sse3 operations
 HAVE_SSE3=no
 AC_ARG_ENABLE(sse3,AC_HELP_STRING([--enable-sse3],[Enable SSE3 operations (default: no)]),want_sse3=$enableval,want_sse3=no)
@@ -330,10 +217,9 @@ AC_CONFIG_FILES([yate-bts.spec
                  mbts/Peering/Makefile:mbts/Makefile.head.in:mbts/Peering/Makefile.in:mbts/Makefile.tail.in
                  mbts/SGSNGGSN/Makefile:mbts/Makefile.head.in:mbts/SGSNGGSN/Makefile.in:mbts/Makefile.tail.in
                  mbts/TRXManager/Makefile:mbts/Makefile.head.in:mbts/TRXManager/Makefile.in:mbts/Makefile.tail.in
-                 mbts/Transceiver52M/Makefile:mbts/Makefile.head.in:mbts/Transceiver52M/Makefile.in:mbts/Makefile.tail.in
-                 mbts/TransceiverRAD1/Makefile:mbts/Makefile.head.in:mbts/TransceiverRAD1/Makefile.in:mbts/Makefile.tail.in
                  mbts/sqlite3/Makefile:mbts/Makefile.head.in:mbts/sqlite3/Makefile.in:mbts/Makefile.tail.in
                  mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in
+                 transceiver/Makefile
                  roaming/Makefile
                  nib/Makefile
                  nib/auth/Makefile])

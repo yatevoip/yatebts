@@ -45,16 +45,15 @@ using namespace std;
 TransceiverManager::TransceiverManager(int numARFCNs,
 		const char* wTRXAddress, int wBasePort)
 	:mHaveClock(false),
-	mClockSocket(wBasePort+100)
+	mClockSocket(wBasePort+100),
+	mControlSocket(wBasePort+101,wTRXAddress,wBasePort + 1)
 {
 	// set up the ARFCN managers
 	for (int i=0; i<numARFCNs; i++) {
 		int thisBasePort = wBasePort + 1 + 2*i;
-		mARFCNs.push_back(new ::ARFCNManager(wTRXAddress,thisBasePort,*this));
+		mARFCNs.push_back(new ::ARFCNManager(i,wTRXAddress,thisBasePort,*this));
 	}
 }
-
-
 
 void TransceiverManager::start()
 {
@@ -64,7 +63,69 @@ void TransceiverManager::start()
 	}
 }
 
+int TransceiverManager::sendCommandPacket(const char* command, char* response)
+{
+	int msgLen = 0;
+	response[0] = '\0';
 
+	int maxRetries = gConfig.getNum("TRX.MaxRetries");
+	mControlLock.lock();
+	LOG(INFO) << "command " << command;
+
+	int n = mControlSocket.write(command);
+	if (n <= 0)
+		maxRetries = 0;
+	for (int retry=0; retry<maxRetries; retry++) {
+		msgLen = mControlSocket.read(response,1000);
+		if (msgLen>0) {
+			response[msgLen] = '\0';
+			break;
+		}
+		LOG(NOTICE) << "TRX link timeout on attempt " << retry+1;
+	}
+
+	LOG(INFO) << "response " << response;
+	mControlLock.unlock();
+
+	if ((msgLen>4) && (strncmp(response,"RSP ",4)==0)) {
+		return msgLen;
+	}
+
+	LOG(WARNING) << "lost control link to transceiver";
+	return 0;
+}
+
+bool TransceiverManager::sendCommand(const char* cmd, int* iParam, const char* sParam,
+	int* rspParam)
+{
+	if (!cmd)
+		return false;
+	// Send command and get response.
+	char cmdBuf[MAX_UDP_LENGTH];
+	char response[MAX_UDP_LENGTH];
+	if (iParam)
+		sprintf(cmdBuf,"CMD %s %d", cmd, *iParam);
+	else if (sParam)
+		sprintf(cmdBuf,"CMD %s %s", cmd, sParam);
+	else
+		sprintf(cmdBuf,"CMD %s", cmd);
+	int rspLen = sendCommandPacket(cmdBuf,response);
+	int status = -1;
+	if (rspLen > 0) {
+		char cmdNameTest[15];
+		cmdNameTest[0]='\0';
+		if (!rspParam)
+			sscanf(response,"RSP %15s %d", cmdNameTest, &status);
+		else
+			sscanf(response,"RSP %15s %d %d", cmdNameTest, &status, rspParam);
+		if (strcmp(cmdNameTest,cmd) != 0)
+			status = -1;
+	}
+	if (status == 0)
+		return true;
+	LOG(ALERT) << cmd << " failed with status " << status;
+	return false;
+}
 
 
 
@@ -137,10 +198,11 @@ unsigned TransceiverManager::C0() const
 
 
 
-::ARFCNManager::ARFCNManager(const char* wTRXAddress, int wBasePort, TransceiverManager &wTransceiver)
+::ARFCNManager::ARFCNManager(unsigned int wArfcnPos, const char* wTRXAddress, int wBasePort,
+	TransceiverManager &wTransceiver)
 	:mTransceiver(wTransceiver),
 	mDataSocket(wBasePort+100+1,wTRXAddress,wBasePort+1),
-	mControlSocket(wBasePort+100,wTRXAddress,wBasePort)
+	mArfcnPos(wArfcnPos)
 {
 	// The default demux table is full of NULL pointers.
 	for (int i=0; i<8; i++) {
@@ -260,50 +322,14 @@ void* ReceiveLoopAdapter(::ARFCNManager* manager){
 	return NULL;
 }
 
-
-
-
-
-int ::ARFCNManager::sendCommandPacket(const char* command, char* response)
-{
-	int msgLen = 0;
-	response[0] = '\0';
-
-	LOG(INFO) << "command " << command;
-	int maxRetries = gConfig.getNum("TRX.MaxRetries");
-	mControlLock.lock();
-
-	for (int retry=0; retry<maxRetries; retry++) {
-		mControlSocket.write(command);
-		msgLen = mControlSocket.read(response,1000);
-		if (msgLen>0) {
-			response[msgLen] = '\0';
-			break;
-		}
-		LOG(WARNING) << "TRX link timeout on attempt " << retry+1;
-	}
-
-	mControlLock.unlock();
-	LOG(INFO) << "response " << response;
-
-	if ((msgLen>4) && (strncmp(response,"RSP ",4)==0)) {
-		return msgLen;
-	}
-
-	LOG(NOTICE) << "lost control link to transceiver";
-	return 0;
-}
-
-
-
 // TODO : lots of duplicate code in these sendCommand()s
 int ::ARFCNManager::sendCommand(const char*command, const char*param, int *responseParam)
 {
 	// Send command and get response.
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
-	sprintf(cmdBuf,"CMD %s %s", command, param);
-	int rspLen = sendCommandPacket(cmdBuf,response);
+	sprintf(cmdBuf,"CMD %u %s %s", mArfcnPos, command, param);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -322,8 +348,8 @@ int ::ARFCNManager::sendCommand(const char*command, int param, int *responsePara
 	// Send command and get response.
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
-	sprintf(cmdBuf,"CMD %s %d", command, param);
-	int rspLen = sendCommandPacket(cmdBuf,response);
+	sprintf(cmdBuf,"CMD %u %s %d", mArfcnPos, command, param);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -343,8 +369,8 @@ int ::ARFCNManager::sendCommand(const char*command, const char* param)
 	// Send command and get response.
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
-	sprintf(cmdBuf,"CMD %s %s", command, param);
-	int rspLen = sendCommandPacket(cmdBuf,response);
+	sprintf(cmdBuf,"CMD %u %s %s", mArfcnPos, command, param);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -362,8 +388,8 @@ int ::ARFCNManager::sendCommand(const char*command)
 	// Send command and get response.
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
-	sprintf(cmdBuf,"CMD %s", command);
-	int rspLen = sendCommandPacket(cmdBuf,response);
+	sprintf(cmdBuf,"CMD %u %s", mArfcnPos, command);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -373,9 +399,6 @@ int ::ARFCNManager::sendCommand(const char*command)
 	if (strcmp(cmdNameTest,command)!=0) return -1;
 	return status;
 }
-
-
-
 
 bool ::ARFCNManager::tune(int wARFCN, bool c0)
 {
@@ -608,11 +631,6 @@ signed ::ARFCNManager::getFactoryCalibration(const char * param)
 
 void ::ARFCNManager::receiveBurst(const RxBurst& inBurst)
 {
-	if (inBurst.RSSI() < gConfig.getNum("TRX.MinimumRxRSSI")) {
-		LOG(DEBUG) << "ignoring " << inBurst;
-		return;
-	}
-
 	LOG(DEBUG) << "processing " << inBurst;
 	uint32_t FN = inBurst.time().FN() % maxModulus;
 	unsigned TN = inBurst.time().TN();

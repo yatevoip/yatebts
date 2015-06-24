@@ -1,0 +1,58 @@
+# Makefile
+# This file holds the make rules for the transceiver
+
+
+DEBUG :=
+
+CXX  := @CXX@ -Wall
+AR  := ar
+DEFS :=
+INCLUDES := -I@top_srcdir@ -I.. -I@srcdir@
+CCFLAGS:= @YATE_INC@
+CFLAGS := $(subst -fno-check-new,,$(CCFLAGS))
+LDFLAGS:= @LDFLAGS@
+YATELIBS:= @YATE_LIB@
+INCFILES := transceiver.h
+
+LOCALLIBS :=
+LIBS := libtransceiver.a
+OBJS := transceiver.o sigproc.o gsmutil.o
+PROGS :=
+
+COMPILE = $(CXX) $(DEFS) $(DEBUG) $(INCLUDES) $(CFLAGS)
+LINK = $(CXX) $(LDFLAGS)
+
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+
+# include optional local make rules
+-include YateLocal.mak
+
+.PHONY: all debug ddebug xdebug
+all: $(LIBS) $(PROGS)
+
+debug:
+	$(MAKE) all DEBUG=-g3 MODSTRIP=
+
+ddebug:
+	$(MAKE) all DEBUG='-g3 -DDEBUG' MODSTRIP=
+
+xdebug:
+	$(MAKE) all DEBUG='-g3 -DXDEBUG' MODSTRIP=
+
+.PHONY: strip
+strip: all
+	strip --strip-debug --discard-locals $(PROGS)
+
+.PHONY: clean
+clean:
+	@-$(RM) $(PROGS) $(LIBS) $(OBJS) $(EXTRACLEAN) core 2>/dev/null
+
+%.o: @srcdir@/%.cpp $(INCFILES)
+	$(COMPILE) -c $<
+
+Makefile: @srcdir@/Makefile.in ../config.status
+	cd .. && ./config.status
+
+libtransceiver.a: $(OBJS)
+	$(AR) rcs $@ $^

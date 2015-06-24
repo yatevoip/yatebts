@@ -19,7 +19,6 @@
 #include "RLCEngine.h"
 #include "FEC.h"
 #include "GSMTAPDump.h"
-#include "../TransceiverRAD1/Transceiver.h"	// For Transceiver::IGPRS
 #define FEC_DEBUG 0
 
 namespace GPRS {
@@ -85,7 +84,7 @@ bool chCompareFunc(PDCHCommon*ch1, PDCHCommon*ch2)
 }
 
 void PDCHL1FEC::mchStart() {
-	getRadio()->setSlot(TN(),Transceiver::IGPRS);
+	getRadio()->setSlot(TN(),TransceiverManager::IGPRS);
 	// Load up the GPRS filler idle burst tables in the transceiver.
 	// We could use any consecutive bsn, but lets use ones around the current time
 	// just to make sure they get through in case someone is triaging somewhere.
@@ -100,7 +99,7 @@ void PDCHL1FEC::mchStart() {
 	debug_test();
 }
 void PDCHL1FEC::mchStop() {
-	getRadio()->setSlot(TN(),Transceiver::I);
+	getRadio()->setSlot(TN(),TransceiverManager::I);
 	mchOldFec->setGPRS(false,NULL);
 }
 
@@ -346,7 +345,7 @@ void PDCHL1Downlink::sendIdleFrame(RLCBSN_t bsn)
 	//mchCS1Enc.encodeFrame41(tobits,0);
 	//transmit(bsn,mchCS1Enc.mI,qCS1,Transceiver::SET_FILLER_FRAME);
 	mchEnc.encodeCS1(tobits);
-	transmit(bsn,mchEnc.mI,qCS1,Transceiver::SET_FILLER_FRAME);
+	transmit(bsn,mchEnc.mI,qCS1,TransceiverManager::SET_FILLER_FRAME);
 }
 
 void PDCHL1Downlink::bugFixIdleFrame()

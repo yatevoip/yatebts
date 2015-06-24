@@ -116,65 +116,6 @@ Connection::MediaConnection gMediaConn(STDERR_FILENO + 5);
 Connection::ConnectionMap gConnMap;
 Connection::GprsConnMap gGprsMap;
 
-
-const char* transceiverPath = "./transceiver";
-
-pid_t gTransceiverPid = 0;
-
-void startTransceiver()
-{
-	//if local kill the process currently listening on this port
-	char killCmd[32];
-	if (gConfig.getStr("TRX.IP") == "127.0.0.1"){
-		sprintf(killCmd,"fuser -k -n udp %d",(int)gConfig.getNum("TRX.Port"));
-		if (system(killCmd)) {}
-	}
-
-	// Start the transceiver binary, if the path is defined.
-	// If the path is not defined, the transceiver must be started by some other process.
-	char TRXnumARFCN[4];
-	sprintf(TRXnumARFCN,"%1d",(int)gConfig.getNum("GSM.Radio.ARFCNs"));
-	std::string trx_path = transceiverPath;
-	try {
-		trx_path = gConfig.getStr("TRX.Path");
-		if (!trx_path.empty())
-			transceiverPath = trx_path.c_str();
-	}
-	catch (ConfigurationTableKeyNotFound e) { }
-	std::string extra_args = gConfig.getStr("TRX.Args");
-	LOG(NOTICE) << "starting transceiver " << transceiverPath << " w/ " << TRXnumARFCN << " ARFCNs and Args:" << extra_args;
-	gTransceiverPid = vfork();
-	LOG_ASSERT(gTransceiverPid>=0);
-	if (gTransceiverPid==0) {
-		// Pid==0 means this is the process that starts the transceiver.
-	    execlp(transceiverPath,transceiverPath,TRXnumARFCN,extra_args.c_str(),(void*)NULL);
-		LOG(EMERG) << "cannot find " << transceiverPath;
-		_exit(1);
-	} else {
-		static int foo = 0;
-		int status;
-		waitpid(gTransceiverPid, &status,0);
-		if (!gTransceiverPid)
-			pthread_exit(&foo);
-		LOG(EMERG) << "Transceiver quit with status " << status << ". Exiting.";
-		// (paul) Added this for debugging without the radio
-		if (gConfig.getBool("TRX.IgnoreDeath"))
-			pthread_exit(&foo);
-		exit(2);
-	}
-}
-
-static void killTransceiver()
-{
-	pid_t tmp = gTransceiverPid;
-	gTransceiverPid = 0;
-	if (!tmp)
-		return;
-	gLogConn.write(LOG_DEBUG,"Killing transceiver");
-	kill(tmp,SIGKILL);
-}
-
-
 void createStats()
 {
 	// count of OpenBTS start events
@@ -304,23 +245,12 @@ int main(int argc, char *argv[])
 	else
 		COUT("\nStarting the system...");
 
-	// is the radio running?
-	// Start the transceiver interface.
-	LOG(INFO) << "checking transceiver";
-	//gTRX.ARFCN(0)->powerOn();
-	//sleep(gConfig.getNum("TRX.Timeout.Start"));
-	//bool haveTRX = gTRX.ARFCN(0)->powerOn(false); // (pat) Dont power on the radio before initing it, particularly SETTSC below; radio can crash.
-	bool haveTRX = gTRX.ARFCN(0)->powerOff();
-
-	Thread transceiverThread;
-	if (!haveTRX) {
-		transceiverThread.start((void*(*)(void*)) startTransceiver, NULL, "bts:transceiver");
-		// sleep to let the FPGA code load
-		// TODO: we should be "pinging" the radio instead of sleeping
-		sleep(5);
-	} else {
-		LOG(NOTICE) << "transceiver already running";
+	// Reset the transceiver
+	if (!gTRX.reset()) {
+		LOG(ALERT) << "Failed to reset transceiver";
+		return 1;
 	}
+	gTRX.statistics(false);
 
 	// Start the peer interface
 //	gPeerInterface.start();
@@ -335,19 +265,9 @@ int main(int argc, char *argv[])
 			gConfig.mSchema["GSM.Radio.Band"].updateDefaultValue(val);
 		}
 
-		val = gTRX.ARFCN(0)->getFactoryCalibration("freq");
-		if (gConfig.isValidValue("TRX.RadioFrequencyOffset", val)) {
-			gConfig.mSchema["TRX.RadioFrequencyOffset"].updateDefaultValue(val);
-		}
-
 		val = gTRX.ARFCN(0)->getFactoryCalibration("rxgain");
 		if (gConfig.isValidValue("GSM.Radio.RxGain", val)) {
 			gConfig.mSchema["GSM.Radio.RxGain"].updateDefaultValue(val);
-		}
-
-		val = gTRX.ARFCN(0)->getFactoryCalibration("txgain");
-		if (gConfig.isValidValue("TRX.TxAttenOffset", val)) {
-			gConfig.mSchema["TRX.TxAttenOffset"].updateDefaultValue(val);
 		}
 	}
 
@@ -537,12 +457,14 @@ int main(int argc, char *argv[])
 
 
 	// OK, now it is safe to start the BTS.
+	gTRX.statistics(true);
 	gBTS.start();
 
 	if (gCmdConn.valid()) {
 		gMediaConn.start("bts:media");
 		gLogConn.write("MBTS ready");
 		gSigConn.send(Connection::SigRadioReady);
+		bool doStop = true;
 		while (gLogConn.valid() && gSigConn.valid() && gMediaConn.valid()) {
 			char* line = gCmdConn.read();
 			if (!line)
@@ -550,14 +472,19 @@ int main(int argc, char *argv[])
 			std::ostringstream sout;
 			int res = gParser.process(line,sout);
 			free(line);
+			if (res < 0) {
+				gTRX.stop();
+				doStop = false;
+			}
 			if (sout.str().empty())
-			    gCmdConn.write("\r\n");
+				gCmdConn.write("\r\n");
 			else if (!gCmdConn.write(sout.str().c_str()))
 				gCmdConn.write("Oops! Error returning command result!");
 			if (res < 0)
 				break;
 		}
-		killTransceiver();
+		if (doStop)
+			gTRX.stop();
 		gLogConn.write("MBTS exiting");
 		return 0;
 	}
@@ -570,8 +497,8 @@ int main(int argc, char *argv[])
 		gReports.incr("OpenBTS.Exit.Error.ConfigurationParamterNotFound");
 	}
 
-	killTransceiver();
-
+	gTRX.stop();
+	return 1;
 }
 
 

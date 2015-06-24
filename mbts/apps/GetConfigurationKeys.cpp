@@ -1801,20 +1801,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("TRX.MinimumRxRSSI","-63",
-		"dB",
-		ConfigurationKey::FACTORY,
-		ConfigurationKey::VALRANGE,
-		"-90:90",// educated guess
-		false,
-		"Bursts received at the physical layer below this threshold are automatically ignored.  "
-			"Values in dB.  "
-			"Set at the factory.  "
-			"Do not adjust without proper calibration."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("TRX.Port","5700",
 		"",
 		ConfigurationKey::FACTORY,
@@ -1851,18 +1837,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	// unused?
-	tmp = new ConfigurationKey("TRX.Timeout.Start","2",
-		"seconds",
-		ConfigurationKey::DEVELOPER,
-		ConfigurationKey::VALRANGE,
-		"1:3",// educated guess
-		false,
-		"How long to wait during system startup before checking to see if the transceiver can be reached."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("TRX.TxAttenOffset","0",
 		"dB of attenuation",
 		ConfigurationKey::FACTORY,
@@ -1872,29 +1846,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Hardware-specific gain adjustment for transmitter, matched to the power amplifier, expessed as an attenuationi in dB.  "
 			"Set at the factory.  "
 			"Do not adjust without proper calibration."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("TRX.Path","",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"",
-		false,
-		"Path used to execute the Transceiver"
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	//kurtis
-	tmp = new ConfigurationKey("TRX.Args","",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::STRING,
-		"",
-		false,
-		"Extra arguments for the Transceiver"
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

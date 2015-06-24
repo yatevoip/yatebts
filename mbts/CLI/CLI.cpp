@@ -280,13 +280,34 @@ int cellID(int argc, char** argv, ostream& os)
 	return SUCCESS;
 }
 
+static string s_useReloadTrx[] = {"TRX.MinimumRxRSSI","TRX.RadioFrequencyOffset","TRX.TxAttenOffset",""};
+static string s_removed[] = {"TRX.Args","TRX.Timeout.Start","TRX.Path",""};
 
-
-
+static bool lookup(string* table, const char* value)
+{
+    if (!(table && value))
+	return false;
+    for (; table->length(); ++table)
+	if (::strcmp(table->c_str(),value) == 0)
+	    return true;
+    return false;
+}
 
 /** Print or modify the global configuration table. */
 int rawconfig(int argc, char** argv, ostream& os)
 {
+	if (argc > 1) {
+		const char* dontHandle = 0;
+		if (lookup(s_useReloadTrx,argv[1]))
+			dontHandle = "Change config and reload the transceiver";
+		else if (lookup(s_removed,argv[1]))
+			dontHandle = "It was removed";
+		if (dontHandle) {
+			os << argv[1] << " can't be used with rawconfig. " << dontHandle << endl;
+			return SUCCESS;
+		}
+	}
+
 	// no args, just print
 	if (argc==1) {
 		gConfig.find("",os);
