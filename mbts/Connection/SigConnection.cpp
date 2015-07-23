@@ -44,6 +44,24 @@ using namespace SGSN;
 #define HB_MAXTIME 30000
 #define HB_TIMEOUT 60000
 
+// Utility function to extract prefixed string
+static std::string getPrefixed(const char* tag, const char* buf)
+{
+    std::string str;
+    if (tag && buf) {
+	const char* start = ::strstr(buf,tag);
+	if (start) {
+	    start += ::strlen(tag);
+	    const char* end = ::strchr(start,' ');
+	    if (end)
+		str.assign(start,end - start);
+	    else
+		str.assign(start);
+	}
+    }
+    return str;
+}
+
 static void processPaging(L3MobileIdentity& ident, uint8_t type)
 {
     switch (type) {
@@ -59,20 +77,26 @@ static void processPaging(L3MobileIdentity& ident, uint8_t type)
     }
 }
 
-static void processPaging(const char* ident, uint8_t type)
+static void processPaging(const char* data, uint8_t type)
 {
-    if (!::strncmp(ident,"TMSI",4)) {
+    std::string ident = getPrefixed("identity=",data);
+    if (ident.empty()) {
+	LOG(ERR) << "can't extract identity from paging data: " << data;
+	return;
+    }
+    if (!ident.compare(0,4,"TMSI")) {
 	char* err = 0;
-	unsigned int tmsi = (unsigned int)::strtol(ident + 4,&err,16);
+	unsigned int tmsi = (unsigned int)::strtol(ident.c_str() + 4,&err,16);
 	if (err && !*err) {
-	    L3MobileIdentity id(tmsi);
+	    std::string imsi = getPrefixed("imsi=",data);
+	    L3MobileIdentity id(tmsi,imsi.c_str());
 	    processPaging(id,type);
 	}
 	else
-	    LOG(ERR) << "received invalid Paging TMSI " << (ident + 4);
+	    LOG(ERR) << "received invalid Paging TMSI " << (ident.c_str() + 4);
     }
-    else if (!::strncmp(ident,"IMSI",4)) {
-	L3MobileIdentity id(ident + 4);
+    else if (!ident.compare(0,4,"IMSI")) {
+	L3MobileIdentity id(ident.c_str() + 4);
 	processPaging(id,type);
     }
     else

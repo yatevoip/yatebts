@@ -765,8 +765,8 @@ function mtLocalDelivery(sms)
     }
     m.text= sms.msg;
     m.callto = registered_subscribers[sms.dest_imsi]["location"];
-    m.imsi = sms.dest_imsi;
-    m.tmsi = registered_subscribers[sms.dest_imsi]["tmsi"];
+    m.oimsi = sms.dest_imsi;
+    m.otmsi = registered_subscribers[sms.dest_imsi]["tmsi"];
     m.maxpdd = "5000";
     if (m.dispatch())
 	return true;

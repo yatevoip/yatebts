@@ -550,6 +550,12 @@ class MSInfo : public SGSN::MSUEAdapter, public SignalQuality, public MSStat
 	Statistic<double> msDownlinkQDelay;
 	Timeval msDownlinkQOldest;			// The timeval from the last guy in the queue.
 
+
+	// Queue for control messages generated from other threads (messages like paging)
+	InterthreadQueue2<RLCDownlinkMessage> msDownlinkCtrlQueue;
+	bool processCtrlQueue(TBF* tbf, PDCHL1Downlink* down);
+	void page(const ByteVector& imsi, uint32_t tmsi, GSM::ChannelType chanType, bool pageForRR = true);
+
 	// Can this TBF use the specified uplink?
 	bool canUseUplink(PDCHL1Uplink*up) {
 		return msPCHUps.find(up);

@@ -116,26 +116,38 @@ class L3MobileIdentity : public L3ProtocolElement {
 	/** Empty ID */
 	L3MobileIdentity()
 		:L3ProtocolElement(),
-		mType(NoIDType)
+		mType(NoIDType),
+		mTMSI(0xffffffffu)
 	{ mDigits[0]='\0'; } 
 
 	/** TMSI initializer. */
-	L3MobileIdentity(unsigned int wTMSI)
+	L3MobileIdentity(unsigned int wTMSI, const char* wDigits = 0)
 		:L3ProtocolElement(),
 		mType(TMSIType), mTMSI(wTMSI)
-	{ mDigits[0]='\0'; } 
+	{
+	    if (!wDigits)
+		mDigits[0]='\0'; 
+	    else {
+		assert(strlen(wDigits)<=15);
+		strcpy(mDigits,wDigits);
+	    }
+	}
 
 	/** IMSI initializer. */
 	L3MobileIdentity(const char* wDigits)
 		:L3ProtocolElement(),
-		mType(IMSIType)
+		mType(IMSIType), mTMSI(0xffffffffu)
 	{ assert(strlen(wDigits)<=15); strcpy(mDigits,wDigits); }
 
 	/**@name Accessors. */
 	//@{
 	MobileIDType type() const { return mType; }
-	const char* digits() const { assert(mType!=TMSIType); return mDigits; }
-	unsigned int TMSI() const { assert(mType==TMSIType); return mTMSI; }
+	const char* digits() const 
+	{
+		if (mDigits[0] == '\0') return 0;
+		return mDigits; 
+	}
+	unsigned int TMSI() const { return mTMSI; }
 	//@}
 
 	/** Comparison. */

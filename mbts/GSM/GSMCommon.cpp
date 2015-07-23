@@ -203,9 +203,6 @@ int GSM::FNCompare(int32_t v1, int32_t v2)
 	return 0;
 }
 
-
-
-
 ostream& GSM::operator<<(ostream& os, const Time& t)
 {
 	os << t.TN() << ":" << t.FN();

@@ -548,6 +548,10 @@ void GmmMobileIdentityIE::decodeIM(ByteVector &result) const
 			result.appendField((mIdData[i]>>4)&0xf,4);
 		}
 	}
+	if (isodd) {
+		result.appendField(0xf,4); // make sure the last nibble is always the same
+		result.shrinkBits(4); // but don't count it as valid data
+	}
 }
 
 // 24.008 10.5.1.4 Mobile Identity

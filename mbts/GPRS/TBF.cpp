@@ -669,6 +669,17 @@ bool MSInfo::msCanUseUplinkTn(unsigned tn)
 	return false;
 }
 
+void MSInfo::page(const ByteVector& imsi, uint32_t tmsi, GSM::ChannelType chanType, bool pageForRR)
+{
+	GLOG(INFO) << "Paging Request for IMSI=" << imsi << " with TMSI=" << LOGVALHEX(tmsi) << " chan=" << chanType << " " << this;
+	RLCMsgPacketPagingRequest* msg = new RLCMsgPacketPagingRequest();
+	if (tmsi == 0xffffffffu)
+		msg->addPagingInfoIMSI(imsi,pageForRR,chanType);
+	else
+		msg->addPagingInfoTMSI(tmsi,pageForRR,chanType);
+	msDownlinkCtrlQueue.write(msg);
+}
+
 bool TBF::mtAllocateUSF()
 {
 	// TODO WAY LATER: Is there a deadlock condition possible if multiple multislot MS
@@ -854,6 +865,29 @@ static RLCDownEngine *createDownlinkTbf(MSInfo *ms, DownlinkQPdu *dlmsg, bool is
 	engine->engineWriteHighSide(dlmsg);
 	engine->mtSetState(TBFState::DataReadyToConnect);
 	return engine;
+}
+
+// handle control messages sent from other threads
+bool MSInfo::processCtrlQueue(TBF* tbf, PDCHL1Downlink* down)
+{
+	if (!(down && down->parent() == msPacch)) // don't send if channel is not PACCH
+		return false;
+	RLCDownlinkMessage* msg = msDownlinkCtrlQueue.readNoBlock();
+	if (!msg)
+		return false;
+	switch (msg->mMessageType) {
+		case RLCDownlinkMessage::PacketPagingRequest:
+			if (msPacch &&  (RROperatingMode::PacketTransfer == getRROperatingMode())) {
+				GLOG(INFO) << msg <<  " for MS  " << this;
+				return msPacch->downlink()->send1MsgFrame(0,msg,0,MsgTransNone,0);
+			}
+			break;
+		default:
+			GPRSLOG(WARNING,GPRS_ERR) << "Unhandled RLC control message " << RLCDownlinkMessage::name(msg->mMessageType);
+			delete msg;
+			break;
+	}
+	return false;
 }
 
 // Service this MS, called from the service loop every RLCBSN time.
@@ -1247,6 +1281,8 @@ bool TBF::mtSendTbfRelease(PDCHL1Downlink *down)
 bool TBF::mtServiceDownlink(PDCHL1Downlink *down)
 {
 	// Only send messages on PACCH.
+	if (mtMS->processCtrlQueue(this,down))
+		return true;
 	while (1) {
 		mac_debug();
 		switch (mtState) {

@@ -126,6 +126,7 @@ class MSUEAdapter {
 	virtual std::string msid() const = 0;	// A human readable name for the MS or UE.
 	virtual void msChangeTlli(uint32_t newTlli) = 0;	// Make TLLI primary.
 	virtual void msAliasTlli(uint32_t newTlli) = 0;	// Add an alias for the TLLI.
+	virtual void page(const ByteVector& imsi, uint32_t tmsi, GSM::ChannelType chanType, bool pageForRR = true) = 0; // Page the MS
 
 #if RN_UMTS
 	// This is the old interface to GPRS/UMTS; see saWriteHighSide()
@@ -199,6 +200,7 @@ class Sgsn {
 
 	static bool handleGprsSuspensionRequest(uint32_t wTlli, const ByteVector &wRaId);
 	static void notifyGsmActivity(const char *imsi);
+	static void sendPaging(const char* imsi, uint32_t tmsi, GSM::ChannelType chanType);
 //#if RN_UMTS
 	// FIXME: make this work like gprs
 	//static void sgsnWriteLowSide(ByteVector &payload,SgsnInfo *si, unsigned rbid);	// UMTS only

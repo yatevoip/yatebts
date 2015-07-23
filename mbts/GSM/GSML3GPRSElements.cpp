@@ -59,7 +59,10 @@ void L3GPRSCellOptions::writeBits(L3Frame& dest, size_t &wp) const
 		dest.writeField(wp,0,1);	// No EGPRS.
 		dest.writeField(wp,0,1);	// No PFC_FEATURE_MODE
 		dest.writeField(wp,0,1);	// No DTM_SUPPORT
-		dest.writeField(wp,0,1);	// No BSS_PAGING_COORDINATION
+		uint8_t bss_coord = (gco.mNMO > 0 ? 1 : 0);
+		dest.writeField(wp,bss_coord,1);	// BSS_PAGING_COORDINATION
+		if ((gco.mNW_EXT_UTBF || bss_coord) && (rel < 4))
+			rel = 4;
 		// Rel-4 extensions:
 		// I tried setting CCN to 1 to get the MS to indicate GERAN feature pack I support.
 		// CCN is network assisted cell change and is also part of GERAN feature pack I.

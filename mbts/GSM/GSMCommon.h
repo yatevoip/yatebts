@@ -249,6 +249,21 @@ enum ChannelType {
 	//@}
 };
 
+/**
+Function to map the GSM::ChannelType enum
+to one of the codes from GMS 04.08 10.5.2.8.
+*/
+static inline unsigned int channelNeededCode(ChannelType wType)
+{
+	switch (wType) {
+		case AnyDCCHType: return 0;
+		case SDCCHType: return 1;
+		case TCHFType: return 2;
+		case AnyTCHType: return 3;
+		default: assert(0);
+	}
+}
+
 
 /** Print channel type name to a stream. */
 std::ostream& operator<<(std::ostream& os, ChannelType val);

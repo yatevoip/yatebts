@@ -3331,6 +3331,16 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    break;
 	case SigStartPaging:
 	case SigStopPaging:
+	    if (!msg.xml()){
+		reason = "Missing XML";
+		break;
+	    }
+	    else {
+		String tmp;
+		encodeTagged(tmp,msg.xml());
+		buf.append(tmp);
+	    }
+	    return true;
 	case SigNeighborsList:
 	    if (!msg.xml()) {
 		reason = "Missing XML";
@@ -5240,8 +5250,11 @@ bool YBTSUE::startPaging(BtsPagingChanType type)
     if (!sig)
 	return false;
     String tmp;
-    if (tmsi())
+    bool addImsi = false;
+    if (tmsi()) {
 	tmp << "TMSI" << tmsi();
+	addImsi = !!imsi();
+    }
     else if (imsi())
 	tmp << "IMSI" << imsi();
     else if (imei())
@@ -5249,7 +5262,11 @@ bool YBTSUE::startPaging(BtsPagingChanType type)
     else
 	return false;
     lck.drop();
-    YBTSMessage m(SigStartPaging,(uint8_t)type,0,new XmlElement("identity",tmp));
+    XmlElement* xml = new XmlElement("StartPaging");
+    xml->addChildSafe(new XmlElement("identity",tmp));
+    if (addImsi)
+	xml->addChildSafe(new XmlElement("imsi",imsi()));
+    YBTSMessage m(SigStartPaging,(uint8_t)type,0,xml);
     if (sig->send(m)) {
 	Debug(&__plugin,DebugAll,"Started paging %s",tmp.c_str());
 	lck.acquire(this);
@@ -5281,7 +5298,9 @@ void YBTSUE::stopPagingNow()
     unlock();
     if (!tmp)
 	return;
-    YBTSMessage m(SigStopPaging,0,0,new XmlElement("identity",tmp));
+    XmlElement* xml = new XmlElement("StopPaging");
+    xml->addChildSafe(new XmlElement("identity",tmp));
+    YBTSMessage m(SigStopPaging,0,0,xml);
     if (sig->send(m)) {
 	Debug(&__plugin,DebugAll,"Stopped paging %s",tmp.c_str());
 	lock();

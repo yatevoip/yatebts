@@ -161,10 +161,10 @@ function buildRegister(imsi,tmsi,exp,imei,warning,msg,unresponsive_server)
 
     var sr = new Message("xsip.generate");
     sr.method = "REGISTER";
-    if (imsi)
-	sr.user = "IMSI" + imsi;
-    else if (tmsi)
+    if (tmsi)
 	sr.user = "TMSI" + tmsi;
+    else if (imsi)
+	sr.user = "IMSI" + imsi;
     else {
 	Engine.debug(Engine.DebugWarn, "Exit buildRegister() because it was called without imsi or tmsi.");
 	return false;
@@ -574,7 +574,9 @@ function routeSMS(msg)
 		return false;
 	}
 	imsi = getIMSI(null, msg.called);
-	if (imsi=="" || subscribers[imsi]==undefined) {
+	if (imsi == "")
+	    imsi = getIMSIFromSIPParam(msg["sip_p-called-party-id"]);
+	if (imsi=="") {
 	    msg.error = "offline";
 	    return false;
 	}
@@ -586,7 +588,7 @@ function routeSMS(msg)
 	}
 
 	msg["sms.caller"] = caller;
-	addRoutingParams(msg,imsi);
+	addRoutingParams(msg,imsi,"o");
 	msg.retValue("ybts/IMSI"+imsi);
     }
 
@@ -785,7 +787,9 @@ function onRoute(msg)
 
 	// check that called is registered in this bts
 	imsi = getIMSIFromCalled(msg.called);
-	if (imsi=="" || subscribers[imsi]==undefined) {
+	if (imsi == "")
+	    imsi = getIMSIFromSIPParam(msg["sip_p-called-party-id"]);
+	if (imsi=="") {
 	    msg.error = "offline";
 	    return false;
 	}
@@ -801,7 +805,7 @@ function onRoute(msg)
 	    msg.callernumtype = "international";
 	}
 
-	addRoutingParams(msg,imsi);
+	addRoutingParams(msg,imsi,"o");
 	msg.retValue("ybts/IMSI"+imsi);
     }
 
@@ -863,6 +867,20 @@ function getIMSIFromCalled(called)
 	return getIMSI(tmsi);
     }
     return getIMSI(null,called);
+}
+
+/**
+ * Get IMSI from a SIP parameter
+ * Expected format for IMSI in parameter is imsi="value"
+ * @param param String which is searched for IMSI
+ * @return IMSI or "" if not found
+ */
+function getIMSIFromSIPParam(param)
+{
+    var res = param.match(/imsi *=" *"?([^ ;]+)"?"/);
+    if (res)
+	return res[1];
+    return "";
 }
 
 /**

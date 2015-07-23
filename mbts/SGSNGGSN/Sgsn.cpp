@@ -1179,6 +1179,24 @@ void Sgsn::notifyGsmActivity(const char *imsi)
 {
 }
 
+// WARNING: This runs in a different thread
+void Sgsn::sendPaging(const char* imsi, uint32_t tmsi, GSM::ChannelType chanType)
+{
+	if (!imsi)
+		return;
+	ByteVector imsiBv;
+	if (!imsiBv.fromBcd(imsi)) {
+		GPRSLOG(NOTICE,GPRS_MSG) << "Failed to unhexify received IMSI=" << imsi;
+		return;
+	}
+	GmmInfo* gmm = findGmmByImsi(imsiBv,0);
+	if (!(gmm && gmm->getGmmState() == GmmState::GmmRegisteredNormal))
+ 		return;
+	MSUEAdapter* ms = SgsnAdapter::findMs(gmm->getTlli());
+	if (!ms)
+		return;
+	ms->page(imsiBv,tmsi,chanType);
+}
 
 // Utility function to reject a PDP context activation
 static void sendPdpContextReject(SgsnInfo *si,SmCause::Cause cause,unsigned ti)

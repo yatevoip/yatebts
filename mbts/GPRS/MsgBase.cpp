@@ -66,6 +66,14 @@ void MsgCommonWrite::writeBitMap(bool*bitmap,unsigned bitmaplen, const char*name
 	}
 }
 
+void MsgCommonWrite::writeBuffer(const unsigned char* buffer, unsigned int len, const char* name)
+{
+	if (!(buffer && len))
+		return;
+	for (unsigned int i = 0; i < len; i++)
+		writeField(buffer[i],(sizeof(unsigned char) << 3),name);
+}
+
 #if 0
 static void truncateredundant(char *str, int len)
 {
@@ -97,6 +105,19 @@ void MsgCommonText::writeBitMap(bool*bitmap,unsigned bitmaplen, const char*name)
 	*tp = 0;
 	//truncateredundant(txtbits,bitmaplen);
 	mos << " " << name << "=(" << txtbits << ")";
+}
+
+void MsgCommonText::writeBuffer(const unsigned char* buffer, unsigned int len, const char* name)
+{
+	if (!(buffer && len))
+		return;
+	mos << " " << name << "=(";
+	char txt[5] = {0};
+	for (unsigned int i = 0; i < len; i++) {
+		sprintf(txt," %02x",buffer[i]);
+		mos << txt;
+	}
+	mos << ")";
 }
 
 // This could fail multi-threaded, but it is only used for debug output.

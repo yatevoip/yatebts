@@ -38,6 +38,7 @@
 #include <GSMLogicalChannel.h>
 #include <GSMConfig.h>
 #include "../GPRS/GPRSExport.h"
+#include "../SGSNGGSN/SgsnExport.h"
 
 #include <NeighborTable.h>
 //#include <Peering.h>
@@ -542,6 +543,7 @@ unsigned Pager::pageAll()
 			LOG(DEBUG) << "paging " << id1;
 			gBTS.getPCH(0)->send(L3PagingRequestType1(id1,type1));
 			gBTS.getPCH(0)->send(L3PagingRequestType1(id1,type1));
+			SGSN::Sgsn::sendPaging(id1.digits(),id1.TMSI(),type1);
 			break;
 		}
 		// Page by pairs when possible.
@@ -551,6 +553,8 @@ unsigned Pager::pageAll()
 		LOG(DEBUG) << "paging " << id1 << " and " << id2;
 		gBTS.getPCH(0)->send(L3PagingRequestType1(id1,type1,id2,type2));
 		gBTS.getPCH(0)->send(L3PagingRequestType1(id1,type1,id2,type2));
+		SGSN::Sgsn::sendPaging(id1.digits(),id1.TMSI(),type1);
+		SGSN::Sgsn::sendPaging(id2.digits(),id2.TMSI(),type2);
 	}
 
 	return mPageIDs.size();

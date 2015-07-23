@@ -1277,6 +1277,181 @@ class RLCMsgPacketDownlinkAssignment : public RLCDownlinkMessage
 	}
 #endif
 
+
+
+class RLCPageInfo {
+public:
+	Bool_i<1> mPageForRR;
+	Bool_z mImsiPresent;
+	Field<32> mTmsIOrPTmsi;
+	ByteVector mImsi;
+	Field<2> mChanNeeded;
+	Bool_z mEmlppPriorityPresent;
+	Field_z<3> mEmlppPriority;
+	
+	RLCPageInfo()
+		{ }
+
+	void set(uint32_t tmsiOrPtmsi, bool pageForRR, GSM::ChannelType chanNeeded = GSM::AnyDCCHType)
+	{
+		mPageForRR = pageForRR;
+		mImsiPresent = false;
+		mTmsIOrPTmsi = tmsiOrPtmsi;
+		mChanNeeded = GSM::channelNeededCode(chanNeeded);
+	}
+
+	void set(const ByteVector& imsi, bool pageForRR, GSM::ChannelType chanNeeded = GSM::AnyDCCHType)
+	{
+		mPageForRR = pageForRR;
+		mImsiPresent = true;
+		mImsi = imsi;
+		mChanNeeded = GSM::channelNeededCode(chanNeeded);
+	}
+
+	void writeBody(MsgCommon &dst) const;
+	static void writeMobileId(ByteVector& dest, GSM::MobileIDType type, const ByteVector& id);
+};
+
+#if RLCMESSAGES_IMPLEMENTATION
+
+	void RLCPageInfo::writeMobileId(ByteVector& dest, GSM::MobileIDType type, const ByteVector& id)
+	{
+		// See GSM 04.08 10.5.1.4.
+		switch (type) {
+			case GSM::NoIDType:
+				dest.appendField(0x0f0,8);
+				break;
+			case GSM::TMSIType:
+		      {
+			      dest.appendField(0x0f4,8);
+			      dest.append(id);
+			      break;
+		      }
+			case GSM::IMSIType:
+		      {
+				size_t len = id.size();
+				unsigned int isOdd = ((id.getByte(len-1) & 0x0f) == 0x0f) ? 1 : 0;
+
+				dest.appendField(((id.getByte(0) & 0xf0) >> 4),4); // first digit
+				dest.appendField(isOdd,1); // encode odd/even number of digits indication
+				dest.appendField(type,3);
+				
+				for (unsigned int i = 1; i < len; i++) {
+					dest.appendField(((id.getByte(i) & 0xf0) >> 4),4);
+					dest.appendField((id.getByte(i-1) & 0x0f),4);
+				}
+				if (!isOdd) // must add octet containing last digit and filler 0xf{digit}
+					dest.appendField((0xf0u | id.getByte(len-1)),8);
+				break;
+		      }
+		      default:
+			      break;
+		}
+	}
+
+	void RLCPageInfo::writeBody(MsgCommon &dst) const
+	{
+		dst.WRITE_FIELD(mPageForRR,1);
+		if (dst.write01(mImsiPresent)) {
+			// write imsi
+			ByteVector imsiEnc(8); // IMSI has 8 bytes encoded.
+			// set write position to the start. By default, the constructor 
+			// sets the write position to the end of the allocated memory,
+			// giving an exception when trying to append anything
+			imsiEnc.setAppendP(0,0);
+			writeMobileId(imsiEnc,GSM::IMSIType,mImsi);
+			dst.writeField(imsiEnc.size(),4);
+			dst.writeBuffer(imsiEnc.begin(),imsiEnc.size(),"IMSI_IE_VAL");
+		}
+		else
+			dst.writeField(mTmsIOrPTmsi,32,(mPageForRR ? "TMSI" : "P-TMSI"),tohex);
+		if (mPageForRR) {
+			dst.writeField(mChanNeeded,2,"ChanNeeded");
+			if (dst.write01(mEmlppPriority))
+				dst.writeField(mEmlppPriority,3,"EMLPPPriority");
+		}
+	}
+#endif
+
+
+/** 3GPP TS 44.060 v12.3.0 section 11.2.10 */
+// Page a MS
+class RLCMsgPacketPagingRequest : public RLCDownlinkMessage
+{
+	public:
+
+	enum PageMode {
+		NormalPaging   = 0,
+		ExtendedPaging = 1,
+		PagingReorg    = 2,
+		SameAsBefore   = 3,
+	};
+
+	Bool_z mPersistenceLevelPresent;
+	//Field_z<4> mPersistenceLevel[4];		// This is for PRACH control, so we wont use it.
+
+	Bool_z m_NLN_PPCHPresent;
+	//Field_z<2> m_NLN_PPCH; // we dont use it
+
+	RLCPageInfo mPagingInfos[4]; // max 4 when paging by TMSI/PTMSI, max 2 when paging by IMSI
+	uint8_t mAvailable;
+	uint8_t mMaxIds;
+
+	// no Iu Paging
+
+	RLCMsgPacketPagingRequest(PageMode mode = NormalPaging);
+
+	bool addPagingInfoTMSI(uint32_t tmsi, bool pageForRR, GSM::ChannelType chan = GSM::AnyDCCHType);
+	bool addPagingInfoIMSI(const ByteVector& imsi, bool pageForRR, GSM::ChannelType chan = GSM::AnyDCCHType);
+	void writeBody(MsgCommon&dst) const;
+};
+#if RLCMESSAGES_IMPLEMENTATION
+	RLCMsgPacketPagingRequest::RLCMsgPacketPagingRequest(PageMode mode)
+		: RLCDownlinkMessage(RLCDownlinkMessage::PacketPagingRequest,false,NULL),
+		  mAvailable(0), mMaxIds(0)
+	{
+		mPageMode = mode;
+	}
+
+	void RLCMsgPacketPagingRequest::writeBody(MsgCommon &dst) const 
+	{
+		dst.write0();	// No persistence level yet.
+		dst.write0();	// no NLN(PPCH)
+
+		for (unsigned int i = 0; i < mAvailable; i++) {
+			dst.write1();
+			mPagingInfos[i].writeBody(dst);
+		}
+		/*
+		dst.write0(); // finished Repeated Page Info
+		dst.write0(); // no Repeated Iu Page Info*/
+	}
+
+	bool RLCMsgPacketPagingRequest::addPagingInfoTMSI(uint32_t tmsi, bool pageForRR, GSM::ChannelType chan)
+	{
+	      if (mMaxIds && mAvailable >= mMaxIds)
+			return false;
+	      if (!mMaxIds)
+		  mMaxIds = 4; // we allow adding 4 paging info by TMSI
+	      mPagingInfos[mAvailable++].set(tmsi,pageForRR,chan);
+	      return true;
+	}
+
+	bool RLCMsgPacketPagingRequest::addPagingInfoIMSI(const ByteVector& imsi, bool pageForRR, GSM::ChannelType chan)
+	{
+	      // we paging by IMSI, make sure we only allow 2 Paging Info
+	      if (mMaxIds == 4 && mAvailable > 1)
+			return false; // can't add IMSI Paging, we already have 2 TMSI Paging requests
+	      mMaxIds = 2;
+	      if (mAvailable >= mMaxIds)
+			return false;
+	      mPagingInfos[mAvailable++].set(imsi,pageForRR,chan);
+	      return true;
+	}
+
+#endif
+
+
 // 44.060 11.2.31
 // This message does not include a TLLI so it can not be used to initiate
 // an uplink or downlink assignment.  This message includes tfi assignment

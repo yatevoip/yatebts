@@ -83,7 +83,7 @@ class MsgCommon
     virtual void write1() {}
 	virtual bool write01(bool present) {return present;}
 	virtual void writeBitMap(bool*value,unsigned bitmaplen, const char*name) = 0;
-
+	virtual void writeBuffer(const unsigned char* buffer, unsigned int len, const char* name = 0) = 0;
 	// getStream() returns the ostream for the text() function, or NULL for
 	// length() or write() functions.  You can use it to make your function
 	// do something special for text().
@@ -119,6 +119,9 @@ class MsgCommonWrite : public MsgCommon {
 
 	// Write a bitmap.
 	void writeBitMap(bool*value,unsigned bitmaplen, const char*name);
+	
+	// write an arbitrary buffer
+	virtual void writeBuffer(const unsigned char* buffer, unsigned int len, const char* name = 0);
 };
 
 class MsgCommonLength : public MsgCommon {
@@ -139,6 +142,8 @@ class MsgCommonLength : public MsgCommon {
 		wp++; if (present) wp += len;
 	}
 	void writeBitMap(bool*,unsigned bitmaplen, const char*) { wp+=bitmaplen; }
+
+	inline void writeBuffer(const unsigned char* buffer, unsigned int len, const char* name = 0) {wp += (len << 3); }
 };
 
 class MsgCommonText : public MsgCommon {
@@ -165,6 +170,7 @@ class MsgCommonText : public MsgCommon {
         if (name && present) { mos << " " << name << "=(" << value << ")"; }
     }
 	void writeBitMap(bool*value,unsigned bitmaplen, const char*name);
+	void writeBuffer(const unsigned char* buffer, unsigned int len, const char* name = 0);
 	std::ostream* getStream() { return &mos; }
 };
 
