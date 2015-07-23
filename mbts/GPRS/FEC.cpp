@@ -554,12 +554,12 @@ static BitVector *decodeLowSide(const RxBurst &inBurst, int B, GprsDecoder &deco
 	switch ((*ccPtr = decoder.getCS())) {
 	case ChannelCodingCS4:
 		success = decoder.decodeCS4();
-		GPRSLOG(DEBUG,GPRS_MSG) << "CS-4 success=" << success;
+		GPRSLOG(DEBUG,GPRS_LOOP) << "CS-4 success=" << success;
 		result = &decoder.mD_CS4;
 		break;
 	case ChannelCodingCS1:
 		success = decoder.decode();
-		GPRSLOG(DEBUG,GPRS_MSG) << "CS-1 success=" << success;
+		GPRSLOG(DEBUG,GPRS_LOOP) << "CS-1 success=" << success;
 		result = &decoder.mD;
 		break;
 	default: devassert(0);	// Others not supported yet.

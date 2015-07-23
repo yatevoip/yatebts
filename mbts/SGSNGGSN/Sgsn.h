@@ -54,13 +54,19 @@ struct AttachInfo {
 	// MsRadioAcces caps saved from the AttachRequest to go in GmmInfo when it is created.
 	ByteVector mMsRadioAccessCap;
 	GMMRoutingAreaIdIE mPrevRaId;
-	void stashMsgInfo(GMMAttach &msgIEs, bool isAttach);
+	RAUpdateType mRAUpdateType;
+	PdpContextStatus mPdpContextStatus;
+	int  mMsgType;
+	void stashMsgInfo(GMMAttach &msgIEs, bool isAttach, int msgType = -1);
 	void copyFrom(AttachInfo &other);
+	void reset();
 
 	AttachInfo() :
 		// wont be used until initialized, but init to invalid value for copyFrom.
 		mAttachReqType((AttachType)0),
-		mAttachReqPTmsi(0)
+		mAttachReqPTmsi(0),
+		mRAUpdateType(RAUpdated),
+		mMsgType(-1)
 	{}
 };
 
@@ -295,7 +301,7 @@ class SgsnInfo
 
 	// Pass throughs to GmmInfo.  All must be protected from mGmmp == NULL.
 	bool isRegistered() const { return mGmmp && mGmmp->isRegistered(); }
-	PdpContextStatus getPdpContextStatus() { return mGmmp ? mGmmp->getPdpContextStatus() : PdpContextStatus(); }
+	PdpContextStatus getPdpContextStatus() { return mGmmp ? mGmmp->getPdpContextStatus() : mtAttachInfo.mPdpContextStatus; }
 	bool freePdp(unsigned nsapi) { return mGmmp ? mGmmp->freePdp(nsapi) : false; }
 	unsigned freePdpAll(bool freeRabsToo) { return mGmmp ? mGmmp->freePdpAll(freeRabsToo) : 0; }
 	PdpContext *getPdp(unsigned nsapi) { return mGmmp ? mGmmp->getPdp(nsapi) : 0; }

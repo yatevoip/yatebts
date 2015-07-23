@@ -3302,6 +3302,7 @@ static void encodeTagged(String& str, const XmlElement* xml)
 bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessage& msg)
 {
     uint8_t b[4] = {(uint8_t)msg.primitive(),msg.info()};
+    static uint8_t zeroStr = 0;
     if (msg.hasConnId()) {
 	if (msg.connId() == NO_CONN_ID) {
 	    Debug(sender,DebugGoOn,"Failed to build %s (%u): No connection ID [%p]",
@@ -3342,27 +3343,26 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    }
 	    return true;
 	case SigNeighborsList:
-	    if (!msg.xml()) {
-		reason = "Missing XML";
-		break;
-	    }
-	    buf.append(msg.xml()->getText());
+	    if (msg.xml())
+		buf.append(msg.xml()->getText());
+	    else
+		buf.append(&zeroStr,sizeof(uint8_t));
 	    return true;
 	case SigGprsAuthRequest:
 	case SigGprsAttachOk:
+	case SigGprsDetach:
 	case SigPdpActivate:
 	case SigPdpModify:
 	case SigPdpDeactivate:
-	    if (!msg.xml()) {
-		reason = "Missing XML";
-		break;
-	    }
-	    else {
-		String tmp;
-		encodeTagged(tmp,msg.xml());
+	{
+	    String tmp;
+	    encodeTagged(tmp,msg.xml());
+	    if (!TelEngine::null(tmp))
 		buf.append(tmp);
-	    }
+	    else
+		buf.append(&zeroStr,sizeof(uint8_t));
 	    return true;
+	}
 	case SigConnRelease:
 	    if (msg.xml())
 		buf.append(msg.xml()->getText());
@@ -3377,7 +3377,6 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	case SigGprsIdentityReq:
 	case SigGprsAttachLBO:
 	case SigGprsAttachRej:
-	case SigGprsDetach:
 	    return true;
 	default:
 	    reason = "No encoder";
@@ -7735,7 +7734,7 @@ void YBTSGprsChan::destroyed()
     }
     const char* cause = 0;
     if (m_cause)
-	cause = lookup(m_cause,GSML3Codec::s_mmRejectCause,"unknown");
+	cause = lookup(m_cause,GSML3Codec::s_gmmRejectCause,"unknown");
     if (m_started) {
 	m_started = false;
 	Message* s = message("chan.hangup");
@@ -7751,7 +7750,7 @@ void YBTSGprsChan::destroyed()
 
 void YBTSGprsChan::disconnected(bool final, const char* reason)
 {
-    m_cause = lookup(reason,GSML3Codec::s_mmRejectCause);
+    m_cause = lookup(reason,GSML3Codec::s_gmmRejectCause);
     YBTSConnChan::disconnected(final,reason);
 }
 
@@ -7803,6 +7802,23 @@ void YBTSGprsChan::callAccept(Message& msg)
 	xml->addChildSafe(new XmlElement("ptmsi",m_newPtmsi));
     if (m_msisdn)
 	xml->addChildSafe(new XmlElement("msisdn",m_msisdn));
+    NamedString* param = msg.getParam(YSTRING("pdps"));
+    if (!TelEngine::null(param))
+	xml->addChildSafe(new XmlElement("pdps",*param));
+    param = msg.getParam(YSTRING("llcsapis"));
+    if (!TelEngine::null(param))
+	xml->addChildSafe(new XmlElement("llcsapis",*param));
+    param = msg.getParam(YSTRING("tids"));
+    if (!TelEngine::null(param))
+	xml->addChildSafe(new XmlElement("tids",*param));
+    
+    if (msg.getBoolValue(YSTRING("mediareq"))) {
+	if (!getSource(s_pdpMedia))
+	    __plugin.media()->setSource(this,s_pdpFormat,s_pdpMedia);
+	if (!getConsumer(s_pdpMedia))
+	    __plugin.media()->setConsumer(this,s_pdpFormat,s_pdpMedia);
+    }
+
     YBTSMessage m(SigGprsAttachOk,0,connId(),xml);
     if (m_conn && m_conn->send(m)) {
 	YBTSConnChan::callAccept(msg);
@@ -7871,7 +7887,7 @@ void YBTSGprsChan::callRejected(const char* error, const char* reason, const Mes
 	    refcount(),getPeer(),this);
 	return;
     }
-    m_cause = lookup(error,GSML3Codec::s_mmRejectCause,0x6f); // Protocol error, unspecified
+    m_cause = lookup(error,GSML3Codec::s_gmmRejectCause,0x6f); // Protocol error, unspecified
 }
 
 bool YBTSGprsChan::msgDrop(Message& msg, const char* reason)
@@ -7883,7 +7899,7 @@ bool YBTSGprsChan::msgDrop(Message& msg, const char* reason)
     bool idle = !getPeer();
     if (!YBTSConnChan::msgDrop(msg,reason))
 	return false;
-    m_cause = lookup(reason,GSML3Codec::s_mmRejectCause,m_cause);
+    m_cause = lookup(reason,GSML3Codec::s_gmmRejectCause,m_cause);
     if (idle)
 	deref();
     return true;
@@ -7953,6 +7969,7 @@ void YBTSGprsChan::handleGprsAttach(YBTSMessage& m)
     XmlElement* imei = xml->findFirstChild(YSTRING("imei"));
     XmlElement* rand = xml->findFirstChild(YSTRING("rand"));
     XmlElement* auts = xml->findFirstChild(YSTRING("auts"));
+    XmlElement* pdps = xml->findFirstChild(YSTRING("pdps"));
     Message* msg = message("call.route");
     if (tlli)
 	msg->addParam("caller","tlli/" + tlli->getText());
@@ -7974,6 +7991,8 @@ void YBTSGprsChan::handleGprsAttach(YBTSMessage& m)
 	msg->addParam(imei->getTag(),imei->getText());
     if (auth)
 	msg->addParam(auth->getTag(),auth->getText());
+    if (pdps)
+	msg->addParam(pdps->getTag(),pdps->getText());
     if (!m_started) {
 	m_started = true;
 	Message* s = message("chan.startup");

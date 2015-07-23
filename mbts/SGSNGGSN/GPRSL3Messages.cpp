@@ -1081,8 +1081,10 @@ void L3GmmMsgServiceAccept::gmmWriteBody(ByteVector &msg)
 {
 	msg.appendByte(0x32);
 	msg.appendByte(0x02);
-	msg.appendByte(mPdpContextStatus.mStatus[0]);
-	msg.appendByte(mPdpContextStatus.mStatus[1]);
+	if (mPdpContextStatus.valid()) {
+		msg.appendByte(mPdpContextStatus.mStatus[0]);
+		msg.appendByte(mPdpContextStatus.mStatus[1]);
+	}
 }
 
 void L3GmmMsgServiceReject::gmmWriteBody(ByteVector &msg)
@@ -1136,7 +1138,7 @@ void L3GmmMsgRAUpdateAccept::gmmWriteBody(ByteVector &msg)
 	// 10.5.7.1 PDP Context Status
 	// And I quote: "This IE shall be included by the Network".  Hmm.
 	// If you set this to zeros the MS relinquishes its PDP contexts.
-	{
+	if (mPdpContextStatusCurrent.valid()) {
 		msg.appendByte(0x32);
 		msg.appendByte(2);	// length is 2 bytes
 		msg.appendByte(mPdpContextStatusCurrent.mStatus[0]);

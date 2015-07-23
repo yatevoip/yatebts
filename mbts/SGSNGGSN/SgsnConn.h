@@ -39,7 +39,7 @@ public:
     static void authRequest(SgsnInfo* si, const char* text);
     static void attachAccept(SgsnInfo* si, const char* text);
     static void attachRej(SgsnInfo* si, unsigned char cause);
-    static void detach(SgsnInfo* si, const char* text);
+    static void detach(SgsnInfo* si, unsigned char cause, const char* text);
     static void pdpActivate(SgsnInfo* si, bool reply, const char* text);
     static void pdpModify(SgsnInfo* si, bool reply, const char* text);
     static void pdpDeactivate(SgsnInfo* si, const char* text);

@@ -573,11 +573,20 @@ struct MsRaCapability : public ByteVector {
 struct PdpContextStatus : public Text2Str
 {
 	unsigned char mStatus[2];
-	PdpContextStatus() { mStatus[0] = mStatus[1] = 0; }
+	 // NSAPIs 0-4 should always be 0, use 0xff to signal default (invalid) values
+	PdpContextStatus(bool init = false) { mStatus[0] = mStatus[1] = init ? 0 : 0xff; }
 	void text(std::ostream &os) const {
 		os <<"PdpContextStatus="<<hex<<(int)mStatus[0]<<","<<(int)mStatus[1]<<dec;
 	}
-	bool anyDefined() { return !!(mStatus[0] | mStatus[1]); }
+	// valid if NSAPIs 0-4 are 0
+	bool valid() { return !(mStatus[0] & 0x1f); }
+	bool anyDefined() { return valid() && !!(mStatus[0] | mStatus[1]); }
+	uint16_t toInt() { return ((/*(uint16_t)*/mStatus[1]) << 8) + mStatus[0]; }
+	void fromInt(uint16_t pdps)
+	{
+		mStatus[0] = (pdps & 0xff);
+		mStatus[1] = ((pdps >> 8) & 0xff);
+	}
 };
 
 

@@ -251,7 +251,7 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		if (!ch) {
 		    SgsnInfo* sgsn = gGprsMap.unmap(id);
 		    if (sgsn)
-			SgsnConn::detach(sgsn, "");
+			SgsnConn::detach(sgsn, info, "");
 		    else
 			LOG(INFO) << "received SigConnRelease for unmapped id " << id;
 		}
@@ -400,7 +400,7 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 		if (!ch) {
 		    SgsnInfo* sgsn = gGprsMap.unmap(id);
 		    if (sgsn)
-			SgsnConn::detach(sgsn, (const char*)data);
+			SgsnConn::detach(sgsn, info, (const char*)data);
 		    else
 			LOG(INFO) << "received SigConnRelease for unmapped id " << id;
 		}
@@ -463,9 +463,9 @@ void SigConnection::process(BtsPrimitive prim, unsigned char info, unsigned int 
 	    {
 		SgsnInfo* sgsn = gGprsMap.find(id);
 		if (sgsn) {
-		    if (len >= 3) {
+		    if (len >= 1) {
 			gGprsMap.unmap(sgsn);
-			SgsnConn::detach(sgsn, (const char*)data);
+			SgsnConn::detach(sgsn, info, (const char*)data);
 		    }
 		    else
 			LOG(ERR) << "received short GPRS Detach of length " << len;
