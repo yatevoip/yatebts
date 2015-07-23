@@ -2602,7 +2602,7 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
 	    b.m_data.reset(n);
 	}
     }
-    b.m_timingError = toaError;
+    b.m_timingError = toaError * 256;
 
     // Trim and center the channel estimate.
     // This shifts the channel estimate to put the max power peak in the center, +/- 1/2 symbol period.
