@@ -176,6 +176,9 @@ GsmTrxModule::~GsmTrxModule()
 
 void GsmTrxModule::readCtrlLoop()
 {
+    bool startRecv = false;
+    bool stopRecv = false;
+    unsigned int invalid = 0;
     while (!Thread::check(false)) {
 	int r = m_ctrl.readSocket(*m_dummy);
 	if (Thread::check(false))
@@ -192,10 +195,13 @@ void GsmTrxModule::readCtrlLoop()
 	if (s.startSkip("CMD RESET ",false)) {
 	    trxStop("received RESET command");
 	    rsp << "RSP RESET " << trxStart(s);
+	    startRecv = true;
+	    stopRecv = (m_trx == 0);
 	}
 	else if (s == YSTRING("CMD STOP")) {
 	    trxStop("received STOP command");
 	    rsp << "RSP STOP 0";
+	    stopRecv = true;
 	}
 	else {
 	    RefPointer<GsmTrxQMF> trx;
@@ -208,6 +214,12 @@ void GsmTrxModule::readCtrlLoop()
 		    trx->command(s,&rsp,0xffffffff);
 	    }
 	    else if (s.startSkip("CMD ",false)) {
+		int level = DebugInfo;
+		if (!(startRecv || stopRecv))
+		    level = invalid ? DebugNote : DebugWarn;
+		invalid++;
+		Debug(this,level,"Received command '%s': transceiver not running",
+		    s.c_str());
 		int pos = s.find(' ');
 		if (pos > 0)
 		    rsp << "RSP " << s.substr(0,pos) << " " <<
