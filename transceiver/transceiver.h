@@ -747,7 +747,8 @@ protected:
     Mutex m_clockUpdMutex;               // Protect clock update and tx time
     GSMTime m_nextClockUpdTime;          // Next clock update time
     GSMTime m_txTime;                    // Transmit time
-    GSMTime m_txLatency;                 // Transmit latency
+    unsigned int m_txSlots;              // The number of timeslots to send in one loop
+    unsigned int m_radioLatencySlots;    // Radio latency in timeslots
     ComplexVector m_sendBurstBuf;        // Send burst buffer
     SignalProcessing m_signalProcessing; // SignalProcessing class initialized for this tranceiver
     unsigned int m_tsc;                  // GSM TSC index
@@ -758,7 +759,6 @@ protected:
     float m_txPowerScale;                // Tx power scaling factor
     Mutex m_radioClockMutex;             // Radio clock mutex
     GSMTime m_radioClock;                // Radio clock
-    GSMTime m_txBufSpace;                // The space available for data sending in radio side
     Semaphore m_txSync;                  // Semaphore used to sync TX/RX data
     TrxRadioIO m_txIO;                   // TX related data
     TrxRadioIO m_rxIO;                   // RX related data

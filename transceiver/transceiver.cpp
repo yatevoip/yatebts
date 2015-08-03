@@ -967,7 +967,8 @@ Transceiver::Transceiver(const char* name)
     m_clockIface("clock"),
     m_startTime(0),
     m_clockUpdMutex(false,"TrxClockUpd"),
-    m_txLatency(2),
+    m_txSlots(16),
+    m_radioLatencySlots(10),
     m_tsc(0),
     m_rxFreq(0),
     m_txFreq(0),
@@ -975,7 +976,6 @@ Transceiver::Transceiver(const char* name)
     m_txAttnOffset(TX_ATTEN_OFFS_DEF),
     m_txPowerScale(1.0f),
     m_radioClockMutex(false,"TrxRadioClock"),
-    m_txBufSpace(2,0),
     m_txSync(1,"TrxTxSync",0),
     m_loopbackMutex(false,"TrxLoopbackData"),
     m_loopback(false),
@@ -1225,10 +1225,11 @@ void Transceiver::runRadioSendData()
     if (!m_radio)
 	return;
     waitPowerOn();
-    GSMTime latencyLastUpdate(m_txTime);
-    GSMTime radioTime;
-    GSMTime endRadioTime;
-    GSMTime txBuf = m_txBufSpace;
+    GSMTime radioTime;                    // Current radio time in loop start
+    GSMTime endRadioTime;                 // Current radio time in loop end (check again, avoid waiting to rx signal)
+    unsigned int txSlots = m_txSlots;     // Send TX slots in 1 loop
+    unsigned int radioLatencySlots = m_radioLatencySlots; // Radio latency (the diference between radio time,
+                                                          //  as we know it, and estimated actual radio time)
     bool wait = true;
     while (true) {
 	if (wait) {
@@ -1241,29 +1242,33 @@ void Transceiver::runRadioSendData()
 		break;
 	    wait = true;
 	}
-	GSMTime rTime = radioTime;
-	rTime.advance(m_txLatency.fn(),m_txLatency.tn());
-	if (m_txTime > rTime)
-	    continue;
-	// TODO Adjust Latency
-	// The underrun may be unreliable here.
-	// Calculate the latency after the data is actualy sent?
-	GSMTime txTime = m_txTime;
-	// NOTE: We should check if statistics are collected only to put the debug message
-	// Check it now since is the only thing we are doing!!!
-	if (statistics()) {
-	    GSMTime maxSendTime = m_txTime;
-	    maxSendTime.advance(txBuf.fn(),txBuf.tn());
-	    if (rTime > maxSendTime) {
-		GSMTime diff;
-		GSMTime::diff(diff,rTime,maxSendTime);
-		Debug(this,DebugMild,
-		    "Oversleep in runRadioSendData() with FN=%u TN=%u (rtime=(%u,%u) max=(%u,%u))",
-		    diff.fn(),diff.tn(),rTime.fn(),rTime.tn(),maxSendTime.fn(),maxSendTime.tn());
-		//txTime.advance(diff.fn(),diff.tn());
-	    }
+	GSMTime radioCurrentTime = radioTime;
+	radioCurrentTime.incTnLarge(radioLatencySlots);
+	GSMTime txTime;
+	// The difference, in timeslots, between current radio time and our TX time
+	int tnOffs = GSMTime::tnOffset(m_txTime,radioCurrentTime);
+	unsigned int sendTimeslots = txSlots;
+	if (tnOffs >= 0) {
+	    // TX time is at least current radio time
+	    // Start sending from current TX time
+	    txTime = m_txTime;
+	    if ((int)sendTimeslots > tnOffs)
+		sendTimeslots -= tnOffs;
+	    else
+		sendTimeslots = 0;
 	}
-	while (rTime > txTime) {
+	else {
+	    // OOPS !!!
+	    // Current TX time is before radio time: underrun
+	    // Start sending from current radio time. Advance radio interface timestamp
+	    txTime = radioCurrentTime;
+	    tnOffs = -tnOffs;
+	    m_txIO.timestamp += tnOffs * m_signalProcessing.gsmSlotLen();
+	    if (statistics())
+		Debug(this,DebugMild,"Transmit underrun by %d timeslots [%p]",
+		    tnOffs,this);
+	}
+	while (sendTimeslots--) {
 	    if (sendBurst(txTime)) {
 		if (loopback())
 		    getRadioClock(txTime);
@@ -1276,12 +1281,14 @@ void Transceiver::runRadioSendData()
 	}
 	if (thShouldExit(this))
 	    break;
+	// Set current TX time. Check if it's time to sync with upper layer
 	Lock lck(m_clockUpdMutex);
 	m_txTime = txTime;
 	bool upd = m_txTime > m_nextClockUpdTime;
 	lck.drop();
 	if (upd && !syncGSMTime())
 	    break;
+	// Look again at radio time
 	getRadioClock(endRadioTime);
 	wait = (radioTime == endRadioTime);
 	if (!wait)

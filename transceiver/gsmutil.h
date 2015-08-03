@@ -178,7 +178,7 @@ public:
 	    if (val > 8) {
 		// Increasing timeslot with multiple of 8 will maintain it's current value
 		// Just increment the frame number for each 8 timeslots
-		incFn(m_fn,val / 8);
+		m_fn = incFn(m_fn,val / 8);
 		// Advance for the rest
 		incTn(val % 8);
 	    }
@@ -357,6 +357,17 @@ public:
 	    if (delta < -(int32_t)GSM_HYPERFRAME_MAX_HALF)
 		return delta + (int32_t)GSM_HYPERFRAME_MAX;
 	    return delta;
+	}
+
+    /**
+     * Calculate the offset, in timeslots, between 2 GSM time
+     * @param t1 First time
+     * @param t2 Second time
+     * @return The offset, in timeslots, between t1 and t2
+     */
+    static inline int tnOffset(const GSMTime& t1, const GSMTime& t2) {
+	    int fnOffs = fnOffset(t1.fn(),t2.fn()) * 8;
+	    return fnOffs + t1.tn() - t2.tn();
 	}
 
     /**
