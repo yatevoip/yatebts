@@ -549,6 +549,17 @@ static const QMFBlockDesc s_qmfBlock4[15] = {
     {"QHHH", 0xffffffff, 0}
 };
 
+static inline void change(Transceiver* trx, unsigned int& dest, const NamedList& list,
+    const String& param, unsigned int defVal, unsigned int minVal, unsigned int maxVal,
+    int level = DebugInfo)
+{
+    unsigned int tmp = list.getIntValue(param,defVal,minVal,maxVal);
+    if (dest != tmp) {
+	Debug(trx,level,"%s changed %u -> %u [%p]",param.c_str(),dest,tmp,trx);
+	dest = tmp;
+    }
+}
+
 static inline String& dumpBits(String& buf, const void* b, unsigned int len)
 {
     DataBlock db((void*)b,len);
@@ -967,8 +978,10 @@ Transceiver::Transceiver(const char* name)
     m_clockIface("clock"),
     m_startTime(0),
     m_clockUpdMutex(false,"TrxClockUpd"),
+    m_clockUpdOffset(2),
     m_txSlots(16),
     m_radioLatencySlots(10),
+    m_radioSendChanged(false),
     m_tsc(0),
     m_rxFreq(0),
     m_txFreq(0),
@@ -1095,6 +1108,11 @@ void Transceiver::reInit(const NamedList& params)
     m_peakOverMeanThreshold = params.getIntValue(YSTRING("peak_over_mean"),m_peakOverMeanThreshold);
     m_maxPropDelay = params.getIntValue(YSTRING("max_prop_delay"),m_maxPropDelay);
     m_upPowerThreshold = params.getIntValue(YSTRING("up_power_warn"),m_upPowerThreshold);
+    change(this,m_clockUpdOffset,params,YSTRING("clock_update_offset"),2,0,256);
+    change(this,m_txSlots,params,YSTRING("tx_slots"),16,1,1024);
+    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),10,0,256);
+    // Signal update
+    m_radioSendChanged = true;
 }
 
 // Wait for PowerOn state
@@ -1232,6 +1250,11 @@ void Transceiver::runRadioSendData()
                                                           //  as we know it, and estimated actual radio time)
     bool wait = true;
     while (true) {
+	if (m_radioSendChanged) {
+	    m_radioSendChanged = false;
+	    txSlots = m_txSlots;
+	    radioLatencySlots = m_radioLatencySlots;
+	}
 	if (wait) {
 	    if (!waitSendTx())
 		break;
@@ -1837,7 +1860,7 @@ bool Transceiver::syncGSMTime()
     Lock lck(m_clockUpdMutex);
     m_nextClockUpdTime = m_txTime;
     m_nextClockUpdTime.advance(216);
-    tmp << (m_txTime.fn() + 2);
+    tmp << (m_txTime.fn() + m_clockUpdOffset);
     if (m_clockIface.m_socket.valid()) {
 	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0)
 	    return true;

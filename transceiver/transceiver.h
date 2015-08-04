@@ -746,9 +746,11 @@ protected:
     GSMTime m_startTime;                 // Tranceiver start time
     Mutex m_clockUpdMutex;               // Protect clock update and tx time
     GSMTime m_nextClockUpdTime;          // Next clock update time
+    unsigned int m_clockUpdOffset;       // Offset (in frames) for radio time sent to upper layer
     GSMTime m_txTime;                    // Transmit time
     unsigned int m_txSlots;              // The number of timeslots to send in one loop
     unsigned int m_radioLatencySlots;    // Radio latency in timeslots
+    bool m_radioSendChanged;             // Flag used to signal data changed for radio send data thread
     ComplexVector m_sendBurstBuf;        // Send burst buffer
     SignalProcessing m_signalProcessing; // SignalProcessing class initialized for this tranceiver
     unsigned int m_tsc;                  // GSM TSC index

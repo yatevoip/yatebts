@@ -180,6 +180,23 @@ Radio.C0=
 ; Defaults to 10.
 ;Timeout.Clock=10
 
+; clock_update_offset: integer: Offset (in GSM frames) for radio clock advertised to upper layer
+; This value is added to current radio clock when synchronizing with upper layer
+; This parameter is applied on reload
+; Defaults to 2. Allowed interval [0..256]
+;clock_update_offset=2
+
+; tx_slots: integer: The number of timeslots to send in one loop
+; This parameter is applied on reload
+; Defaults to 16. Allowed interval [1..1024]
+;tx_slots=16
+
+; radio_latency_slots: integer: Estimated radio latency in timeslots
+; This value is used to drop old bursts from send queue (avoid sending old data to radio)
+; This parameter is applied on reload
+; Defaults to 10. Allowed interval [0..256]
+;radio_latency_slots=10
+
 
 [control]
 ; This section manages the configuration for various MBTS controls.
