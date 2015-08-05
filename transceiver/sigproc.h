@@ -1171,6 +1171,29 @@ public:
 	{ return m_gsmSlotLen; }
 
     /**
+     * Convert a timestamp to timeslots
+     * @param ts Timestamp to convert
+     * @return The number of timeslots in given timestamp
+     */
+    inline uint64_t ts2slots(uint64_t ts) const
+	{ return ts / m_gsmSlotLen; }
+
+    /**
+     * Convert an absolute timeslots value to timestamp
+     * @param timeslots Value to convert
+     * @return The data timestamp
+     */
+    inline uint64_t slots2ts(uint64_t timeslots) const
+	{ return timeslots * m_gsmSlotLen; }
+
+    /**
+     * Round up a given timestamp to slot boundary
+     * @param ts Timestamp to adjust
+     */
+    inline void alignTs(uint64_t& ts) const
+	{ ts = (ts2slots(ts) + 1) * m_gsmSlotLen; }
+
+    /**
      * Retrieve the Laurent Pulse Approximation vector
      * @return Laurent Pulse Approximation vector
      */

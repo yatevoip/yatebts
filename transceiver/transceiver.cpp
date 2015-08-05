@@ -41,7 +41,6 @@
 #endif
 
 #define FILLER_FRAMES_MIN 102
-#define AVEREGE_NOISE_LENGTH 102
 #define BOARD_SHIFT 4
 
 // Dump data when entering in qmf() function
@@ -976,7 +975,6 @@ Transceiver::Transceiver(const char* name)
     m_arfcnCount(0),
     m_arfcnConf(1),
     m_clockIface("clock"),
-    m_startTime(0),
     m_clockUpdMutex(false,"TrxClockUpd"),
     m_clockUpdOffset(2),
     m_txSlots(16),
@@ -1090,8 +1088,8 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
     }
     Debug(this,DebugInfo,"Transceiver initialized radio=(%p) '%s' [%p]",
 	m_radio,m_radio->debugName(),this);
-    m_nextClockUpdTime = m_startTime;
-    m_txTime = m_startTime;
+    m_nextClockUpdTime = 0;
+    m_txTime = 0;
     changeState(Idle);
     return true;
 }
@@ -1126,12 +1124,11 @@ void Transceiver::waitPowerOn()
 void Transceiver::runReadRadio()
 {
     waitPowerOn();
-    GSMTime time;
-    getRadioClock(time);
-    time.decTn(3);
     TrxRadioIO& io = m_rxIO;
     if (m_radio->getRxTime(io.timestamp) != 0)
 	io.timestamp = 0;
+    // Round up timestamp to slot boundary
+    m_signalProcessing.alignTs(io.timestamp);
     RadioReadBufs bufs(BITS_PER_TIMESLOT * m_oversamplingRate,0);
     ComplexVector crt(bufs.bufSamples());
     ComplexVector aux(bufs.bufSamples());
@@ -1170,22 +1167,25 @@ void Transceiver::runReadRadio()
 	}
 	if (!incTn)
 	    continue;
-	if (v) {
-	    // Increase burst time by skipped bufs to set proper GSM time
-	    time.incTnLarge(incTn - 1);
-	    RadioRxData* r = new RadioRxData(0,time);
+	GSMTime time = m_signalProcessing.ts2slots(io.timestamp);
+	if (v && time > GSMTime(4)) {
+	    RadioRxData* r = new RadioRxData(0,time - 4);
 	    r->m_data.steal(*v);
 	    recvRadioData(r);
-	    time.incTn();
 	    // Allocate space for used buffer
 	    v->assign(bufs.bufSamples());
 	    bufs.crt.samples = (float*)v->data();
 	}
-	else
-	    time.incTnLarge(incTn);
 	// Advance radio clock. Signal TX
+	// Sync to next slot boundary if needed
+	if ((io.timestamp % m_signalProcessing.gsmSlotLen()) != 0) {
+	    Debug(this,DebugNote,"Resyncing RX timestamp " FMT64U " [%p]",
+		io.timestamp,this);
+	    time++;
+	    io.timestamp = time * m_signalProcessing.gsmSlotLen();
+	}
 	m_radioClockMutex.lock();
-	m_radioClock.incTnLarge(incTn);
+	m_radioClock = time;
 	m_radioClockMutex.unlock();
 	m_txSync.unlock();
     }
@@ -1196,8 +1196,9 @@ void Transceiver::recvRadioData(RadioRxData* d)
 {
     if (!d)
 	return;
-    XDebug(this,DebugAll,"Enqueueing radio data (%p) TN=%u FN=%u len=%u [%p]",
-	d,d->m_time.tn(),d->m_time.fn(),d->m_data.length(),this);
+    XDebug(this,DebugAll,
+	"Enqueueing radio data (%p) time=" FMT64U " (FN=%u TN=%u) len=%u [%p]",
+	d,d->m_time.time(),d->m_time.fn(),d->m_time.tn(),d->m_data.length(),this);
 
     if (m_dumpOneRx) { // For TEST purposes
 	m_dumpOneRx = false;
@@ -1243,7 +1244,7 @@ void Transceiver::runRadioSendData()
     if (!m_radio)
 	return;
     waitPowerOn();
-    GSMTime radioTime;                    // Current radio time in loop start
+    GSMTime radioTime;                    // Current radio time (in timeslots) in loop start
     GSMTime endRadioTime;                 // Current radio time in loop end (check again, avoid waiting to rx signal)
     unsigned int txSlots = m_txSlots;     // Send TX slots in 1 loop
     unsigned int radioLatencySlots = m_radioLatencySlots; // Radio latency (the diference between radio time,
@@ -1265,38 +1266,35 @@ void Transceiver::runRadioSendData()
 		break;
 	    wait = true;
 	}
-	GSMTime radioCurrentTime = radioTime;
-	radioCurrentTime.incTnLarge(radioLatencySlots);
-	GSMTime txTime;
-	// The difference, in timeslots, between current radio time and our TX time
-	int tnOffs = GSMTime::tnOffset(m_txTime,radioCurrentTime);
+	GSMTime radioCurrentTime = radioTime + radioLatencySlots;
+	GSMTime txTime = m_txTime;
 	unsigned int sendTimeslots = txSlots;
-	if (tnOffs >= 0) {
+	// Don't send old data
+	if (txTime >= radioCurrentTime) {
 	    // TX time is at least current radio time
 	    // Start sending from current TX time
-	    txTime = m_txTime;
-	    if ((int)sendTimeslots > tnOffs)
-		sendTimeslots -= tnOffs;
+	    unsigned int diff = (unsigned int)(txTime - radioCurrentTime);
+	    if (sendTimeslots > diff)
+		sendTimeslots -= diff;
 	    else
 		sendTimeslots = 0;
 	}
 	else {
 	    // OOPS !!!
 	    // Current TX time is before radio time: underrun
-	    // Start sending from current radio time. Advance radio interface timestamp
+	    // Start sending from current radio time
 	    txTime = radioCurrentTime;
-	    tnOffs = -tnOffs;
-	    m_txIO.timestamp += tnOffs * m_signalProcessing.gsmSlotLen();
 	    if (statistics())
-		Debug(this,DebugMild,"Transmit underrun by %d timeslots [%p]",
-		    tnOffs,this);
+		Debug(this,m_txTime ? DebugMild : DebugAll,
+		    "Transmit underrun by " FMT64U " timeslots [%p]",
+		    radioCurrentTime - m_txTime,this);
 	}
 	while (sendTimeslots--) {
 	    if (sendBurst(txTime)) {
 		if (loopback())
 		    getRadioClock(txTime);
 		else
-		    txTime.incTn();
+		    txTime++;
 		continue;
 	    }
 	    fatalError();
@@ -1313,9 +1311,10 @@ void Transceiver::runRadioSendData()
 	    break;
 	// Look again at radio time
 	getRadioClock(endRadioTime);
-	wait = (radioTime == endRadioTime);
-	if (!wait)
+	if (radioTime < endRadioTime) {
+	    wait = false;
 	    radioTime = endRadioTime;
+	}
     }
 }
 
@@ -1366,16 +1365,17 @@ bool Transceiver::waitSendTx()
     return true;
 }
 
-bool Transceiver::sendBurst(GSMTime& time)
+bool Transceiver::sendBurst(GSMTime time)
 {
-    int t3 = time.fn() % 51;
-    int t2 = time.fn() % 26;
+    uint32_t fn = time.fn();
+    int t3 = fn % 51;
+    int t2 = fn % 26;
 #ifdef DEBUG
     if (t3 == 0 && time.tn() == 0)
 	Debug(this,DebugAll,"Sending Time FN=%d",time.fn());
 #endif
-    XDebug(this,DebugAll,"sendBurst() FN=%u TN=%u T2=%d T3=%d[%p]",
-	time.fn(),time.tn(),t2,t3,this);
+    XDebug(this,DebugAll,"sendBurst(" FMT64U ") FN=%u TN=%u T2=%d T3=%d [%p]",
+	time.time(),fn,time.tn(),t2,t3,this);
     // Build send data
     bool first = true;
     for (unsigned int i = 0; i < m_arfcnCount; i++) {
@@ -1450,6 +1450,7 @@ bool Transceiver::sendBurst(GSMTime& time)
     // Test ?
     if (m_testIncrease || s_dumper)
 	adjustSendData(data,time);
+    m_txIO.timestamp = m_signalProcessing.slots2ts(time);
     unsigned int code = m_radio->send(m_txIO.timestamp,
 	(float*)data.data(),data.length(),&m_txPowerScale);
     m_txIO.timestamp += data.length();
@@ -1858,9 +1859,11 @@ bool Transceiver::syncGSMTime()
 {
     String tmp("IND CLOCK ");
     Lock lck(m_clockUpdMutex);
-    m_nextClockUpdTime = m_txTime;
-    m_nextClockUpdTime.advance(216);
     tmp << (m_txTime.fn() + m_clockUpdOffset);
+    XDebug(this,DebugAll,"Sending radio time sync at " FMT64U " fn=%u [%p]",
+	m_txTime.time(),m_txTime.fn(),this);
+    // Next update in 1 second
+    m_nextClockUpdTime = m_txTime + GSM_SLOTS_SEC;
     if (m_clockIface.m_socket.valid()) {
 	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0)
 	    return true;
@@ -2400,7 +2403,7 @@ int Transceiver::handleCmdManageTx(unsigned int arfcn, String& cmd, String* rspP
 	m_arfcn[arfcn]->dumpBursts();
 	return 0;
     }
-    DDebug(this,DebugStub,"Received ManageTx command %s %u",command.c_str(),GSM_HYPERFRAME_MAX_HALF);
+    DDebug(this,DebugStub,"Received ManageTx command %s",command.c_str());
     return 0; 
 }
 
@@ -2497,7 +2500,7 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
     float noise = SignalProcessing::computePower(b.m_data.data(),
 	b.m_data.length(),2,0.5,b.m_data.length() - 2);
     noise += SignalProcessing::computePower(b.m_data.data(),b.m_data.length(),2,0.5,0);
-    noise /= 2;
+    noise /= 4;
     a->addAverageNoise(10 * ::log10f(noise));
 
     // Calculate Signal to Noise ratio
@@ -2580,11 +2583,10 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
 
     if (b.m_powerLevel > m_upPowerThreshold) {
 	slot.powerErrors++;
-	int offs = GSMTime::fnOffset(slot.lastPowerWarn,t.fn());
-	if (offs < 0) {
+	if (slot.lastPowerWarn < t) {
 	    Debug(a,DebugInfo,"%sSlot %d. Receiver clipping %g dB (FN=%u) count=%u [%p]",
 		a->prefix(),slot.slot,b.m_powerLevel,t.fn(),slot.powerErrors,a);
-	    slot.lastPowerWarn = GSMTime::incFn(t.fn(),217); // 1 sec = 216.(6)
+	    slot.lastPowerWarn = t + GSM_SLOTS_SEC;
 	    slot.powerErrors = 0;
 	}
     }
@@ -2600,22 +2602,18 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
     // It indicates a failure of the closed loop timing control.
     if (bType == ARFCN::BurstNormal && (toaError > 2 || toaError < -2)) {
 	slot.toaErrors++;
-	int offs = GSMTime::fnOffset(slot.lastTOAWarn,t.fn());
-	if (offs < 0) {
+	if (slot.lastTOAWarn < t) {
 	    Debug(a,DebugAll,
 		"%sSlot %d. Excessive TOA error=%d peak/mean=%g count=%u [%p]",
 		a->prefix(),slot.slot,toaError,peakOverMean,slot.toaErrors,a);
 	    slot.toaErrors = 0;
-	    slot.lastTOAWarn = GSMTime::incFn(t.fn(),217);
+	    slot.lastTOAWarn = t + GSM_SLOTS_SEC;
 	}
     }
-    else if (slot.toaErrors) {
-	int offs = GSMTime::fnOffset(slot.lastTOAWarn,t.fn());
-	if (offs < 0) {
-	    Debug(a,DebugAll,"%sSlot %d. Excessive TOA errors %u [%p]",
-		a->prefix(),slot.slot,slot.toaErrors,a);
-	    slot.toaErrors = 0;
-	}
+    else if (slot.toaErrors && slot.lastTOAWarn < t) {
+	Debug(a,DebugAll,"%sSlot %d. Excessive TOA errors %u [%p]",
+	    a->prefix(),slot.slot,slot.toaErrors,a);
+	slot.toaErrors = 0;
     }
     // Shift the received signal to compensate for TOA error.
     // This shifts the signal so that the max power image is aligned to the expected position.
@@ -2632,7 +2630,7 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
 	    b.m_data.reset(n);
 	}
     }
-    b.m_timingError = toaError * 256;
+    b.m_timingError = toaError;
 
     // Trim and center the channel estimate.
     // This shifts the channel estimate to put the max power peak in the center, +/- 1/2 symbol period.
@@ -3508,16 +3506,13 @@ void ARFCN::addBurst(GSMTxBurst* burst)
 	m_expired.insert(burst);
 	return;
     }
-    GSMTime tmpTime = txTime;
-    tmpTime.advance(204,0);
+    GSMTime tmpTime = txTime + 204 * 8;
     if (burst->time() > tmpTime) {
 	if (debugAt(DebugNote)) {
-	    uint32_t f;
-	    uint8_t n;
-	    GSMTime::diff(f,n,burst->time().fn(),burst->time().tn(),
-		txTime.fn(),txTime.tn());
-	    Debug(this,DebugNote,"%sReceived burst too far in future diff: fn=%u tn=%u [%p]",
-		prefix(),f,n,this);
+	    GSMTime diff(burst->time().time() - txTime);
+	    Debug(this,DebugNote,
+		"%sReceived burst too far in future by " FMT64U " timeslots (fn=%u tn=%u) [%p]",
+		prefix(),diff.time(),diff.fn(),diff.tn(),this);
 	}
 	m_expired.insert(burst);
 	return;
@@ -3525,16 +3520,13 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     ObjList* last = &m_txQueue;
     for (ObjList* o = m_txQueue.skipNull();o;o = o->skipNext()) {
 	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
-
-	int comp = GSMTime::compare(b->time(),burst->time());
-	
-	if (comp > 0) {
+	if (burst->time() > b->time()) {
 	    XDebug(this,DebugAll,"%sInsert burst fn=%u tn=%u [%p]",
 		prefix(),burst->time().fn(),burst->time().tn(),this);
 	    o->insert(burst);
 	    return;
 	}
-	if (comp == 0) {
+	if (burst->time() == b->time()) {
 	    Debug(this,DebugAll,"%sDuplicate burst received fn=%u tn=%u [%p]",
 		prefix(),b->time().fn(),b->time().tn(),this);
 	    TelEngine::destruct(burst);
@@ -3770,7 +3762,7 @@ uint64_t ARFCN::dumpDroppedBursts(String* buf, const char* sep, bool force,
 
 void ARFCN::addAverageNoise(float current)
 {
-    m_averegeNoiseLevel += (current - m_averegeNoiseLevel) / AVEREGE_NOISE_LENGTH;
+    m_averegeNoiseLevel = 0.9 * m_averegeNoiseLevel + 0.1 * current;
 }
 
 void ARFCN::dumpSlotsDelay(String& dest)

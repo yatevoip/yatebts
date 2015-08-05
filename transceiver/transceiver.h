@@ -308,10 +308,10 @@ struct ArfcnSlot
     int burstType;                       // Expected burst type
     bool warnRecvDrop;                   // Warn dropping recv frame
     float delay;                         // Average delay spread
-    uint32_t lastPowerWarn;              // Last frame number value for power warn (used by demodulator)
+    GSMTime lastPowerWarn;               // Last time for power warn (used by demodulator)
     unsigned int powerErrors;            // The nmber of power errors
-    uint32_t lastTOAWarn;                // Last frame number value for TOA error warn (used by demodulator)
-    unsigned int toaErrors;              // Number of TOA errors  (used by demodulator)
+    GSMTime lastTOAWarn;                 // Last time for TOA error warn (used by demodulator)
+    unsigned int toaErrors;              // Number of TOA errors (used by demodulator)
 
 };
 
@@ -421,13 +421,6 @@ public:
 	{ return m_state; }
 
     /**
-     * Retrieve the tranceiver start time
-     * @return Transceiver start time
-     */
-    inline GSMTime startTime() const
-	{ return m_startTime; }
-
-    /**
      * Retrieve the number of ARFCNs
      * @return The number of ARFCNs
      */
@@ -479,10 +472,10 @@ public:
     /**
      * Extract the bursts for sending.
      * Sum them for each ARFCN and send them to the radio interface.
-     * @param time The time of the burst that needs to be sent.
+     * @param time The time of the burst that needs to be sent
      * @return True on success, false on fatal error
      */
-    bool sendBurst(GSMTime& time);
+    bool sendBurst(GSMTime time);
 
     /**
      * Process a received radio burst
@@ -667,7 +660,7 @@ protected:
 
     /**
      * Get the radio clock
-     * @param dest The radio clock to be filled;
+     * @param dest The radio clock to be filled
      */
     inline void getRadioClock(GSMTime& dest) {
 	    Lock lck(m_radioClockMutex);
@@ -743,7 +736,6 @@ protected:
     unsigned int m_arfcnCount;           // The number of ARFCNs
     unsigned int m_arfcnConf;            // The number of configured ARFCNs
     TransceiverSockIface m_clockIface;   // Upper layer clock sync socket
-    GSMTime m_startTime;                 // Tranceiver start time
     Mutex m_clockUpdMutex;               // Protect clock update and tx time
     GSMTime m_nextClockUpdTime;          // Next clock update time
     unsigned int m_clockUpdOffset;       // Offset (in frames) for radio time sent to upper layer

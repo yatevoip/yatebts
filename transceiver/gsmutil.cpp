@@ -157,10 +157,11 @@ void GSMRxBurst::fillEstimatesBuffer()
     //   2 bytes correlator timing offset (timing advance error)
     int16_t toa = m_timingError * 256;
     *buf++ = m_time.tn();
-    *buf++ = (int8_t)(m_time.fn() >> 24);
-    *buf++ = (int8_t)(m_time.fn() >> 16);
-    *buf++ = (int8_t)(m_time.fn() >> 8);
-    *buf++ = (int8_t)m_time.fn();
+    uint32_t fn = m_time.fn();
+    *buf++ = (int8_t)(fn >> 24);
+    *buf++ = (int8_t)(fn >> 16);
+    *buf++ = (int8_t)(fn >> 8);
+    *buf++ = (int8_t)fn;
     *buf++ = (int8_t)m_powerLevel;
     *buf++ = (int8_t)(toa >> 8);
     *buf++ = (int8_t)toa;

@@ -35,7 +35,8 @@ class GSMRxBurst;                        // A received GSM burst
 // TDMA frame number max value (see TS 100 908 (GSM 05.02) Section 4.3.3)
 // The actual maximum value is GSM_HYPERFRAME_MAX - 1 (2715647)
 #define GSM_HYPERFRAME_MAX (26U * 51U * 2048U)
-#define GSM_HYPERFRAME_MAX_HALF (GSM_HYPERFRAME_MAX / 2)
+// The number of timeslots in 1 second (216(6) frames)
+#define GSM_SLOTS_SEC (217 * 8)
 
 // Burst length in symbols
 #define GSM_BURST_LENGTH 148
@@ -72,6 +73,7 @@ public:
 
 /**
  * This class implements GSM time as defined in GSM 05.02 4.3
+ * The time is held in timeslots
  * @short GSM time
  */
 class GSMTime
@@ -81,7 +83,7 @@ public:
      * Constructor
      */
    inline GSMTime()
-	: m_fn(0), m_tn(0)
+	: m_time(0)
 	{}
 
     /**
@@ -89,7 +91,15 @@ public:
      * @param fn Frame number
      * @param tn Timeslot number
      */
-    inline GSMTime(uint32_t fn, uint8_t tn = 0)
+    inline GSMTime(uint64_t time)
+	{ *this = time; }
+
+    /**
+     * Constructor
+     * @param fn Frame number
+     * @param tn Timeslot number
+     */
+    inline GSMTime(uint32_t fn, uint8_t tn)
 	{ assign(fn,tn); }
 
     /**
@@ -97,7 +107,7 @@ public:
      * @param src Source object
      */
     inline GSMTime(const GSMTime& src)
-	: m_fn(src.fn()), m_tn(src.tn())
+	: m_time(src.m_time)
 	{}
 
     /**
@@ -105,115 +115,29 @@ public:
      * @param fn Frame number
      * @param tn Timeslot number
      */
-    inline void assign(uint32_t fn, uint8_t tn = 0)
-	{
-	    m_fn = fn % GSM_HYPERFRAME_MAX;
-	    m_tn = tn % 8;
-	}
+    inline void assign(uint32_t fn, uint8_t tn)
+	{ m_time = fn * 8 + tn; }
+
+    /**
+     * Retrieve the time
+     * @return Time value
+     */
+    inline uint64_t time() const
+	{ return m_time; }
 
     /**
      * Retrieve the frame number
      * @return Frame number
      */
     inline uint32_t fn() const
-	{ return m_fn; }
+	{ return time2fn(m_time); }
 
     /**
      * Retrieve the timeslot number
-     * @return timeslot number
+     * @return Timeslot number
      */
     inline uint8_t tn() const
-	{ return m_tn; }
-
-    /**
-     * Increment frame number
-     */
-    inline void incFn()
-	{ m_fn = (m_fn + 1) % GSM_HYPERFRAME_MAX; }
-
-    /**
-     * Decrement frame number
-     */
-    inline void decFn() {
-	    if (m_fn)
-		m_fn--;
-	    else
-		m_fn = GSM_HYPERFRAME_MAX - 1;
-	}
-
-    /**
-     * Increment timeslot number.
-     * Increment frame number also if timeslot wrap around
-     */
-    inline void incTn() {
-	    if (m_tn < 7)
-		m_tn++;
-	    else {
-		m_tn = 0;
-		incFn();
-	    }
-	}
-
-    /**
-     * Increase timeslot number.
-     * Increment frame number also if timeslot wrap around
-     * @param val Value to increase, interval: [1..7]
-     */
-    inline void incTn(uint8_t val) {
-	    if (!val || val > 8)
-		return;
-	    m_tn += val;
-	    if (m_tn > 7) {
-		m_tn -= 8;
-		incFn();
-	    }
-	}
-
-    /**
-     * Increase timeslot number using large value (greater than 8).
-     * Increment frame number also if timeslot wrap around
-     * @param val Value to increase
-     */
-    inline void incTnLarge(unsigned int val) {
-	    if (val > 8) {
-		// Increasing timeslot with multiple of 8 will maintain it's current value
-		// Just increment the frame number for each 8 timeslots
-		m_fn = incFn(m_fn,val / 8);
-		// Advance for the rest
-		incTn(val % 8);
-	    }
-	    else
-		incTn(val);
-	}
-
-    /**
-     * Decrement timeslot number.
-     * Decrement frame number also if timeslot wrap around
-     */
-    inline void decTn() {
-	    if (m_tn)
-		m_tn--;
-	    else {
-		m_tn = 7;
-		decFn();
-	    }
-	}
-
-    /**
-     * Decrease timeslot number.
-     * Decrement frame number also if timeslot wrap around
-     * @param val Value to decrease, interval: [1..7]
-     */
-    inline void decTn(uint8_t val) {
-	    if (!val || val > 8)
-		return;
-	    if (m_tn >= val)
-		m_tn -= val;
-	    else {
-		m_tn = (uint8_t)(8 + ((int)m_tn - (int)val));
-		decFn();
-	    }
-	}
+	{ return m_time % 8; }
 
     /**
      * Advance time
@@ -221,23 +145,31 @@ public:
      * @param tn Timeslot number to advance
      */
     inline void advance(uint32_t fn, uint8_t tn = 0)
-	{ sum(m_fn,m_tn,m_fn,m_tn,fn,tn); }
+	{ m_time += fn * 8 + tn; }
 
     /**
      * Greater then comparison operator
      * @param other Object to compare with
-     * @return True if this time is greater then given time
+     * @return True if this time is greater than given time
      */
     inline bool operator>(const GSMTime& other) const
-	{ return compare(fn(),tn(),other.fn(),other.tn()) > 0; }
+	{ return m_time > other.m_time; }
+
+    /**
+     * Less then comparison operator
+     * @param other Object to compare with
+     * @return True if this time is less than given time
+     */
+    inline bool operator<(const GSMTime& other) const
+	{ return m_time < other.m_time; }
 
     /**
      * Greater then or equal to comparison operator
      * @param other Object to compare with
-     * @return True if this time is less then given time
+     * @return True if this time is less than given time
      */
     inline bool operator>=(const GSMTime& other) const
-	{ return compare(fn(),tn(),other.fn(),other.tn()) >= 0; }
+	{ return m_time >= other.m_time; }
 
     /**
      * Equality operator
@@ -245,7 +177,7 @@ public:
      * @return True if this time is equal with given time
      */
     inline bool operator==(const GSMTime& other) const
-	{ return compare(fn(),tn(),other.fn(),other.tn()) == 0; }
+	{ return m_time == other.m_time; }
 
     /**
      * Inequality operator
@@ -253,135 +185,50 @@ public:
      * @return True if this time is not equal with given time
      */
     inline bool operator!=(const GSMTime& other) const
-	{ return compare(fn(),tn(),other.fn(),other.tn()) != 0; }
+	{ return m_time != other.m_time; }
 
     /**
      * Asignment operator
      * @param src Source object
      */
     inline GSMTime& operator=(const GSMTime& src) {
-	    m_fn = src.fn();
-	    m_tn = src.tn();
+	    m_time = src.m_time;
 	    return *this;
 	}
 
     /**
-     * Add time values
-     * @param fn Destination frame number
-     * @param tn Destination timeslot number
-     * @param fn1 First frame number
-     * @param tn1 First timeslot number
-     * @param fn2 Second frame number
-     * @param tn2 Second timeslot number
+     * Asignment operator
+     * @param time Time to assign
      */
-    static inline void sum(uint32_t& fn, uint8_t& tn, uint32_t fn1, uint8_t tn1,
-	uint32_t fn2, uint8_t tn2) {
-	    tn = (tn1 + tn2) % 8;
-	    fn = (fn1 + fn2 + (tn1 + tn2) / 8) % GSM_HYPERFRAME_MAX;
+    inline GSMTime& operator=(uint64_t time) {
+	    m_time = time;
+	    return *this;
 	}
 
     /**
-     * Calculate the difference between time values
-     * @param fn Destination frame number
-     * @param tn Destination timeslot number
-     * @param fn1 First frame number
-     * @param tn1 First timeslot number
-     * @param fn2 Second frame number
-     * @param tn2 Second timeslot number
+     * Postfix increment timeslot operator
      */
-    static inline void diff(uint32_t& fn, uint8_t& tn, uint32_t fn1, uint8_t tn1,
-	    uint32_t fn2, uint8_t tn2) {
-	    if (tn1 < tn2) {
-		tn1 += 8;
-		(fn1 == 0) ? (fn1 = GSM_HYPERFRAME_MAX) : fn1--;
-	    }
-	    tn = tn1 - tn2;
-	    fn = (fn1 >= fn2) ? (fn1 - fn2) : (GSM_HYPERFRAME_MAX - fn2 + fn1);
+    inline GSMTime& operator++(int) {
+	    m_time++;
+	    return *this;
 	}
 
     /**
-     * Calculate the difference between given time values
-     * @param dest The destination time value
-     * @param t1 First timer
-     * @param t2 Second timer
+     * Cast to uint64_t operator
      */
-    static inline void diff(GSMTime& dest, const GSMTime& t1, const GSMTime& t2)
-	{ diff(dest.m_fn,dest.m_tn,t1.fn(),t1.tn(),t2.fn(),t2.tn()); }
+    inline operator uint64_t() const
+	{ return m_time; }
 
     /**
-     * Compare time values
-     * @param fn1 First frame number
-     * @param tn1 First timeslot number
-     * @param fn2 Second frame number
-     * @param tn2 Second timeslot number
-     * @return Negative if first time is less then the second one, positive if first
-     *  time is greater then the second one, 0 if equal
+     * Convert an absolute time in timeslots to frame number
+     * @param time Value to convert
+     * @return Frame number
      */
-    static inline int32_t compare(uint32_t fn1, uint8_t tn1, uint32_t fn2, uint8_t tn2) {
-	    if (fn1 != fn2)
-		return fnOffset(fn1,fn2);
-	    return (int)tn1 - (int)tn2;
-	}
+    static inline uint32_t time2fn(uint64_t time)
+	{ return (uint32_t)((time / 8) % GSM_HYPERFRAME_MAX); }
 
-    /**
-     * Compare time values
-     * @param t1 First time
-     * @param t2 Second time
-     * @return Negative if first time is less then the second one, positive if first
-     *  time is greater then the second one, 0 if equal
-     */
-    static inline int32_t compare(const GSMTime& t1, const GSMTime& t2)
-	{ return compare(t1.fn(),t1.tn(),t2.fn(),t2.tn()); }
-
-    /**
-     * Compare time values. Increment first time frame number before comparison
-     * @param t1 First time
-     * @param t2 Second time
-     * @param t1FN Value to add to first time frame number
-     * @return Negative if first time is less then the second one, positive if first
-     *  time is greater then the second one, 0 if equal
-     */
-    static inline int32_t compare(const GSMTime& t1, const GSMTime& t2, uint32_t t1FN)
-	{ return compare((t1.fn() + t1FN) % GSM_HYPERFRAME_MAX,t1.tn(),t2.fn(),t2.tn()); }
-
-    /**
-     * Calculate the offset between 2 frames inside frame number max value interval
-     * @param fn1 First frame number
-     * @param fn2 Second frame number
-     * @return The offset between fn1 and fn2
-     */
-    static inline int32_t fnOffset(uint32_t fn1, uint32_t fn2) {
-	    int32_t delta = (int32_t)fn1 - (int32_t)fn2;
-	    if (delta >= (int32_t)GSM_HYPERFRAME_MAX_HALF)
-		return delta - (int32_t)GSM_HYPERFRAME_MAX;
-	    if (delta < -(int32_t)GSM_HYPERFRAME_MAX_HALF)
-		return delta + (int32_t)GSM_HYPERFRAME_MAX;
-	    return delta;
-	}
-
-    /**
-     * Calculate the offset, in timeslots, between 2 GSM time
-     * @param t1 First time
-     * @param t2 Second time
-     * @return The offset, in timeslots, between t1 and t2
-     */
-    static inline int tnOffset(const GSMTime& t1, const GSMTime& t2) {
-	    int fnOffs = fnOffset(t1.fn(),t2.fn()) * 8;
-	    return fnOffs + t1.tn() - t2.tn();
-	}
-
-    /**
-     * Increment a frame number
-     * @param val Value to increment
-     * @param step Increment step
-     * @return Incremented value
-     */
-    static inline uint32_t incFn(uint32_t val, uint32_t step = 1)
-	{ return (val + step) % GSM_HYPERFRAME_MAX; }
-
-protected:
-    uint32_t m_fn;                       // Frame number
-    uint8_t m_tn;                        // Timeslot number
+private:
+    uint64_t m_time;
 };
 
 
