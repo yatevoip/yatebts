@@ -162,7 +162,7 @@ void GSMRxBurst::fillEstimatesBuffer()
     *buf++ = (int8_t)(fn >> 16);
     *buf++ = (int8_t)(fn >> 8);
     *buf++ = (int8_t)fn;
-    *buf++ = (int8_t)m_powerLevel;
+    *buf++ = (int8_t)-m_powerLevel;
     *buf++ = (int8_t)(toa >> 8);
     *buf++ = (int8_t)toa;
 }
