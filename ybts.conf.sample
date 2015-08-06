@@ -194,8 +194,8 @@ Radio.C0=
 ; radio_latency_slots: integer: Estimated radio latency in timeslots
 ; This value is used to drop old bursts from send queue (avoid sending old data to radio)
 ; This parameter is applied on reload
-; Defaults to 9. Allowed interval [0..256]
-;radio_latency_slots=9
+; Defaults to 5. Allowed interval [0..256]
+;radio_latency_slots=5
 
 ; print_status: integer: Print transceiver status on output
 ; This parameter is applied on reload

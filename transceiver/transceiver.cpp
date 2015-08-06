@@ -1125,7 +1125,7 @@ void Transceiver::reInit(const NamedList& params)
     m_upPowerThreshold = params.getIntValue(YSTRING("up_power_warn"),m_upPowerThreshold);
     change(this,m_clockUpdOffset,params,YSTRING("clock_update_offset"),16,0,256);
     change(this,m_txSlots,params,YSTRING("tx_slots"),16,1,1024);
-    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),9,0,256);
+    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),5,0,256);
     m_printStatus = params.getIntValue(YSTRING("print_status"));
     m_printStatusBursts = m_printStatus &&
 	params.getBoolValue(YSTRING("print_status_bursts"),true);
