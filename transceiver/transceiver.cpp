@@ -559,6 +559,21 @@ static inline void change(Transceiver* trx, unsigned int& dest, const NamedList&
     }
 }
 
+static inline const char* encloseDashes(String& s, bool extra = false)
+{
+    static const String s1 = "\r\n-----";
+    if (s)
+	s = s1 + (extra ? "\r\n" : "") + s + s1;
+    return s.safe();
+}
+
+static inline String& appendTime(String& buf, const GSMTime& time, const char* prefix = 0)
+{
+    buf << prefix << time.time();
+    buf << " " << time.fn() << "/" << time.tn();
+    return buf;
+}
+
 static inline String& dumpBits(String& buf, const void* b, unsigned int len)
 {
     DataBlock db((void*)b,len);
@@ -976,9 +991,11 @@ Transceiver::Transceiver(const char* name)
     m_arfcnConf(1),
     m_clockIface("clock"),
     m_clockUpdMutex(false,"TrxClockUpd"),
-    m_clockUpdOffset(2),
+    m_clockUpdOffset(16),
     m_txSlots(16),
-    m_radioLatencySlots(10),
+    m_radioLatencySlots(9),
+    m_printStatus(0),
+    m_printStatusBursts(true),
     m_radioSendChanged(false),
     m_tsc(0),
     m_rxFreq(0),
@@ -1059,7 +1076,7 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	    String tmp;
 	    tmp << "\r\nARFCNs=" << m_arfcnCount;
 	    tmp << "\r\noversampling=" << m_oversamplingRate;
-	    Debug(this,DebugAll,"Initialized [%p]\r\n-----%s\r\n-----",this,tmp.c_str());
+	    Debug(this,DebugAll,"Initialized [%p]%s",this,encloseDashes(tmp));
 	}
 	// Set GSM sample rate: (13e6 / 48) + 1
 	NamedList p("");
@@ -1106,9 +1123,12 @@ void Transceiver::reInit(const NamedList& params)
     m_peakOverMeanThreshold = params.getIntValue(YSTRING("peak_over_mean"),m_peakOverMeanThreshold);
     m_maxPropDelay = params.getIntValue(YSTRING("max_prop_delay"),m_maxPropDelay);
     m_upPowerThreshold = params.getIntValue(YSTRING("up_power_warn"),m_upPowerThreshold);
-    change(this,m_clockUpdOffset,params,YSTRING("clock_update_offset"),2,0,256);
+    change(this,m_clockUpdOffset,params,YSTRING("clock_update_offset"),16,0,256);
     change(this,m_txSlots,params,YSTRING("tx_slots"),16,1,1024);
-    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),10,0,256);
+    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),9,0,256);
+    m_printStatus = params.getIntValue(YSTRING("print_status"));
+    m_printStatusBursts = m_printStatus &&
+	params.getBoolValue(YSTRING("print_status_bursts"),true);
     // Signal update
     m_radioSendChanged = true;
 }
@@ -1123,6 +1143,11 @@ void Transceiver::waitPowerOn()
 // Read radio loop
 void Transceiver::runReadRadio()
 {
+    // Offset between uplink and downlink is 3 timeslots
+    // The read data method returns the timestamp of the next slot
+    // i.e. we must decrease radio clock by 4
+    static const GSMTime s_gsmUpDownOffset(4);
+
     waitPowerOn();
     TrxRadioIO& io = m_rxIO;
     if (m_radio->getRxTime(io.timestamp) != 0)
@@ -1168,8 +1193,8 @@ void Transceiver::runReadRadio()
 	if (!incTn)
 	    continue;
 	GSMTime time = m_signalProcessing.ts2slots(io.timestamp);
-	if (v && time > GSMTime(4)) {
-	    RadioRxData* r = new RadioRxData(0,time - 4);
+	if (v && time >= s_gsmUpDownOffset) {
+	    RadioRxData* r = new RadioRxData(0,time - s_gsmUpDownOffset);
 	    r->m_data.steal(*v);
 	    recvRadioData(r);
 	    // Allocate space for used buffer
@@ -1246,15 +1271,20 @@ void Transceiver::runRadioSendData()
     waitPowerOn();
     GSMTime radioTime;                    // Current radio time (in timeslots) in loop start
     GSMTime endRadioTime;                 // Current radio time in loop end (check again, avoid waiting to rx signal)
-    unsigned int txSlots = m_txSlots;     // Send TX slots in 1 loop
-    unsigned int radioLatencySlots = m_radioLatencySlots; // Radio latency (the diference between radio time,
-                                                          //  as we know it, and estimated actual radio time)
+    unsigned int txSlots = 0;             // Send TX slots in 1 loop
+    unsigned int radioLatencySlots = 0;   // Radio latency (the diference between radio time,
+                                          //  as we know it, and estimated actual radio time)
+    int printStatus = 0;
+    bool printBursts = m_printStatusBursts;
     bool wait = true;
+    m_radioSendChanged = true;
     while (true) {
 	if (m_radioSendChanged) {
 	    m_radioSendChanged = false;
 	    txSlots = m_txSlots;
 	    radioLatencySlots = m_radioLatencySlots;
+	    printStatus = m_printStatus;
+	    printBursts = m_printStatusBursts;
 	}
 	if (wait) {
 	    if (!waitSendTx())
@@ -1265,6 +1295,36 @@ void Transceiver::runRadioSendData()
 	    if (thShouldExit(this))
 		break;
 	    wait = true;
+	}
+	if (printStatus) {
+	    if (printStatus > 0)
+		printStatus--;
+	    String s;
+	    appendTime(s,radioTime,"\r\nRadioClock:\t");
+	    appendTime(s,m_lastClockUpd,"\r\nLastSyncUpper:\t");
+	    appendTime(s,m_txTime,"\r\nTxTime:\t\t");
+	    ARFCNStatsTx aStats;
+	    for (unsigned int i = 0; i < m_arfcnConf; i++) {
+		s << "\r\nARFCN[" << i << "]";
+		ARFCN* a = m_arfcn[i];
+		// Note: some values are taken without protection
+		a->getTxStats(aStats);
+		appendTime(s,a->m_lastUplinkBurstOutTime,"\r\n  UplinkLastOutTime:\t");
+		appendTime(s,aStats.burstLastInTime,"\r\n  DownlinkLastInTime:\t");
+		if (printBursts) {
+		    uint64_t rx = a->m_rxBursts;
+		    String tmp;
+		    uint64_t dropped = a->dumpDroppedBursts(&tmp);
+		    s << "\r\n  RxBursts:\t\t" << rx;
+		    s << "\r\n  RxDroppedBursts:\t" << dropped << " " << tmp;
+		    s << "\r\n  TxMissSyncOnSend:\t" << aStats.burstsMissedSyncOnSend;
+		    s << "\r\n  TxExpiredOnSend:\t" << aStats.burstsExpiredOnSend;
+		    s << "\r\n  TxExpiredOnRecv:\t" << aStats.burstsExpiredOnRecv;
+		    s << "\r\n  TxFutureOnRecv:\t" << aStats.burstsFutureOnRecv;
+		    s << "\r\n  TxDupOnRecv:\t\t" << aStats.burstsDupOnRecv;
+		}
+	    }
+	    Output("Transceiver(%s) status: [%p]%s",debugName(),this,encloseDashes(s));
 	}
 	GSMTime radioCurrentTime = radioTime + radioLatencySlots;
 	GSMTime txTime = m_txTime;
@@ -1395,10 +1455,12 @@ bool Transceiver::sendBurst(GSMTime time)
 	if (!burst) {
 	    if (sync) {
 		m_sendBurstBuf.resize(m_sendBurstBuf.length());
-		if (statistics())
-		    Debug(this,DebugNote,
-			"Requested to get SYNC burst from filler table (FN=%u TN=%u T2=%d T3=%d)",
-			time.fn(),time.tn(),t2,t3);
+		a->m_txStats.burstsMissedSyncOnSend++;
+		if (statistics()) {
+		    String tmp;
+		    Debug(this,DebugNote,"Missing SYNC burst at %s T2=%d T3=%d [%p]",
+			appendTime(tmp,time).c_str(),t2,t3,this);
+		}
 		continue;
 	    }
 	    burst = a->m_fillerTable.get(time);
@@ -1859,11 +1921,20 @@ bool Transceiver::syncGSMTime()
 {
     String tmp("IND CLOCK ");
     Lock lck(m_clockUpdMutex);
-    tmp << (m_txTime.fn() + m_clockUpdOffset);
-    XDebug(this,DebugAll,"Sending radio time sync at " FMT64U " fn=%u [%p]",
-	m_txTime.time(),m_txTime.fn(),this);
+    m_lastClockUpd = m_txTime + m_clockUpdOffset;
+    tmp << m_lastClockUpd.fn();
     // Next update in 1 second
     m_nextClockUpdTime = m_txTime + GSM_SLOTS_SEC;
+#ifdef XDEBUG
+    String sent;
+    String crt;
+    String next;
+    appendTime(sent,m_lastClockUpd);
+    appendTime(crt,m_txTime);
+    appendTime(next,m_nextClockUpdTime);
+    Debug(this,DebugInfo,"Sending radio time sync %s at %s next %s [%p]",
+	sent.c_str(),crt.c_str(),next.c_str(),this);
+#endif
     if (m_clockIface.m_socket.valid()) {
 	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0)
 	    return true;
@@ -2722,8 +2793,7 @@ void TransceiverQMF::radioPowerOnStarting()
 #endif
     }
     if (tmp)
-	Debug(this,DebugAll,"%sQMF nodes: [%p]\r\n-----%s\r\n-----",
-	    prefix(),this,tmp.c_str());
+	Debug(this,DebugAll,"%sQMF nodes: [%p]%s",prefix(),this,encloseDashes(tmp));
     // Generate the half band filter coefficients
     if (m_halfBandFltCoeffLen && m_halfBandFltCoeff.length() != m_halfBandFltCoeffLen) {
 	m_halfBandFltCoeff.assign(m_halfBandFltCoeffLen);
@@ -3051,8 +3121,8 @@ void TransceiverQMF::checkDemodPerf(const ARFCN* a, const GSMRxBurst& b, int bTy
 	if (ts[i] == bp[i])
 	    continue;
 	String t1, t2;
-	tscDump = "\r\n-----\r\nTSC:   " + dumpBits(t1,(void*)ts,GSM_NB_TSC_LEN) +
-	    "\r\nburst: " + dumpBits(t2,bp,GSM_NB_TSC_LEN) + "\r\n-----";
+	tscDump = "TSC:   " + dumpBits(t1,(void*)ts,GSM_NB_TSC_LEN) +
+	    "\r\nburst: " + dumpBits(t2,bp,GSM_NB_TSC_LEN);
 	level = DebugWarn;
 	break;
     }
@@ -3064,7 +3134,7 @@ void TransceiverQMF::checkDemodPerf(const ARFCN* a, const GSMRxBurst& b, int bTy
     Debug(a,level,
 	"%sProcessed RX burst %s: DemodPerformance=%s TSC=%s power=%g [%p]%s",
 	a->prefix(),burstInfo.c_str(),demodPerf.c_str(),(tscDump ? "invalid" : "ok"),
-	b.m_powerLevel,a,tscDump.c_str());
+	b.m_powerLevel,a,encloseDashes(tscDump,true));
 }
 
 //
@@ -3372,9 +3442,12 @@ void ARFCN::moveBurstsToFillers(const GSMTime& time, bool warnExpired)
 	m_fillerTable.set(static_cast<GSMTxBurst*>(o->remove(false)));
 	expired++;
     }
-    if (expired && warnExpired)
-	Debug(this,DebugNote,"%s%u burst(s) expired at fn=%u tn=%u [%p]",
-	    prefix(),expired,time.fn(),time.tn(),this);
+    if (!expired)
+	return;
+    m_txStats.burstsExpiredOnSend += expired;
+    if (warnExpired)
+	Debug(this,DebugNote,"%s%u burst(s) expired at " FMT64U " (%u/%u) [%p]",
+	    prefix(),expired,time.time(),time.fn(),time.tn(),this);
 }
 
 // Initialize a timeslot and related data
@@ -3496,12 +3569,15 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     transceiver()->getTxTime(txTime);
     Lock myLock(m_txMutex);
 
+    String t;
+    String tmp;
+    m_txStats.burstLastInTime = burst->time();
     if (burst->filler() || txTime > burst->time()) {
 	if (!burst->filler()) {
-	    Debug(this,DebugNote,
-		"%sReceived delayed burst fn=%u tn=%u current: fn=%u tn=%u [%p]",
-		prefix(),burst->time().fn(),burst->time().tn(),
-		txTime.fn(),txTime.tn(),this);
+	    Debug(this,DebugNote,"%sReceived delayed burst %s at %s [%p]",
+		prefix(),appendTime(t,burst->time()).c_str(),
+		appendTime(tmp,txTime).c_str(),this);
+	    m_txStats.burstsExpiredOnRecv++;
 	}
 	m_expired.insert(burst);
 	return;
@@ -3510,10 +3586,10 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     if (burst->time() > tmpTime) {
 	if (debugAt(DebugNote)) {
 	    GSMTime diff(burst->time().time() - txTime);
-	    Debug(this,DebugNote,
-		"%sReceived burst too far in future by " FMT64U " timeslots (fn=%u tn=%u) [%p]",
-		prefix(),diff.time(),diff.fn(),diff.tn(),this);
+	    Debug(this,DebugNote,"%sReceived burst too far in future by %s at %s [%p]",
+		prefix(),appendTime(t,diff).c_str(),appendTime(tmp,txTime).c_str(),this);
 	}
+	m_txStats.burstsFutureOnRecv++;
 	m_expired.insert(burst);
 	return;
     }
@@ -3521,15 +3597,16 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     for (ObjList* o = m_txQueue.skipNull();o;o = o->skipNext()) {
 	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
 	if (burst->time() > b->time()) {
-	    XDebug(this,DebugAll,"%sInsert burst fn=%u tn=%u [%p]",
-		prefix(),burst->time().fn(),burst->time().tn(),this);
+	    XDebug(this,DebugAll,"%sInsert burst %s [%p]",
+		prefix(),appendTime(t,burst->time()).c_str(),this);
 	    o->insert(burst);
 	    return;
 	}
 	if (burst->time() == b->time()) {
-	    Debug(this,DebugAll,"%sDuplicate burst received fn=%u tn=%u [%p]",
-		prefix(),b->time().fn(),b->time().tn(),this);
+	    Debug(this,DebugAll,"%sDuplicate burst received at %s [%p]",
+		prefix(),appendTime(t,burst->time()).c_str(),this);
 	    TelEngine::destruct(burst);
+	    m_txStats.burstsDupOnRecv++;
 	    return;
 	}
 	last = o;
@@ -3844,6 +3921,7 @@ bool ARFCNSocket::recvBurst(GSMRxBurst*& burst)
 {
     if (!burst)
 	return true;
+    m_lastUplinkBurstOutTime = burst->time();
     burst->fillEstimatesBuffer();
     return m_data.writeSocket(burst->m_bitEstimate,ARFCN_RXBURST_LEN,*this) >= 0;
 }

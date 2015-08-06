@@ -738,10 +738,13 @@ protected:
     TransceiverSockIface m_clockIface;   // Upper layer clock sync socket
     Mutex m_clockUpdMutex;               // Protect clock update and tx time
     GSMTime m_nextClockUpdTime;          // Next clock update time
-    unsigned int m_clockUpdOffset;       // Offset (in frames) for radio time sent to upper layer
+    GSMTime m_lastClockUpd;              // Last clock value advertised to upper layer
+    unsigned int m_clockUpdOffset;       // Offset (in timeslots) for radio time sent to upper layer
     GSMTime m_txTime;                    // Transmit time
     unsigned int m_txSlots;              // The number of timeslots to send in one loop
     unsigned int m_radioLatencySlots;    // Radio latency in timeslots
+    int m_printStatus;                   // Print transceiver status
+    bool m_printStatusBursts;            // Print bursts counters in status
     bool m_radioSendChanged;             // Flag used to signal data changed for radio send data thread
     ComplexVector m_sendBurstBuf;        // Send burst buffer
     SignalProcessing m_signalProcessing; // SignalProcessing class initialized for this tranceiver
@@ -1063,6 +1066,22 @@ private:
 };
 
 
+class ARFCNStatsTx
+{
+public:
+    inline ARFCNStatsTx()
+	: burstsMissedSyncOnSend(0), burstsExpiredOnSend(0), burstsExpiredOnRecv(0),
+	burstsFutureOnRecv(0), burstsDupOnRecv(0)
+	{}
+    GSMTime burstLastInTime;             // Time of last downlink burst received from upper layer
+    uint64_t burstsMissedSyncOnSend;     // The number a SYNC burst is missing on send time
+    uint64_t burstsExpiredOnSend;        // The number of expired bursts on send time
+    uint64_t burstsExpiredOnRecv;        // The number of already expired bursts on receive time
+    uint64_t burstsFutureOnRecv;         // The number of bursts in future on receive time
+    uint64_t burstsDupOnRecv;            // The number of duplicate bursts on receive time
+};
+
+
 /**
  * This class implements a transceiver ARFCN
  * @short An ARFCN
@@ -1268,6 +1287,15 @@ public:
     inline GSMTxBurst* getFiller(const GSMTime& t)
 	{ return m_fillerTable.get(t); }
 
+    /**
+     * Retrieve TX statistics
+     * @param dest Destination
+     */
+    inline void getTxStats(ARFCNStatsTx& dest) {
+	    Lock lck(m_txMutex);
+	    dest = m_txStats;
+	}
+	
 protected:
     /**
      * Move expired and filler bursts filler table
@@ -1332,6 +1360,8 @@ protected:
     uint64_t m_rxBurstsStart;            // Received bursts start time
     uint64_t m_rxBursts;                 // Received bursts
     uint64_t m_rxDroppedBursts[RxDropCount]; // Dropped Rx bursts
+    GSMTime m_lastUplinkBurstOutTime;    // Time of last uplink burst sent to upper layer
+    ARFCNStatsTx m_txStats;              // TX statistics
     float m_averegeNoiseLevel;           // Averege noise level
     TrafficShower m_rxTraffic;           // RX traffic parameters
     TrafficShower m_txTraffic;           // TX traffic parameters

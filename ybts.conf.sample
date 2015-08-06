@@ -180,11 +180,11 @@ Radio.C0=
 ; Defaults to 10.
 ;Timeout.Clock=10
 
-; clock_update_offset: integer: Offset (in GSM frames) for radio clock advertised to upper layer
+; clock_update_offset: integer: Offset (in GSM timeslots) for radio clock advertised to upper layer
 ; This value is added to current radio clock when synchronizing with upper layer
 ; This parameter is applied on reload
-; Defaults to 2. Allowed interval [0..256]
-;clock_update_offset=2
+; Defaults to 16. Allowed interval [0..256]
+;clock_update_offset=16
 
 ; tx_slots: integer: The number of timeslots to send in one loop
 ; This parameter is applied on reload
@@ -194,8 +194,21 @@ Radio.C0=
 ; radio_latency_slots: integer: Estimated radio latency in timeslots
 ; This value is used to drop old bursts from send queue (avoid sending old data to radio)
 ; This parameter is applied on reload
-; Defaults to 10. Allowed interval [0..256]
-;radio_latency_slots=10
+; Defaults to 9. Allowed interval [0..256]
+;radio_latency_slots=9
+
+; print_status: integer: Print transceiver status on output
+; This parameter is applied on reload
+; New value will override old value even if not changed
+; Values:
+;   0: disable
+;   negative: forever, until changed
+;   positive: the number of times to print it
+;print_status=0
+
+; print_status_bursts: integer: Print burst counters when printing transceiver status
+; This parameter is applied on reload and is ignored if print_status is 0
+;print_status_bursts=yes
 
 
 [control]
