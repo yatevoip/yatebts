@@ -35,6 +35,8 @@ class GSMRxBurst;                        // A received GSM burst
 // TDMA frame number max value (see TS 100 908 (GSM 05.02) Section 4.3.3)
 // The actual maximum value is GSM_HYPERFRAME_MAX - 1 (2715647)
 #define GSM_HYPERFRAME_MAX (26U * 51U * 2048U)
+// The number of timeslots in a hyperframe
+#define GSM_HYPERFRAME_TS (GSM_HYPERFRAME_MAX * 8U)
 // The number of timeslots in 1 second (216(6) frames)
 #define GSM_SLOTS_SEC (217 * 8)
 
@@ -140,6 +142,13 @@ public:
 	{ return m_time % 8; }
 
     /**
+     * Retrieve the timeslot number in hyperframe
+     * @return Timeslot number
+     */
+    inline uint32_t timeslot() const
+	{ return m_time % GSM_HYPERFRAME_TS; }
+
+    /**
      * Advance time
      * @param fn Frame number to advance
      * @param tn Timeslot number to advance
@@ -153,7 +162,7 @@ public:
      * @return True if this time is greater than given time
      */
     inline bool operator>(const GSMTime& other) const
-	{ return m_time > other.m_time; }
+	{ return diff(other) > 0; }
 
     /**
      * Less then comparison operator
@@ -161,23 +170,31 @@ public:
      * @return True if this time is less than given time
      */
     inline bool operator<(const GSMTime& other) const
-	{ return m_time < other.m_time; }
+	{ return diff(other) < 0; }
 
     /**
      * Greater then or equal to comparison operator
      * @param other Object to compare with
-     * @return True if this time is less than given time
+     * @return True if this time is greater or equal than given time
      */
     inline bool operator>=(const GSMTime& other) const
-	{ return m_time >= other.m_time; }
+	{ return diff(other) >= 0; }
 
     /**
-     * Equality operator
+     * Less then or equal to comparison operator
+     * @param other Object to compare with
+     * @return True if this time is less or equal than given time
+     */
+    inline bool operator<=(const GSMTime& other) const
+	{ return diff(other) <= 0; }
+
+    /**
+     * Equality operator, compares modulo hyperframe length
      * @param other Object to compare with
      * @return True if this time is equal with given time
      */
     inline bool operator==(const GSMTime& other) const
-	{ return m_time == other.m_time; }
+	{ return diff(other) == 0; }
 
     /**
      * Inequality operator
@@ -185,7 +202,7 @@ public:
      * @return True if this time is not equal with given time
      */
     inline bool operator!=(const GSMTime& other) const
-	{ return m_time != other.m_time; }
+	{ return diff(other) != 0; }
 
     /**
      * Asignment operator
@@ -218,6 +235,16 @@ public:
      */
     inline operator uint64_t() const
 	{ return m_time; }
+
+    /**
+     * Compute difference in timeslots to another time in same hyperframe
+     * @param other Object to substract from this
+     * @return Difference in timeslots taking into account hyperframe wraparound
+     */
+    inline int32_t diff(const GSMTime& other) const {
+	uint32_t t = (GSM_HYPERFRAME_TS + timeslot() - other.timeslot()) % GSM_HYPERFRAME_TS;
+	return (t < (GSM_HYPERFRAME_TS / 2)) ? t : (t - GSM_HYPERFRAME_TS);
+    }
 
     /**
      * Convert an absolute time in timeslots to frame number
