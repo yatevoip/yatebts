@@ -1342,6 +1342,22 @@ public:
 	unsigned int middle, float param = 1.0);
 
     /**
+     * Convert a linear power value to decibels, limit down to -120dB
+     * @param power Linear power value
+     * @return Power in decibels
+     */
+    static inline float power2db(float power)
+	{ return (power >= 1e-12) ? (10.0 * ::log10f(power)) : -120.0; }
+
+    /**
+     * Convert a power value from decibels to linear
+     * @param db Power in decibels
+     * @return Linear value of power
+     */
+    static inline float db2power(float db)
+	{ return ::powf(10.0, 0.1 * db); }
+
+    /**
      * Sum 'out' with input 'data'.
      * Avoid 'out' data realloc (uses copy if it's the first time to sum)
      * @param out Destination vector

@@ -2569,14 +2569,13 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
 
     // Use the last 4 samples of the input data (guard period) to calculate the noise level
     float noise = SignalProcessing::computePower(b.m_data.data(),
-	b.m_data.length(),2,0.5,b.m_data.length() - 2);
-    noise += SignalProcessing::computePower(b.m_data.data(),b.m_data.length(),2,0.5,0);
-    noise /= 4;
-    a->addAverageNoise(10 * ::log10f(noise));
+	b.m_data.length(),2,0.25,b.m_data.length() - 2)
+	    + SignalProcessing::computePower(b.m_data.data(),b.m_data.length(),2,0.25,0);
+    a->addAverageNoise(SignalProcessing::power2db(noise));
 
     // Calculate Signal to Noise ratio
     float SNR = power / noise;
-    b.m_powerLevel = 10 * ::log10f(power);
+    b.m_powerLevel = SignalProcessing::power2db(power);
 
 #ifdef TRANSCEIVER_DUMP_ARFCN_PROCESS_IN
     a->dumpRecvBurst("processRadioBurst()",t,b.m_data.data(),len);
@@ -2630,8 +2629,9 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
     int maxIndex = -1;
     // GSM standards specififys that we should calculate from center +/- 2
     // We use center +/- 5 to be sure
+    unsigned int centerMin = center - 5;
     unsigned int centerMax = center + 5;
-    for (unsigned i = center - 5; i <= centerMax; i++) {
+    for (unsigned i = centerMin; i <= centerMax; i++) {
 	float pwr = he[i].mulConj();
 	rms += pwr;
 	if (pwr < max) 
@@ -2639,8 +2639,8 @@ bool TransceiverQMF::processRadioBurst(unsigned int arfcn, ArfcnSlot& slot, GSMR
 	max = pwr;
 	maxIndex = i;
     }
-    rms /= (he.length() - (center - 5));
-    if (rms == 0) {
+    rms /= (centerMax - centerMin + 1);
+    if (rms < 1e-12) {
 	a->dropRxBurst(ARFCN::RxDropNullRMS,t,len,DebugNote);
 	return false;
     }
@@ -2922,7 +2922,7 @@ void TransceiverQMF::qmf(const GSMTime& time, unsigned int index)
 	final = false;
     }
 
-    crt.power = 10 * ::log10f(crt.power);
+    crt.power = SignalProcessing::power2db(crt.power);
 
 #ifdef XDEBUG
     String tmp;
@@ -2936,7 +2936,8 @@ void TransceiverQMF::qmf(const GSMTime& time, unsigned int index)
     dumpRecvBurst(tmp1,time,crt.data.data(),crt.data.length());
 #endif
     dumpRxData("qmf[",index,"].x",crt.data.data(),crt.data.length());
-    if (crt.power < m_burstMinPower)
+    // Even if the power is too low compute noise from every 9th timeslot
+    if ((crt.power < m_burstMinPower) && (time.timeslot() % 9))
 	return;
     // Forward data to ARFCNs
     if (final) {
