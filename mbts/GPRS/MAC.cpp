@@ -1630,7 +1630,7 @@ static void processRLCUplinkDataBlock(PDCHL1FEC *pdch, RLCRawBlock *src,TBF *res
 static void processUplinkResourceRequest(
 	PDCHL1FEC *requestch,	// The channel the request arrived on.
 	RLCMsgPacketResourceRequest *rmsg,
-	RLCBlockReservation::type restype, RadData &rd)
+	RLCBlockReservation::type restype, const RadData& rachRd, RadData &rd)
 {
 	MSInfo *ms = rmsg->getMS(requestch,true);
 	if (!ms) {
@@ -1640,6 +1640,10 @@ static void processUplinkResourceRequest(
 		return;
 	}
 	ms->talkedUp();
+
+	bool isRach = (restype == RLCBlockReservation::ForRACH);
+	if (isRach && rachRd.mValid) // init MS with RSSI and TE from RACH
+		ms->setRadData(rachRd.mRSSI,rachRd.mTimingError);
 	if (rd.mValid) {
 		ms->setRadData(rd.mRSSI,rd.mTimingError);
 	}
@@ -1650,7 +1654,6 @@ static void processUplinkResourceRequest(
 		if (rmsg->mILevelPresent[tn]) { ms->msILevel.addPoint(rmsg->mILevelTN[tn]); }
 	}
 
-	bool isRach = (restype == RLCBlockReservation::ForRACH);
 	if (isRach) {
 		// After an MS in PacketIdle mode contacts us, we send it a single
 		// block uplink assignment, and this is its answer.
@@ -1833,7 +1836,7 @@ static void processUplinkResourceRequest(
 
 static void processResourceRequest(
 	PDCHL1FEC *pdch,RLCMsgPacketResourceRequest* rmsg,
-	RLCBlockReservation::type restype, RadData &rd)
+	RLCBlockReservation::type restype, RadData& rachRd, RadData &rd)
 {
 	int accessType = rmsg->mAccessTypePresent ? (int) rmsg->mAccessType : 0;
 	//GPRSLOG(1) << "processResourceRequest"<<LOGVAR(accessType);
@@ -1844,7 +1847,7 @@ static void processResourceRequest(
 		case 3: // Mobility Management Procedure.
 		case 1: // Page Response
 		case 2: // Cell Update
-			processUplinkResourceRequest(pdch,rmsg,restype,rd);
+			processUplinkResourceRequest(pdch,rmsg,restype,rachRd,rd);
 			break;
 	}
 }
@@ -1976,7 +1979,7 @@ static void processUplinkBlock(PDCHL1FEC *pdch, RLCRawBlock *src)
 				processDownlinkAckNack(pdch,(RLCMsgPacketDownlinkAckNack*)msg,src->mRD);
 				break;
 			case RLCUplinkMessage::PacketResourceRequest:
-				processResourceRequest(pdch,(RLCMsgPacketResourceRequest*) msg,restype,src->mRD);
+				processResourceRequest(pdch,(RLCMsgPacketResourceRequest*) msg,restype,rd,src->mRD);
 				break;
 			case RLCUplinkMessage::PacketUplinkDummyControlBlock:
 				processUplinkDummy(pdch,(RLCMsgPacketUplinkDummyControlBlock*)msg,src->mRD);
