@@ -1643,7 +1643,7 @@ static void processUplinkResourceRequest(
 
 	bool isRach = (restype == RLCBlockReservation::ForRACH);
 	if (isRach && rachRd.mValid) // init MS with RSSI and TE from RACH
-		ms->setRadData(rachRd.mRSSI,rachRd.mTimingError);
+		ms->initRadData(rachRd.mRSSI,rachRd.mTimingError);
 	if (rd.mValid) {
 		ms->setRadData(rd.mRSSI,rd.mTimingError);
 	}

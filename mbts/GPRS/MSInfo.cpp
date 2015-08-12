@@ -844,6 +844,15 @@ void SignalQuality::setRadData(float wRSSI,float wTimingError)
 	adjustTimingAdvance(wTimingError);
 }
 
+void SignalQuality::initRadData(float wRSSI,float wTimingError)
+{
+	mGamma = GetPowerGammaAdjust(wRSSI,GetPowerGamma());
+	mNextTA = mLastTA = GetTimingAdvance(wTimingError);
+	mTimer.setInvalid();
+	mTimerTA.setInvalid();
+	GPRSLOG(DEBUG,GPRS_MSG) << "initRadData TA=" << mNextTA << LOGVAR(mGamma);
+}
+
 // Determine whether we should use slow or fast channel coding for the specified direction.
 ChannelCodingType MSInfo::msGetChannelCoding(RLCDirType wdir) const
 {

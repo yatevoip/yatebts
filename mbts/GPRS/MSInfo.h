@@ -161,6 +161,7 @@ struct SignalQuality {
 	GprsTimer mTimerTA;
 	void setRadData(RadData &rd);
 	void setRadData(float wRSSI,float wTimingError);
+	void initRadData(float wRSSI,float wTimingError);
 	inline int msGetAlpha(bool transmit = true)
 		 { return transmit ? (mLastAlpha = GetPowerAlpha(),mLastAlpha) : mLastAlpha; }
 	inline int msGetGamma(bool transmit = true)

@@ -1026,6 +1026,8 @@ int noise(int argc, char** argv, ostream& os)
         int noise = gTRX.ARFCN(0)->getNoiseLevel();
         os << "noise RSSI is -" << noise << " dB wrt full scale" << endl;
 	os << "MS RSSI target is " << gConfig.getNum("GSM.Radio.RSSITarget") << " dB wrt full scale" << endl;
+	if (gConfig.getBool("GPRS.Enable"))
+		os << "MS GPRS target is " << gConfig.getNum("GPRS.MS.Power.RSSITarget") << " dB wrt full scale" << endl;
 
         return SUCCESS;
 }
