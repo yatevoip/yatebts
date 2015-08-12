@@ -160,7 +160,6 @@ DatagramSocket::~DatagramSocket()
 
 int DatagramSocket::write( const char * message, size_t length )
 {
-	assert(length<=MAX_UDP_LENGTH);
 	int retVal = sendto(mSocketFD, message, length, 0,
 		(struct sockaddr *)mDestination, addressSize());
 	if (retVal == -1 ) perror("DatagramSocket::write() failed");
@@ -169,7 +168,6 @@ int DatagramSocket::write( const char * message, size_t length )
 
 int DatagramSocket::writeBack( const char * message, size_t length )
 {
-	assert(length<=MAX_UDP_LENGTH);
 	int retVal = sendto(mSocketFD, message, length, 0,
 		(struct sockaddr *)mSource, addressSize());
 	if (retVal == -1 ) perror("DatagramSocket::write() failed");
@@ -194,7 +192,6 @@ int DatagramSocket::writeBack( const char * message)
 
 int DatagramSocket::send(const struct sockaddr* dest, const char * message, size_t length )
 {
-	assert(length<=MAX_UDP_LENGTH);
 	int retVal = sendto(mSocketFD, message, length, 0, dest, addressSize());
 	if (retVal == -1 ) perror("DatagramSocket::send() failed");
 	return retVal;
