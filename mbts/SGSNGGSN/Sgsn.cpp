@@ -967,16 +967,16 @@ static void handleAttachRequest(SgsnInfo *si, L3GmmMsgAttachRequest &armsg)
 }
 
 
-static void handleAttachComplete(SgsnInfo *si, L3GmmMsgAttachComplete &acmsg)
+static void handleAttachComplete(SgsnInfo *si, L3GmmUlMsg &msg)
 {
 	// The ms is acknowledging receipt of the new tlli.
 	GmmInfo *gmm = si->getGmm();
-	if (! gmm) {
+	if (!gmm) {
 		// The attach complete does not match this ms state.
 		// Happens, for example, when you first turn on the bts and the ms
 		// is still trying to complete a previous attach.  Ignore it.
 		// The MS will timeout and try to attach again.
-		SGSNLOGF(INFO,GPRS_CHECK_FAIL|GPRS_ERR,"SGSN","Ignoring spurious Attach Complete" << si);
+		SGSNLOGF(INFO,GPRS_CHECK_FAIL|GPRS_ERR,"SGSN","Ignoring spurious " << msg.mtname() << " " << si);
 		// Dont send a reject because we did not reject anything.
 		return;
 	}
@@ -987,16 +987,17 @@ static void handleAttachComplete(SgsnInfo *si, L3GmmMsgAttachComplete &acmsg)
 #if RN_UMTS
 #else
 	// Start using the tlli associated with this imsi/ptmsi when we talk to the ms.
-	si->changeTlli(true);
+	SgsnInfo* othersi = si->changeTlli(true);
 #endif
-	if (si->getConnId() >= 0) {
-		adjustConnectionId(si);
-		MSUEAdapter *ms = si->getMS();
+	if (othersi->getConnId() >= 0) {
+		adjustConnectionId(othersi);
+		MSUEAdapter *ms = othersi->getMS();
 		if (ms)
-			ms->msChangeTlli(si->mMsHandle);
-		gSigConn.send(SigGprsAttachOk,1,si->getConnId());
+			ms->msChangeTlli(othersi->mMsHandle);
+		gSigConn.send(SigGprsAttachOk,1,othersi->getConnId());
 	}
-	addShellRequest("GprsAttach",gmm);
+	if (msg.MTI() == L3GmmMsg::AttachComplete)
+		addShellRequest("GprsAttach",gmm);
 	si->mtAttachInfo.reset();
 
 #if 0 // nope, we are going to pass the TLLI down with each message and let GPRS deal with it.
@@ -1154,27 +1155,9 @@ static void handleRAUpdateRequest(SgsnInfo *si, L3GmmMsgRAUpdateRequest &raumsg)
 	handleRAUpdateReqLocally(si,gmm);
 }
 
-static void handleRAUpdateComplete(SgsnInfo *si, L3GmmMsgRAUpdateComplete &racmsg)
+static inline void handleRAUpdateComplete(SgsnInfo *si, L3GmmMsgRAUpdateComplete &racmsg)
 {
-	GmmInfo *gmm = si->getGmm();
-	if (!gmm) {
-		SGSNLOGF(INFO,GPRS_CHECK_FAIL|GPRS_ERR,"SGSN","Ignoring spurious RA Update Complete" << si);
-		return;
-	}
-	gmm->setGmmState(GmmState::GmmRegisteredNormal);
-	gmm->setAttachTime();
-	gmm->msi = si;
-	// Start using the tlli associated with this imsi/ptmsi when we talk to the ms.
-	si->changeTlli(true);
-
-	if (si->getConnId() >= 0) {
-		adjustConnectionId(si);
-		MSUEAdapter *ms = si->getMS();
-		if (ms)
-			ms->msChangeTlli(si->mMsHandle);
-		gSigConn.send(SigGprsAttachOk,1,si->getConnId());
-	}
-	si->mtAttachInfo.reset();
+	handleAttachComplete(si,racmsg);
 }
 
 // This message may arrive on a DCCH channel via the GSM RR stack, rather than a GPRS message,
@@ -1588,6 +1571,7 @@ static void handleActivatePdpContextRequest(SgsnInfo *si, L3SmMsgActivatePdpCont
 	if (!si->isRegistered()) {
 		sendPdpContextReject(si,SmCause::Message_not_compatible_with_the_protocol_state,pdpr.mTransactionId);
 		sendImplicitlyDetached(si);
+		si->sgsnReset();
 		return;
 	}
 	// Message is valid and the MS is GMM registered
@@ -1777,8 +1761,15 @@ static bool handleL3SmMsg(SgsnInfo *si,ByteVector &frame1)
 		case GprsConnLocal:
 			return false;
 	}
-	if (gGprsMap.find(si->getConnId()) != si)
+	if (gGprsMap.find(si->getConnId()) != si) {
 		SGSNLOGF(ERR,GPRS_ERR,"SGSN","SM for not mapped" << si);
+		if (!si->isRegistered()) {
+			sendImplicitlyDetached(si);
+			si->sgsnReset();
+			return true;
+		}
+		adjustConnectionId(si);
+	}
 	switch (mt) {
 		case L3SmMsg::ActivatePDPContextRequest:
 			{
