@@ -508,7 +508,7 @@ std::ostream& operator<<(std::ostream& os, const TBF*tbf);
 std::ostream& operator<<(std::ostream& os, const TBF*tbf)
 {
 	if (tbf) {
-		os << " TBF#" << tbf->mtDebugId <<" ";
+		os << " TBF#" << tbf->mtDebugId <<" TFI=" << tbf->mtTFI << " TBF_TLLI=" << LOGVALHEX(tbf->mtTlli);
 	} else {
 		os << " TBF(null ptr) ";
 	}

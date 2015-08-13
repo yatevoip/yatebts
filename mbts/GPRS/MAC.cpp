@@ -1956,7 +1956,7 @@ static void processUplinkBlock(PDCHL1FEC *pdch, RLCRawBlock *src)
 		case MACPayloadType::RLCData:
 			if (restype != RLCBlockReservation::None) {
 				// This happened alot before fixing the transceiverRAD1.
-				GLOG(ERR) << "ERROR: Received reservation in RLC data block";
+				GLOG(ERR) << "ERROR: Received reservation " << restype << " in RLC data block";
 			}
 			processRLCUplinkDataBlock(pdch,src,restbf);
 			break;
