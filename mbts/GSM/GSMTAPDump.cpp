@@ -156,7 +156,7 @@ void gWriteGSMTAP(unsigned ARFCN, unsigned TS, unsigned FN,
 	if (!(ofs = buildHeader(buffer,MAX_DUMP_LENGTH,ARFCN,TS,FN,
 					to,is_saach,ul_dln,wType,0)))
 		return;
-	if ((ofs + (frame.size() / 8)  + (frame.size() % 8 ? 1 : 0)) > MAX_DUMP_LENGTH) {
+	if ((ofs + (frame.size() + 7) / 8) > MAX_DUMP_LENGTH) {
 		LOG(NOTICE) << "Built GSMTAP buffer exceeds max length=" << MAX_DUMP_LENGTH 
 			<< " header_len=" << ofs << " data_len=" << frame.size() / 8  << ", not dumping";
 		return;

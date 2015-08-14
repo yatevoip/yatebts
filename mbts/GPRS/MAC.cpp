@@ -1604,7 +1604,7 @@ static void processRLCUplinkDataBlock(PDCHL1FEC *pdch, RLCRawBlock *src,TBF *res
 				<<" tbf=" <<tbf <<" bsn="<<src->mBSN <<tbf<<oss.str();
 		}
 		if (restbf && restbf != tbf) {
-			GLOG(ERR) << "Incoming block reservation does not match "<<tbf<< LOGVAR(restbf);
+			GLOG(ERR) << "Incoming block reservation for" << restbf << " does not match received "<< tbf;
 		}
 		tbf->engineRecvDataBlock(rb,pdch->TN());
 	} else {
