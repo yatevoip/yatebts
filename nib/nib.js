@@ -1162,7 +1162,7 @@ function onRegister(msg)
 		else if (msg["auth.response"]!="") {
 		    if (checkAuth(msg,imsi)==false)
 			return false;
-	    	} 
+		} 
 		else if (msg["auth.auts"]) {
 		    return authResync(msg,imsi);
 		}
@@ -1369,10 +1369,11 @@ function onCommand(msg)
 	    msg.retValue("Incomplete command!\r\n");
 	    return true;
     }
+
     var part = msg.line.split(" ");
     var build_command = part[0] + " " +part[1];
     var part_command = "nib registered";
-    
+
     if (build_command != part_command)
 	return false;
 
@@ -1384,12 +1385,13 @@ function onCommand(msg)
     var tmp = part[3]+" not registered.";
     for (var imsi_key in registered_subscribers) {
 	if (imsi_key != part[2])
-		continue;
-        if (registered_subscribers[imsi_key]["location"]!="") 
-                var tmp = imsi_key+" is registered.\r\n";
-        msg.retValue(tmp);
-        return true;
+	    continue;
+	if (registered_subscribers[imsi_key]["location"]!="")
+	    var tmp = imsi_key+" is registered.\r\n";
+	msg.retValue(tmp);
+	return true;
     }
+
     msg.retValue(tmp);
     return false;
 }
