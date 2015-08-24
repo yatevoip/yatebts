@@ -2,18 +2,10 @@
 # to add a revision tag run rpmbuild --define 'revision value'
 # to create a debug info package run rpmbuild --define 'debuginfo 1'
 # to suppress auto dependencies run rpmbuild --define 'nodeps 1'
-# to disable RAD1 support run rpmbuild --define 'norad1 1'
-# to disable bladeRF support run rpmbuild --define 'noblade 1'
-# to disable USRP1 support run rpmbuild --define 'nousrp1 1'
-# to disable UHD support run rpmbuild --define 'nouhd 1'
 
 %{!?dist:%define dist %{nil}}
 %{!?revision:%define revision %{nil}}
 %{?nodeps:%define no_auto_deps 1}
-%{?norad1:%define no_rad1 1}
-%{?noblade:%define no_blade 1}
-%{?nousrp1:%define no_usrp1 1}
-%{?nouhd:%define no_uhd 1}
 
 %{!?debuginfo:%define debuginfo %{nil}}
 %if "%{debuginfo}"
@@ -29,6 +21,9 @@
 
 %if "%{dist}" == ""
 %define dist %{?distsuffix:%distsuffix}%{?product_version:%product_version}
+%endif
+%if "%{dist}" == ""
+%define dist %(test -f /etc/mageia-release && echo mga)
 %endif
 %if "%{dist}" == ""
 %define dist %(test -f /etc/mandriva-release && echo mdv)
@@ -53,7 +48,7 @@
 %endif
 
 Summary:	GSM BTS based on Yet Another Telephony Engine
-Name:     	@PACKAGE_TARNAME@
+Name:		@PACKAGE_TARNAME@
 Version: 	@PACKAGE_VERSION@
 Release:	@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{dist}
 License:	GPL
@@ -66,7 +61,8 @@ BuildRequires:	gcc-c++
 BuildRequires:	yate-devel >= @YATE_REQ@
 Requires:	yate = @YATE_VER@
 Requires:	yate-gsm = @YATE_VER@
-Requires:	%{name}-transceiver = %{version}-%{release}
+Requires:	yate-radio = @YATE_VER@
+Conflicts:	yate-bts-transceiver
 
 %define prefix	/usr
 %define moddir	%{_libdir}/yate/server
@@ -77,7 +73,7 @@ Requires:	%{name}-transceiver = %{version}-%{release}
 Yate is a telephony engine designed to implement PBX and IVR solutions
 for small to large scale projects.
 This module implements a 2G GSM BTS for Yate.
-At least one transceiver package must also be installed for interfacing with the hardware.
+At least one Yate radio device package must also be installed.
 
 %files
 %defattr(-, root, root)
@@ -100,7 +96,6 @@ if grep -q '^ *Radio.C0 *= *[0-9]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; th
 fi
 
 %postun
-test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
 if [ -s /usr/lib/systemd/system/yate.service ]; then
     systemctl condrestart yate.service
 else
@@ -157,7 +152,7 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2
 	EOF
     fi
 fi
-if ! grep -q '; Installed by yate-bts' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+if ! grep -q '^ *mode *=' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
     if grep -q '^ *\[ybts\]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[ybts\]/{sect=1}
@@ -194,6 +189,7 @@ chmod -R g+rw %{_sysconfdir}/yate
 Summary:	SIP based GSM roaming support for Yate-BTS
 Group:		Applications/Communications
 Requires:	%{name} = %{version}-%{release}
+Requires:	yate-scripts = @YATE_VER@
 Requires(post):	gawk
 
 %description roaming
@@ -207,7 +203,7 @@ Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE serve
 
 %post roaming
 sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{_sysconfdir}/yate/javascript.conf
-if ! grep -q '; Installed by yate-bts' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+if ! grep -q '^ *mode *=' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
     if grep -q '^ *\[ybts\]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[ybts\]/{sect=1}
@@ -256,120 +252,6 @@ if ! grep -q '; Installed by yate-bts-roaming +handover' %{_sysconfdir}/yate/ysi
 fi
 
 
-%if "%{no_rad1}" != "1"
-
-%package rad1
-Summary:	RAD1 transceiver support for Yate-BTS
-Group:		Applications/Communications
-Provides:	%{name}-transceiver
-Requires:	%{name} = %{version}-%{release}
-
-%description rad1
-RAD1 transceiver executable and support files for Yate-BTS.
-
-%files rad1
-%defattr(-, root, root)
-%{btsdir}/transceiver-rad1
-%{btsdir}/ezusb.ihx
-%{btsdir}/fpga.rbf
-
-%post rad1
-test -f %{btsdir}/transceiver || ln -sf transceiver-rad1 %{btsdir}/transceiver
-
-%postun rad1
-test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
-
-%define conf_rad1 --enable-rad1
-%else
-%define conf_rad1 --disable-rad1
-%endif
-
-
-%if "%{no_blade}" != "1"
-
-%package bladerf
-Summary:	bladeRF transceiver support for Yate-BTS
-Group:		Applications/Communications
-Provides:	%{name}-transceiver
-Requires:	%{name} = %{version}-%{release}
-
-%description bladerf
-bladeRF transceiver executable and support files for Yate-BTS.
-
-%files bladerf
-%defattr(-, root, root)
-%{btsdir}/transceiver-bladerf
-%{btsdir}/firmware.img
-%{btsdir}/hostedx40.rbf
-%{btsdir}/hostedx115.rbf
-
-%post bladerf
-test -f %{btsdir}/transceiver || ln -sf transceiver-bladerf %{btsdir}/transceiver
-
-%postun bladerf
-test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
-
-%define conf_blade --enable-bladerf
-%else
-%define conf_blade --disable-bladerf
-%endif
-
-
-%if "%{no_usrp1}" != "1"
-
-%package usrp1
-Summary:	USRP1 transceiver support for Yate-BTS
-Group:		Applications/Communications
-Provides:	%{name}-transceiver
-Requires:	%{name} = %{version}-%{release}
-
-%description usrp1
-USRP1 transceiver executable and support files for Yate-BTS.
-
-%files usrp1
-%defattr(-, root, root)
-%{btsdir}/transceiver-usrp1
-%{btsdir}/std_inband.rbf
-
-%post usrp1
-test -f %{btsdir}/transceiver || ln -sf transceiver-usrp1 %{btsdir}/transceiver
-
-%postun usrp1
-test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
-
-%define conf_usrp1 --enable-usrp1
-%else
-%define conf_usrp1 --disable-usrp1
-%endif
-
-
-%if "%{no_uhd}" != "1"
-
-%package uhd
-Summary:	UHD transceiver support for Yate-BTS
-Group:		Applications/Communications
-Provides:	%{name}-transceiver
-Requires:	%{name} = %{version}-%{release}
-
-%description uhd
-UHD transceiver executable and support files for Yate-BTS.
-
-%files uhd
-%defattr(-, root, root)
-%{btsdir}/bts/transceiver-uhd
-
-%post uhd
-test -f %{btsdir}/transceiver || ln -sf transceiver-uhd %{btsdir}/transceiver
-
-%postun uhd
-test -f %{btsdir}/transceiver || rm -f %{btsdir}/transceiver
-
-%define conf_uhd --enable-uhd
-%else
-%define conf_uhd --disable-uhd
-%endif
-
-
 %prep
 %setup -q -n %{name}
 
@@ -400,8 +282,7 @@ chmod +x %{local_find_provides}
 %endif
 
 %build
-./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man \
-    %{conf_usrp1} %{conf_uhd} %{conf_rad1} %{conf_blade}
+./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man
 make %{stripped}
 
 %install
@@ -413,6 +294,9 @@ ln -sf %{_datadir}/yate/nib_web %{buildroot}/var/www/html/nib
 rm -rf %{buildroot}
 
 %changelog
+* Mon Aug 24 2015 Paul Chitescu <paulc@null.ro>
+- Removed hardware support subpackages
+
 * Thu Apr 24 2014 Paul Chitescu <paulc@null.ro>
 - Added bladerf subpackage
 
