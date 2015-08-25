@@ -1122,6 +1122,14 @@ The IP address of receiving Wireshark, if you use it for real time traces.",
 
 	$fields["YBTS"] = array(
 		"ybts" => array(
+			"mode" => array(
+				array("selected"=> "nib", "nib","roaming"),
+				"display" => "select",
+				"comment" => "BTS mode of operation. This setting will specify which Javascript script 
+to load for the operation. Possible values are:
+    - nib: loads script necessary for Network In a Box mode of operation
+    - roaming: loads script necessary for the roaming mode of operation"
+			),
 			"heartbeat_ping"=> array(
 				"display" => "text",
 				"value" => "30000",
@@ -1309,6 +1317,75 @@ Defaults to 720000",
 				"comment" => "Authenticate MS on MT USSD. This parameter is applied on reload. Defaults to 'no'."
 			)
 
+		),
+		"roaming" => array(
+			"expires" => array(
+				"display" => "text",
+				"value" => "3600",
+				"comment" => "Expire time for registrations."
+			),
+			"reg_sip" => array(
+				"display" => "text",
+				"comment" => "String: ip:port where SIP requests are sent.
+It is REQUIRED to set reg_sip or nodes_sip.
+Example: reg_sip=192.168.1.245:5058",
+				"validity" => array("valid_reg_sip","reg_sip")
+			),
+			"nodes_sip" => array(
+				"display" => "text",
+				"comment" => "json object: node => ip:port of each YateUCN server
+node, which is computed based on the TMSI received from the handset.
+This ensures that registrations are always sent to the same YateUCN server.".
+//It is REQUIRED to set reg_sip or nodes_sip.
+"Example: nodes_sip={\"123\":\"192.168.1.245:5058\",\"101\":\"192.168.1.176:5059\"}",
+				"validity" => array("valid_nodes_sip", "nodes_sip")
+			),
+			"nnsf_bits" => array(
+				"display" => "text",
+				"value" => "8",
+				"comment" => "Int: Number of bits to use for
+the Non Access Stratum (NAS) Node Selection Function (NNSF)."
+			),
+			"my_sip" => array(
+				"display" => "text",
+				"comment" => "string: ip:port for the local SIP listener.
+Unless otherwise configured, this is the IP of the machine
+where YateBTS is installed.
+Example: my_sip=198.168.1.168"
+			),
+			"gstn_location" => array(
+				"display" => "text",
+				"comment" => "String: unique number that identies the cell in the national database
+Associated to each base station by the network operator."
+			),
+			"text_sms" => array(
+				"display" => "checkbox",
+				"comment" => "If possible decode and send the SMS as text/plain SIP MESSAGE body.
+By default the binary type application/vnd.3gpp.sms is used."
+			)
+		),
+
+		"handover" => array(
+			"enable" => array(
+				"display" => "checkbox",
+				"value" => "1",
+				"comment" => "Globally enable handover functions.
+Default is enabled."
+			),
+			"neighbors" => array(
+				"display" => "text",
+				"comment" => "Comma separated list of neighbor SIP addresses.
+Each neighbor will be periodically queried for target handover availability.
+Example: neighbors=10.0.0.1, 10.0.0.2, 10.0.0.3:5065.
+Default is empty."
+			),
+			"reason" => array(
+				"display" => "text",
+				"value" => "GSM;text=\"Handover\"",
+				"comment" => 'Text to place in the Reason SIP header.
+An empty or boolean false value disables the Reason header.
+Default: GSM;text="Handover".'
+			)
 		)
 	);
 

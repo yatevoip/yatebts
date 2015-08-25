@@ -30,7 +30,7 @@ function get_menu_structure()
 		"Transceiver" => array(),
 		"Tapping" => array(),
 		"Test" => array(),
-		"YBTS" => array("YBTS","Security")
+		"YBTS" => array("YBTS","Security","Roaming","Handover")
 	);
 	return $structure;
 }
@@ -169,7 +169,9 @@ function description_ybts_section()
 		"tapping" => "Section [tapping] - settings control if radio layer GSM and GPRS packets are tapped to Wireshark.",
 		"test" => "Section [test] has special parameters used to simulate errors.",
 		"ybts" => "Section [ybts] configures ybts related parameters.",
-		"security" => "Section [security] configures security related parameters."
+		"security" => "Section [security] configures security related parameters.",
+		"roaming" => "Section [roaming] controls parameters used by roaming.js when connecting YateBTS to a core network.",
+		"handover" => "Section [handover] controls handover parameters used by roaming.js."
 	);
 
 	foreach ($section_desc as $subsect => $desc) {

@@ -375,4 +375,42 @@ function check_t3260($field_name, $field_value)
 
 	return array(true);
 }
+
+/*
+ * Validate reg_sip from [roaming] section in ybts.conf: ip:port or just ip
+ */
+function valid_reg_sip($field_name, $field_value)
+{
+	if (!strlen($field_value))
+		return array(true);
+
+	$expl = explode(":",$field_value);
+	$ip = $expl[0];
+	if (!filter_var($ip, FILTER_VALIDATE_IP))
+		return array(false, "Field $field_name '$field_value' doesn't contain a valid IP address.");
+
+	$port = (isset($expl[1])) ? $expl[1] : null;
+	if ($port && !filter_var($port,FILTER_VALIDATE_INT))
+		return array(false, "Field $field_name '$field_value' doesn't contain a valid port.");
+
+	return array(true);
+}
+
+/*
+ * Validate nodes_sip from [roaming] section in ybts.conf
+ */
+function valid_nodes_sip($field_name, $field_value)
+{
+	if (!strlen($field_value))
+		return array(true);
+
+	$field_value = htmlspecialchars_decode($field_value);
+	$decoded = json_decode($field_value);
+
+	if ($decoded===null)
+		return array(false, "Field $field_name '$field_value' isn't a valid JSON object.");
+
+	return array(true);
+}
+
 ?>
