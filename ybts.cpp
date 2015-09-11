@@ -6861,6 +6861,8 @@ bool YBTSChan::initOutgoing(Message& msg)
     s->addParam("caller",caller,false);
     s->addParam("called",msg.getValue(YSTRING("called")),false);
     lck.drop();
+    setMaxcall(msg);
+    setMaxPDD(msg);
     Engine::enqueue(s);
     initChan();
     return initMT();
