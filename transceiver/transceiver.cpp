@@ -1151,7 +1151,7 @@ void Transceiver::runReadRadio()
     // Offset between uplink and downlink is 3 timeslots
     // The read data method returns the timestamp of the next slot
     // i.e. we must decrease radio clock by 4
-    static const GSMTime s_gsmUpDownOffset(4);
+    static const uint64_t s_gsmUpDownOffset = 4;
 
     waitPowerOn();
     TrxRadioIO& io = m_rxIO;
@@ -1198,8 +1198,8 @@ void Transceiver::runReadRadio()
 	if (!incTn)
 	    continue;
 	GSMTime time = m_signalProcessing.ts2slots(io.timestamp);
-	if (v && time >= s_gsmUpDownOffset) {
-	    RadioRxData* r = new RadioRxData(0,time - s_gsmUpDownOffset);
+	if (v && time.time() >= s_gsmUpDownOffset) {
+	    RadioRxData* r = new RadioRxData(0,time.time() - s_gsmUpDownOffset);
 	    r->m_data.steal(*v);
 	    recvRadioData(r);
 	    // Allocate space for used buffer
