@@ -722,8 +722,10 @@ protected:
     Mutex m_stateMutex;                  // Serialize state change
     RadioInterface* m_radio;             // The radio interface
     Thread* m_radioReadThread;           // Worker (read radio data) thread
+    Thread::Priority m_radioReadPrio;    // Read radio worker priority
     Thread* m_radioInThread;             // Worker (process radio input) thread
     Thread* m_radioOutThread;            // Worker (radio feeder) thread
+    Thread::Priority m_radioOutPrio;     // Send radio worker priority
     GenQueue m_rxQueue;                  // Pending radio data
     unsigned int m_oversamplingRate;     // Tranceiver oversampling rate
     int m_burstMinPower;                 // Minimum burst power level to accept

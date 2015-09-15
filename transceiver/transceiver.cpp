@@ -83,14 +83,15 @@ public:
 	TrxRadioOut = 0x0020,
 	RadioMask = TrxRadioRead | TrxRadioIn | TrxRadioOut | ARFCNData | ARFCNRx,
     };
-    TrxWorker(unsigned int type, TransceiverObj* obj)
-	: Thread(lookup(type,s_name)), m_type(type), m_obj(obj)
+    TrxWorker(unsigned int type, TransceiverObj* obj, Thread::Priority prio = Thread::Normal)
+	: Thread(lookup(type,s_name),prio), m_type(type), m_obj(obj)
 	{}
     ~TrxWorker()
 	{ notify(); }
     virtual void cleanup()
 	{ notify(); }
-    static bool create(Thread*& th, int type, TransceiverObj* o);
+    static bool create(Thread*& th, int type, TransceiverObj* o,
+	Thread::Priority prio = Thread::Normal);
     static void cancelThreads(TransceiverObj* o, unsigned int waitMs1, Thread** th1,
 	unsigned int waitMs2 = 0, Thread** th2 = 0,
 	unsigned int waitMs3 = 0, Thread** th3 = 0);
@@ -265,14 +266,14 @@ const TokenDict TrxWorker::s_info[] = {
     {0,0},
 };
 
-bool TrxWorker::create(Thread*& th, int type, TransceiverObj* o)
+bool TrxWorker::create(Thread*& th, int type, TransceiverObj* o, Thread::Priority prio)
 {
     if (!o)
 	return 0;
     if (th)
 	cancelThreads(o,20,&th);
     Lock lck(s_mutex);
-    TrxWorker* tmp = new TrxWorker(type,o);
+    TrxWorker* tmp = new TrxWorker(type,o,prio);
     if (tmp->startup()) {
 	th = tmp;
 	return true;
@@ -976,8 +977,10 @@ Transceiver::Transceiver(const char* name)
     m_stateMutex(false,"TrxState"),
     m_radio(0),
     m_radioReadThread(0),
+    m_radioReadPrio(Thread::Normal),
     m_radioInThread(0),
     m_radioOutThread(0),
+    m_radioOutPrio(Thread::Normal),
     m_rxQueue(24,"TrxRxQueue"),
     m_oversamplingRate(1),
     m_burstMinPower(RX_RSSI_DEF),
@@ -1072,6 +1075,8 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	    break;
 	if (!resetARFCNs(arfcns,port,rAddr,lAddr,nFillers))
 	    break;
+	m_radioReadPrio = Thread::priority(params[YSTRING("radio_read_priority")]);
+	m_radioOutPrio = Thread::priority(params[YSTRING("radio_send_priority")]);
 	if (debugAt(DebugAll)) {
 	    String tmp;
 	    tmp << "\r\nARFCNs=" << m_arfcnCount;
@@ -1790,11 +1795,11 @@ bool Transceiver::radioPowerOn(String* reason)
 	    reasonStr = "radio failure";
 	    break;
 	}
-	if (!TrxWorker::create(m_radioReadThread,TrxWorker::TrxRadioRead,this))
+	if (!TrxWorker::create(m_radioReadThread,TrxWorker::TrxRadioRead,this,m_radioReadPrio))
 	    break;
 	if (!TrxWorker::create(m_radioInThread,TrxWorker::TrxRadioIn,this))
 	    break;
-	if (!TrxWorker::create(m_radioOutThread,TrxWorker::TrxRadioOut,this))
+	if (!TrxWorker::create(m_radioOutThread,TrxWorker::TrxRadioOut,this,m_radioOutPrio))
 	    break;
 	unsigned int i = 0;
 	for (; i < m_arfcnCount; i++)

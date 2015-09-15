@@ -197,6 +197,16 @@ Radio.C0=
 ; Defaults to 5. Allowed interval [0..256]
 ;radio_latency_slots=5
 
+; radio_read_priority: keyword: Radio read thread priority
+; Allowed values: lowest, low, normal, high, highest
+; Defaults to 'normal' if missing or invalid
+;radio_read_priority=normal
+
+; radio_send_priority: keyword: Radio send thread priority
+; Allowed values: lowest, low, normal, high, highest
+; Defaults to 'normal' if missing or invalid
+;radio_send_priority=normal
+
 ; print_status: integer: Print transceiver status on output
 ; This parameter is applied on reload
 ; New value will override old value even if not changed
