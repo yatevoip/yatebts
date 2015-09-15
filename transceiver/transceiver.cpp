@@ -1075,7 +1075,7 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	    break;
 	if (!resetARFCNs(arfcns,port,rAddr,lAddr,nFillers))
 	    break;
-	m_radioReadPrio = Thread::priority(params[YSTRING("radio_read_priority")]);
+	m_radioReadPrio = Thread::priority(params[YSTRING("radio_read_priority")],Thread::High);
 	m_radioOutPrio = Thread::priority(params[YSTRING("radio_send_priority")]);
 	if (debugAt(DebugAll)) {
 	    String tmp;

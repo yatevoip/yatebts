@@ -199,8 +199,8 @@ Radio.C0=
 
 ; radio_read_priority: keyword: Radio read thread priority
 ; Allowed values: lowest, low, normal, high, highest
-; Defaults to 'normal' if missing or invalid
-;radio_read_priority=normal
+; Defaults to 'high' if missing or invalid
+;radio_read_priority=high
 
 ; radio_send_priority: keyword: Radio send thread priority
 ; Allowed values: lowest, low, normal, high, highest
