@@ -147,4 +147,6 @@ $proj_title = "Yatebts NIB";
 $pysim_csv = $yate_conf_dir . "sim_data.csv";
 # type of card SIM used by PySIM. Types allowed: fakemagicsim, supersim, magicsim, grcardsim, sysmosim-gr1, sysmosim-gr1, sysmoSIM-GR2, sysmoUSIM-GR1 or try auto 
 $sim_type = "sysmoSIM-GR2";
+# yate cdr logs file
+$yate_cdr = "/var/log/yate-cdr.csv";
 ?>
