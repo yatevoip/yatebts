@@ -84,7 +84,10 @@ protected:
     virtual void initialize();
     virtual bool received(Message& msg, int id);
     virtual void statusParams(String& str);
+    virtual bool commandComplete(Message& msg, const String& partLine,
+	const String& partWord);
     void onTimer(const Time& time = Time());
+    bool onCmdControl(Message& msg);
     // Control management (start/stop)
     bool ctrlStart();
     void ctrlStop();
@@ -110,6 +113,8 @@ private:
 
 INIT_PLUGIN(GsmTrxModule);
 static unsigned int s_engineStop = 0;
+static const String s_modCmds[] = {"help",""};
+static const String s_trxCmds[] = {"print-status",""};
 
 static const TokenDict s_stateName[] = {
     {"Idle",    GsmTrxModule::Idle},
@@ -117,6 +122,15 @@ static const TokenDict s_stateName[] = {
     {"Running", GsmTrxModule::Running},
     {0,0},
 };
+
+static bool completeStrList(String& dest, const String& partWord, const String* ptr)
+{
+    if (!ptr)
+	return false;
+    while (*ptr)
+	Module::itemComplete(dest,*ptr++,partWord);
+    return false;
+}
 
 
 //
@@ -280,6 +294,7 @@ void GsmTrxModule::initialize()
 	if (!ctrlStart())
 	    return;
 	setup();
+	installRelay(Control);
 	installRelay(Halt);
 	installRelay(EngineStop,"engine.stop");
     }
@@ -294,6 +309,12 @@ bool GsmTrxModule::received(Message& msg, int id)
 {
     if (id == Timer)
 	onTimer(msg.msgTime());
+    else if (id == Control) {
+	const String& comp = msg[YSTRING("component")];
+	if (comp == name())
+	    return onCmdControl(msg);
+	return false;
+    }
     else if (id == EngineStop)
 	s_engineStop++;
     else if (id == Halt) {
@@ -307,6 +328,21 @@ bool GsmTrxModule::received(Message& msg, int id)
 void GsmTrxModule::statusParams(String& str)
 {
     str << "state=" << lookup(m_state,s_stateName);
+}
+
+bool GsmTrxModule::commandComplete(Message& msg, const String& partLine,
+    const String& partWord)
+{
+    if (partLine == YSTRING("control")) {
+	itemComplete(msg.retValue(),name(),partWord);
+	return false;
+    }
+    String tmp = partLine;
+    if (tmp.startSkip("control") && tmp == name()) {
+	completeStrList(msg.retValue(),partWord,s_trxCmds);
+	return completeStrList(msg.retValue(),partWord,s_modCmds);
+    }
+    return Module::commandComplete(msg,partLine,partWord);
 }
 
 void GsmTrxModule::onTimer(const Time& time)
@@ -350,6 +386,30 @@ void GsmTrxModule::onTimer(const Time& time)
 	    }
 	}
     }
+}
+
+bool GsmTrxModule::onCmdControl(Message& msg)
+{
+
+    static const char* s_help =
+	"\r\ncontrol gsmtrx print-status [count=1] [nobursts=no]"
+	"\r\n  Set transceiver print status."
+	    "\r\n    count: negative to print until stopped, number of print operations otherwise."
+	    "\r\n    nobursts=yes inhibits bursts counters printing."
+	"\r\ncontrol gsmtrx help"
+	"\r\n  Display control commands help";
+
+    const String& oper = msg[YSTRING("operation")];
+    // Module commands
+    if (oper == YSTRING("help")) {
+	msg.retValue() << s_help;
+	return true;
+    }
+    // Transceiver commands
+    RefPointer<GsmTrxQMF> trx;
+    if (getTransceiver(trx))
+	return trx->control(oper,msg);
+    return false;
 }
 
 bool GsmTrxModule::ctrlStart()

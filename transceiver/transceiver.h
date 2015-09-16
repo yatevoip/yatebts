@@ -327,7 +327,7 @@ public:
      * Constructor
      */
     inline TrxRadioIO()
-	: timestamp(0),
+	: timestamp(0), bursts(0),
 	m_errCount(0), m_errMax(30), m_errInc(10)
 	{}
 
@@ -363,6 +363,7 @@ public:
 	}
 
     uint64_t timestamp;                  // Current I/O timestamp
+    uint64_t bursts;                     // I/O bursts
 
 protected:
     unsigned int m_errCount;             // Current number of errors
@@ -536,6 +537,14 @@ public:
      * @return True on success
      */
     bool command(const char* str, String* rsp = 0, unsigned int arfcn = 0);
+
+    /**
+     * Handle control commands
+     * @param oper Operation to execute
+     * @param params Operation parameters
+     * @return True on success, false on failure
+     */
+    bool control(const String& oper, const NamedList& params);
 
     /**
      * Check if the transceiver is exiting (stopping)
@@ -747,6 +756,7 @@ protected:
     unsigned int m_radioLatencySlots;    // Radio latency in timeslots
     int m_printStatus;                   // Print transceiver status
     bool m_printStatusBursts;            // Print bursts counters in status
+    bool m_printStatusChanged;           // Print status changed flag
     bool m_radioSendChanged;             // Flag used to signal data changed for radio send data thread
     ComplexVector m_sendBurstBuf;        // Send burst buffer
     SignalProcessing m_signalProcessing; // SignalProcessing class initialized for this tranceiver

@@ -999,6 +999,7 @@ Transceiver::Transceiver(const char* name)
     m_radioLatencySlots(9),
     m_printStatus(0),
     m_printStatusBursts(true),
+    m_printStatusChanged(false),
     m_radioSendChanged(false),
     m_tsc(0),
     m_rxFreq(0),
@@ -1136,6 +1137,7 @@ void Transceiver::reInit(const NamedList& params)
 	params.getBoolValue(YSTRING("print_status_bursts"),true);
     // Signal update
     m_radioSendChanged = true;
+    m_printStatusChanged = true;
 }
 
 // Wait for PowerOn state
@@ -1248,6 +1250,7 @@ void Transceiver::recvRadioData(RadioRxData* d)
 	::printf("\r\ninput-data:%s\n",dumprx.c_str());
     }
 #endif
+    m_rxIO.bursts++;
     if (m_rxQueue.add(d,this))
 	return;
     if (!thShouldExit(this))
@@ -1288,6 +1291,9 @@ void Transceiver::runRadioSendData()
 	    m_radioSendChanged = false;
 	    txSlots = m_txSlots;
 	    radioLatencySlots = m_radioLatencySlots;
+	}
+	if (m_printStatusChanged) {
+	    m_printStatusChanged = false;
 	    printStatus = m_printStatus;
 	    printBursts = m_printStatusBursts;
 	}
@@ -1302,17 +1308,21 @@ void Transceiver::runRadioSendData()
 	    wait = true;
 	}
 	if (printStatus) {
+	    // Note: some values are taken without protection
 	    if (printStatus > 0)
 		printStatus--;
 	    String s;
 	    appendTime(s,radioTime,"\r\nRadioClock:\t");
 	    appendTime(s,m_lastClockUpd,"\r\nLastSyncUpper:\t");
 	    appendTime(s,m_txTime,"\r\nTxTime:\t\t");
+	    if (printBursts) {
+		s << "\r\nTxBursts:\t" << m_txIO.bursts;
+		s << "\r\nRxBursts:\t" << m_rxIO.bursts;
+	    }
 	    ARFCNStatsTx aStats;
 	    for (unsigned int i = 0; i < m_arfcnConf; i++) {
 		s << "\r\nARFCN[" << i << "]";
 		ARFCN* a = m_arfcn[i];
-		// Note: some values are taken without protection
 		a->getTxStats(aStats);
 		appendTime(s,a->m_lastUplinkBurstOutTime,"\r\n  UplinkLastOutTime:\t");
 		appendTime(s,aStats.burstLastInTime,"\r\n  DownlinkLastInTime:\t");
@@ -1521,6 +1531,7 @@ bool Transceiver::sendBurst(GSMTime time)
     unsigned int code = m_radio->send(m_txIO.timestamp,
 	(float*)data.data(),data.length(),&m_txPowerScale);
     m_txIO.timestamp += data.length();
+    m_txIO.bursts++;
     if (m_txIO.updateError(code == 0))
 	return true;
     if (!thShouldExit(this)) {
@@ -1697,6 +1708,18 @@ bool Transceiver::command(const char* str, String* rsp, unsigned int arfcn)
 	Debug(this,DebugAll,"Command '%s' (ARFCN=%u) RSP '%s'",str,arfcn,rspParam.c_str());
     syncGSMTime();
     return buildCmdRsp(rsp,cmd,status,rspParam);
+}
+
+bool Transceiver::control(const String& oper, const NamedList& params)
+{
+    if (oper == YSTRING("print-status")) {
+	m_printStatus = params.getIntValue(YSTRING("count"),1);
+	m_printStatusBursts = m_printStatus && !params.getBoolValue(YSTRING("nobursts"));
+	m_printStatusChanged = true;
+    }
+    else
+	return false;
+    return true;
 }
 
 // Set the minimum power to accept radio bursts
