@@ -1287,3 +1287,4 @@ table.menu a.menu_links { border-bottom:none;}
 /*WRITE SIM FORM*/
 div.error_link { border-bottom:2px solid #93c300;width:75px;display:inline;}
 div.err_link_pysim { display:inline;}
+div.next_lines {text-align:right;margin-right:5%;}
