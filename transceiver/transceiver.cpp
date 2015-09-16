@@ -1792,8 +1792,8 @@ bool Transceiver::radioSetPower(int p)
     float f = (float)(p + newVal);
     float tmp = ::powf(10.0,0.1 * f);
     m_txPowerScale = (tmp < 1 ? 1.0 : (1.0 / ::sqrt(tmp))) / m_arfcnConf;
-    Debug(this,DebugInfo,"Set Tx power=%d gain=%g power_scaling=%g [%p]",
-	p,f,m_txPowerScale,this);
+    Debug(this,DebugInfo,"Set Tx gain=%d power_scaling=%g [%p]",
+	newVal,m_txPowerScale,this);
     return true;
 }
 
@@ -2039,9 +2039,6 @@ int Transceiver::handleCmdSetPower(unsigned int arfcn, String& cmd, String* rspP
 	if (!cmd)
 	    TRX_SET_ERROR_BREAK(CmdEInvalidParam);
 	int p = cmd.toInteger();
-	const RadioCapability* caps = m_radio->capabilities();
-	if (caps)
-	    clampInt(p,caps->txGain2MinVal,caps->txGain2MaxVal,"SETPOWER");
 	if (!radioSetPower(p + m_txAttnOffset))
 	    break;
 	m_txPower = p;
