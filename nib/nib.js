@@ -917,18 +917,33 @@ function onRoute(msg)
 	return true;
     }
 
-    called = isShortNumber(called);
+    var orig_called = called;
+    var posib_called_param = ["called", "sip_to", "sip_p-called-party-id", "sip_ruri"];
 
-    if (routeToRegUser(msg,called)==true)
-	return true;
+    for (var called_param of posib_called_param) {
+	called = getCalled(msg, called_param);
+	if (called=="")
+	    continue;
 
-    if (subscribers) {
-	if (getSubscriberIMSI(called)!=false) {
-	    // called is in our users but it's not registered
-	    msg.error = "offline";
+	called = isShortNumber(called);
+
+	if (routeToRegUser(msg,called)==true) {
+	    msg.called = called;
 	    return true;
 	}
 
+	if (subscribers) {
+	    if (getSubscriberIMSI(called)!=false) {
+		msg.called = called;
+		// called is in our users but it's not registered
+		msg.error = "offline";
+		return true;
+	    }
+	}
+    }
+    called = orig_called;
+
+    if (subscribers) {
 	// call seems to be for outside
 	// must make sure caller is in our subscribers
 
@@ -949,6 +964,20 @@ function onRoute(msg)
     // caller is not registered to us and is trying to call outside NIB
     msg.error = "service-unavailable"; // or maybe forbidden
     return true;
+}
+
+/*
+ * Retrieve called number from different parameters/SIP headers
+ */
+function getCalled(msg,param_name)
+{
+    var called = msg[param_name];
+    if (param_name=="called")
+	return called;
+    res = called.match(/:?([+0-9]+)[@>]/);
+    if (res)
+	return res[1];
+    return "";
 }
 
 function addRejected(imsi)
