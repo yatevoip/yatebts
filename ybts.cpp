@@ -137,6 +137,9 @@ static const String s_mapCompType = "type";
 static const String s_mapOperCode = "operationCode";
 static const String s_mapUssdText = "ussd-Text";
 // Global
+static const String s_peerid = "peerid";
+static const String s_targetid = "targetid";
+static const String s_handlers = "handlers";
 static const String s_error = "error";
 static const String s_reason = "reason";
 static const String s_noAuth = "noauth";
@@ -7443,6 +7446,7 @@ void YBTSChan::callAccept(Message& msg)
     // Remember message params to re-execute if we are disconnected before progressing
     lck.acquire(driver());
     m_route = new Message(msg);
+    clearListParams(*m_route,s_peerid,s_targetid,s_handlers);
 }
 
 void YBTSChan::callRejected(const char* error, const char* reason, const Message* msg)
@@ -7459,7 +7463,7 @@ void YBTSChan::callRejected(const char* error, const char* reason, const Message
     }
     Lock lck(driver());
     m_route = new Message(*msg);
-    m_route->clearParam(YSTRING("id"));
+    clearListParams(*m_route,s_peerid,s_targetid,s_handlers);
     lck.drop();
     startAuthThread();
 }
@@ -7598,9 +7602,9 @@ void YBTSChan::endDisconnect(const Message& msg, bool handled)
 	return;
     }
     Lock lck(driver());
-    m_route->clearParam(YSTRING("id"));
+    clearListParams(*m_route,s_peerid,s_targetid,s_handlers);
     YBTSConnAuth::authClearParams(*m_route);
-    m_route->copySubParams(msg,"auth.",false);
+    m_route->copySubParams(msg,"auth.",false,true);
     lck.drop();
     startAuthThread();
 }

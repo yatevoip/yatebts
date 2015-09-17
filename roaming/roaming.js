@@ -282,12 +282,13 @@ function addAuthParams(sr,msg,imsi,tmsi,autz)
 	sr[autz] = 'Digest ' + tempinfo[key]["realm"] + 'uri="' + key + '", nonce="' + tempinfo[key]["nonce"] + '", response="' + msg["auth.response"] + '", algorithm=AKAv1-MD5';
     } else if (msg["auth.auts"]!="") {
 	sr[autz] = 'Digest ' + tempinfo[key]["realm"] + 'uri="' + key + '", nonce="' + tempinfo[key]["nonce"] + '", auts="' + Engine.htoa(msg["auth.auts"]) + '", algorithm=AKAv1-MD5';
+	if ("" != msg.id)
+	    tempinfo_route[msg.id] = key;
     } else if (msg.error!="") {
 	Engine.debug(Engine.DebugWarn, "Authentication failed for imsi/tmsi: "+key+", error: "+msg.error);
 	return false;
     }
-    if (tempinfo[key]!="")
-	delete tempinfo[key];
+    delete tempinfo[key];
 
     return true;
 }
@@ -337,7 +338,7 @@ function onDisconnected(msg)
 	return false;
 
     var realm = ""; 
-    res = auth.match(/realm *= *"?([^ "]+)"?/); 
+    var res = auth.match(/realm *= *"?([^ "]+)"?/); 
     if (res)
 	realm = 'realm="' + res[1] + '", ';
 
@@ -421,7 +422,7 @@ function reqResponse(request_type,sr,msi,msg,server)
 	    var auth = sr["sip_www-authenticate"];
 
 	    var realm = ""; 
-	    res = auth.match(/realm *= *"?([^ "]+)"?/); 
+	    var res = auth.match(/realm *= *"?([^ "]+)"?/); 
 	    if (res)
 		realm = 'realm="' + res[1] + '", ';
 
@@ -446,7 +447,7 @@ function reqResponse(request_type,sr,msi,msg,server)
 		return false;
 	    }
 
-	    var res = auth.match(/nonce *= *"?([^ "]+)"?/);
+	    res = auth.match(/nonce *= *"?([^ "]+)"?/);
 	    if (res) {
 		var nonce = res[1];
 		tempinfo[msi] = { "nonce":nonce,"realm":realm};
@@ -677,6 +678,37 @@ function onMoSMS(msg)
 }
 
 /**
+ * Fill MT USSD route data
+ * @param msg Object. Message to be handled
+ * @return True if filled, false if not
+ */
+function fillMtUSSD(msg,route)
+{
+    var imsi = getIMSIFromCalled(msg.called);
+    if (imsi == "")
+	    imsi = getIMSIFromSIPParam(msg["sip_p-called-party-id"]);
+    if (imsi == "") {
+	msg.error = "offline";
+	return false;
+    }
+    if (route !== false) {
+	msg["sipussd.execute.oimsi"] = imsi;
+	msg["sipussd.execute.otmsi"] = subscribers[imsi]["tmsi"];
+	var cp = "" + msg.copyparams;
+	if (cp)
+	    cp += ",";
+	msg["copyparams"] = cp + "sipussd.execute.oimsi,sipussd.execute.otmsi";
+	msg["sipussd.callto"] = "ybts/IMSI" + imsi;
+    }
+    else {
+	msg["oimsi"] = imsi;
+	msg["otmsi"] = subscribers[imsi]["tmsi"];
+	msg["callto"] = "ybts/IMSI" + imsi;
+    }
+    return true;
+}
+
+/**
  * Handle USSD route
  * @param msg Object. Message to be handled
  */
@@ -690,6 +722,7 @@ function routeUSSD(msg)
 	    imsi = getIMSI(tmsi);
 	if (imsi || tmsi) {
 	    if (imsi && subscribers[imsi] != undefined) {
+		addRoutingParams(msg,imsi,"i");
 		var sip_server = getSIPRegistrar(tmsi);
 		if (sip_server) {
 		    msg["sipussd.domain"] = sip_server;
@@ -710,18 +743,7 @@ function routeUSSD(msg)
     }
     else if (msg.module === "sip") {
 	// MT USSD
-	var imsi = getIMSIFromCalled(msg.called);
-	if (imsi == "" || subscribers[imsi] == undefined) {
-	    msg.error = "offline";
-	    return false;
-	}
-	var cp = "" + msg.copyparams;
-	if (cp)
-	    cp += ",";
-	msg["sipussd.execute.oimsi"] = imsi;
-	msg["sipussd.execute.otmsi"] = subscribers[imsi]["tmsi"];
-	msg["copyparams"] = cp + "sipussd.execute.oimsi,sipussd.execute.otmsi";
-	msg["sipussd.callto"] = "ybts/IMSI" + imsi;
+	fillMtUSSD(msg);
     }
     return false;
 }
@@ -1026,15 +1048,14 @@ function readUEsFromConf()
 {
     conf = new ConfigFile(Engine.configFile("tmsidata"),true);
     ues = conf.getSection("ues",true);
-    var subscriber_info, imsi;
     subscribers = {};
 
-    keys = ues.keys();
+    var keys = ues.keys();
     var count_ues = 0;
-    for (imsi of keys) {
+    for (var imsi of keys) {
 	// Ex:226030182676743=000000bd,354695033561290,,1401097352
 	// imsi=tmsi,imei,msisdn,expires
-	subscriber_info = ues.getValue(imsi);
+	var subscriber_info = ues.getValue(imsi);
 	subscriber_info = subscriber_info.split(",");
 	var tmsi = subscriber_info[0];
 	var imei = subscriber_info[1];
@@ -1106,7 +1127,7 @@ function updateSubscribers(msg)
 
     var expire_subscriber = Date.now()/1000 + imsi_cleanup;
     
-    subscriber = {"tmsi":msg.tmsi, "msisdn":msg.msisdn, "imei":imei, "expires":expire_subscriber};
+    var subscriber = {"tmsi":msg.tmsi, "msisdn":msg.msisdn, "imei":imei, "expires":expire_subscriber};
     if (msg["callid"]) 
 	subscriber["callid"] = msg["callid"];
     else {
@@ -1295,7 +1316,7 @@ function onCommand(msg)
 	    tmp +=    "--------------- -------- -------------- --------------- ----------\r\n";
 	    if (subscribers) {
 		for (var imsi in subscribers) {
-	 	    subscriber = subscribers[imsi];
+	 	    var subscriber = subscribers[imsi];
 		    tmp += strFix(imsi,15) + " " + strFix(subscriber.tmsi,8) + " " + strFix(subscriber.msisdn,14) + " " + strFix(subscriber.imei,15) + " "+ strFix(subscriber.expires,10) + "\r\n";
 		}
 	    }
@@ -1304,9 +1325,9 @@ function onCommand(msg)
 
 	case "roaming forget all":
 	    for (var imsi in subscribers) {
-	    	Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
-	    	delete subscribers[imsi];
-	    	saveUE(imsi);
+		Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
+		delete subscribers[imsi];
+		saveUE(imsi);
 	    }
 	    Engine.debug(Engine.DebugInfo, "Finished expiring subscribers");
 	    return true;
@@ -1314,14 +1335,14 @@ function onCommand(msg)
 
     var command = msg.line;
     if (command.substr(0,15)=="roaming forget ") {
-	    var imsi = command.substr(15);
-	    if (subscribers[imsi]!="") {
-		Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
-		delete subscribers[imsi];
-		saveUE(imsi);
-	    } else 
-		Engine.debug("Invalid subscriber '"+imsi+"'");
-	    return true;
+	var imsi = command.substr(15);
+	if (subscribers[imsi]!="") {
+	    Engine.debug(Engine.DebugInfo, "Expiring subscriber "+imsi);
+	    delete subscribers[imsi];
+	    saveUE(imsi);
+	} else 
+	    Engine.debug("Invalid subscriber '"+imsi+"'");
+	return true;
     }
 
     return false;
