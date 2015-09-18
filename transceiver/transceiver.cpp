@@ -1332,6 +1332,13 @@ void Transceiver::runRadioSendData()
 		    uint64_t dropped = a->dumpDroppedBursts(&tmp);
 		    s << "\r\n  RxBursts:\t\t" << rx;
 		    s << "\r\n  RxDroppedBursts:\t" << dropped << " " << tmp;
+		    tmp.clear();
+		    for (uint8_t j = 0; j < 8; j++) {
+			if (tmp)
+			    tmp << "/";
+			tmp << aStats.burstsDwInSlot[j];
+		    }
+		    s << "\r\n  DownlinkInBursts:\t" << aStats.burstsDwIn << " (" << tmp << ")";
 		    s << "\r\n  TxMissSyncOnSend:\t" << aStats.burstsMissedSyncOnSend;
 		    s << "\r\n  TxExpiredOnSend:\t" << aStats.burstsExpiredOnSend;
 		    s << "\r\n  TxExpiredOnRecv:\t" << aStats.burstsExpiredOnRecv;
@@ -3598,6 +3605,8 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     String t;
     String tmp;
     m_txStats.burstLastInTime = burst->time();
+    m_txStats.burstsDwIn++;
+    m_txStats.burstsDwInSlot[burst->time().tn()]++;
     if (burst->filler() || txTime > burst->time()) {
 	if (!burst->filler()) {
 	    Debug(this,DebugNote,"%sReceived delayed burst %s at %s [%p]",

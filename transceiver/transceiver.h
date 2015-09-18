@@ -312,7 +312,6 @@ struct ArfcnSlot
     unsigned int powerErrors;            // The nmber of power errors
     GSMTime lastTOAWarn;                 // Last time for TOA error warn (used by demodulator)
     unsigned int toaErrors;              // Number of TOA errors (used by demodulator)
-
 };
 
 
@@ -1082,10 +1081,15 @@ class ARFCNStatsTx
 {
 public:
     inline ARFCNStatsTx()
-	: burstsMissedSyncOnSend(0), burstsExpiredOnSend(0), burstsExpiredOnRecv(0),
-	burstsFutureOnRecv(0), burstsDupOnRecv(0)
-	{}
+	: burstsDwIn(0),
+	burstsMissedSyncOnSend(0), burstsExpiredOnSend(0), burstsExpiredOnRecv(0),
+	burstsFutureOnRecv(0), burstsDupOnRecv(0) {
+		for (uint8_t i = 0; i < 8; i++)
+		    burstsDwInSlot[i] = 0;
+	    }
     GSMTime burstLastInTime;             // Time of last downlink burst received from upper layer
+    uint64_t burstsDwIn;                 // The number of bursts received from upper layer for TX
+    uint64_t burstsDwInSlot[8];          // The number of bursts received from upper layer for TX per timeslot
     uint64_t burstsMissedSyncOnSend;     // The number a SYNC burst is missing on send time
     uint64_t burstsExpiredOnSend;        // The number of expired bursts on send time
     uint64_t burstsExpiredOnRecv;        // The number of already expired bursts on receive time
