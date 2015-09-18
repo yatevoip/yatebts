@@ -478,10 +478,8 @@ int GsmTrxModule::trxStart(String& cmdLine)
 	TelEngine::destruct(r);
 	return Transceiver::CmdEInvalidState;
     }
-    unsigned int arfcns = 1;
     int pos = cmdLine.find(' ');
-    if (pos > 0)
-	arfcns = cmdLine.substr(0,pos).toInteger(1,0,1);
+    unsigned int arfcns = cmdLine.substr(0,pos).toInteger(1,0,1);
     params.setParam(YSTRING("arfcns"),String(arfcns));
     params.setParam(YSTRING("remoteaddr"),m_ctrl.m_remote.host());
     params.setParam(YSTRING("localaddr"),m_ctrl.m_local.host());
