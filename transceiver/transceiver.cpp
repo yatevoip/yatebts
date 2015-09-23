@@ -70,6 +70,8 @@
 #define TX_ATTEN_OFFS_MIN 0
 #define TX_ATTEN_OFFS_MAX 100
 
+#define RADIO_LATENCY_SLOTS_DEF 5
+
 namespace TelEngine {
 
 class TrxWorker : public Thread, public GenObject
@@ -996,7 +998,7 @@ Transceiver::Transceiver(const char* name)
     m_clockUpdMutex(false,"TrxClockUpd"),
     m_clockUpdOffset(16),
     m_txSlots(16),
-    m_radioLatencySlots(9),
+    m_radioLatencySlots(RADIO_LATENCY_SLOTS_DEF),
     m_printStatus(0),
     m_printStatusBursts(true),
     m_printStatusChanged(false),
@@ -1131,7 +1133,8 @@ void Transceiver::reInit(const NamedList& params)
     m_upPowerThreshold = params.getIntValue(YSTRING("up_power_warn"),m_upPowerThreshold);
     change(this,m_clockUpdOffset,params,YSTRING("clock_update_offset"),16,0,256);
     change(this,m_txSlots,params,YSTRING("tx_slots"),16,1,1024);
-    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),5,0,256);
+    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),
+	RADIO_LATENCY_SLOTS_DEF,0,256);
     m_printStatus = params.getIntValue(YSTRING("print_status"));
     m_printStatusBursts = m_printStatus &&
 	params.getBoolValue(YSTRING("print_status_bursts"),true);
