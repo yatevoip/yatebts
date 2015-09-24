@@ -80,13 +80,13 @@ public:
     enum Type {
 	TrxRadioRead = 0x0001,
 	TrxRadioIn = 0x0004,
-	ARFCNData = 0x0008,
+	ARFCNTx = 0x0008,
 	ARFCNRx = 0x0010,
 	TrxRadioOut = 0x0020,
-	RadioMask = TrxRadioRead | TrxRadioIn | TrxRadioOut | ARFCNData | ARFCNRx,
+	RadioMask = TrxRadioRead | TrxRadioIn | TrxRadioOut | ARFCNTx | ARFCNRx,
     };
     TrxWorker(unsigned int type, TransceiverObj* obj, Thread::Priority prio = Thread::Normal)
-	: Thread(lookup(type,s_name),prio), m_type(type), m_obj(obj)
+	: Thread(buildName(type,obj),prio), m_type(type), m_obj(obj)
 	{}
     ~TrxWorker()
 	{ notify(); }
@@ -98,8 +98,23 @@ public:
 	unsigned int waitMs2 = 0, Thread** th2 = 0,
 	unsigned int waitMs3 = 0, Thread** th3 = 0);
     static void softCancel(unsigned int mask = 0xffffffff);
+    static inline const char* buildName(unsigned int type, TransceiverObj* obj) {
+	    if (type == ARFCNTx || type == ARFCNRx) {
+		ARFCN* a = YOBJECT(ARFCN,obj);
+		String tmp(a ? lookup(type,s_name) : "");
+		if (tmp) {
+		    tmp << ":" << a->arfcn();
+		    ObjList* o = s_dynamicNames.find(tmp);
+		    if (!o)
+			o = s_dynamicNames.append(new String(tmp));
+		    return static_cast<String*>(o->get())->c_str();
+		}
+	    }
+	    return lookup(type,s_name);
+	}
     static const TokenDict s_name[];
     static const TokenDict s_info[];
+    static ObjList s_dynamicNames;
     static Mutex s_mutex;
 protected:
     virtual void run();
@@ -249,8 +264,10 @@ ObjList TrxWorker::s_threads;
 Mutex TrxWorker::s_mutex(false,"TrxWorkers");
 static FileDataDumper* s_dumper = 0;
 
+ObjList TrxWorker::s_dynamicNames;
+
 const TokenDict TrxWorker::s_name[] = {
-    {"ARFCNData",     ARFCNData},
+    {"ARFCNTx",       ARFCNTx},
     {"ARFCNRx",       ARFCNRx},
     {"TrxRadioRead",  TrxRadioRead},
     {"TrxRadioIn",    TrxRadioIn},
@@ -259,7 +276,7 @@ const TokenDict TrxWorker::s_name[] = {
 };
 
 const TokenDict TrxWorker::s_info[] = {
-    {"Data socket read",       ARFCNData},
+    {"Data socket read",       ARFCNTx},
     {"Radio input process",    ARFCNRx},
     {"Radio device read",      TrxRadioRead},
     {"Radio read process",     TrxRadioIn},
@@ -381,7 +398,7 @@ void TrxWorker::run()
     DDebug(m_obj,DebugAll,"%s%s thread (%p) started [%p]",
 	m_obj->prefix(),lookup(m_type,s_info),this,m_obj);
     switch (m_type) {
-	case ARFCNData:
+	case ARFCNTx:
 	    (static_cast<ARFCNSocket*>(m_obj))->runReadDataSocket();
 	    break;
 	case ARFCNRx:
@@ -1403,7 +1420,7 @@ void Transceiver::runRadioSendData()
     }
 }
 
-bool shouldBeSync(GSMTime& time)
+static inline bool shouldBeSync(const GSMTime& time)
 {
     if (time.tn() != 0)
 	return false;
@@ -3939,7 +3956,7 @@ bool ARFCNSocket::radioPowerOn(String* reason)
     if (!ARFCN::radioPowerOn(reason))
 	return false;
     Lock lck(m_mutex);
-    if (!TrxWorker::create(m_dataReadThread,TrxWorker::ARFCNData,this))
+    if (!TrxWorker::create(m_dataReadThread,TrxWorker::ARFCNTx,this))
 	return false;
     return true;
 }
