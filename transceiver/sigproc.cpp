@@ -373,10 +373,36 @@ void SignalProcessing::setOversample(unsigned int oversample)
 
 void SignalProcessing::applyMinusPIOverTwoFreqShift(ComplexVector& array)
 {
-    static const Complex s_minusPiOverTwo[] = {Complex(1,0), Complex(0,-1), Complex(-1,0), Complex(0,1)};
-    for (unsigned int i = 0;i < array.length();i++) {
-	Complex::multiply(array[i],array[i],s_minusPiOverTwo[i % 4]);
+    // (-PI / 2) freq shift vector: (1,0) (0,-1) (-1,0) (0,1)
+    Complex* c = array.data();
+    if (!c)
+	return;
+    Complex* cStop = c + array.length();
+    Complex* cStop4 = c + (array.length() / 4) * 4;
+    while (c != cStop4) {
+	// Multiply by (1,0):
+	++c;
+	// Multiply by (0,-1):
+	c->set(c->imag(),-c->real());
+	++c;
+	// Multiply by (-1,0):
+	c->set(-c->real(),-c->imag());
+	++c;
+	// Multiply by (0,1):
+	c->set(-c->imag(),c->real());
+	++c;
     }
+    if (c == cStop)
+	return;
+    // Multiply by (1,0): skip it
+    if (++c == cStop)
+	return;
+    // Multiply by (0,-1):
+    c->set(c->imag(),-c->real());
+    if (++c == cStop)
+	return;
+    // Multiply by (-1,0):
+    c->set(-c->real(),-c->imag());
 }
 
 void SignalProcessing::correlate(ComplexVector& out, const ComplexVector& a1, unsigned int a1Start, 
