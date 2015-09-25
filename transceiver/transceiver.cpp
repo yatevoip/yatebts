@@ -796,9 +796,9 @@ void TransceiverObj::dumpRxData(const char* prefix, unsigned int index, const ch
 #ifdef TRANSCEIVER_DUMP_RX_DEBUG
     if (!debugAt(DebugAll))
 	return;
-    String tmp;
-    Complex::dump(tmp,c,len);
-    ::printf("\n%s%d%s:%s\n",prefix,index,postfix,tmp.safe());
+    String info;
+    info << prefix << index << postfix << "\r\n";
+    ComplexVector::output(c,len,30,SigProcUtils::appendComplex,"-----",",",info);
 #endif
 }
 
@@ -808,9 +808,9 @@ void TransceiverObj::dumpRxData(const char* prefix, unsigned int index, const ch
 #ifdef TRANSCEIVER_DUMP_RX_DEBUG
     if (!debugAt(DebugAll))
 	return;
-    String tmp;
-    FloatVector::dump(tmp,f,len,SigProcUtils::appendFloat);
-    ::printf("\n%s%d%s:%s\n",prefix,index,postfix,tmp.safe());
+    String info;
+    info << prefix << index << postfix << "\r\n";
+    FloatVector::output(f,len,30,SigProcUtils::appendFloat,"-----",",",info);
 #endif
 }
 
@@ -2833,15 +2833,14 @@ void TransceiverQMF::radioPowerOnStarting()
 	    b.freqShift.clear();
 	}
 #if 0
-	char buf[256];
+	String buf;
 	if (!tmp)
 	    tmp << "\r\nIndex Name ARFCN FreqShift";
 	String s;
 	if (b.arfcn != 0xffffffff)
 	    s = b.arfcn;
-	int n = ::sprintf(buf,"%-5d %-4s %-5s %.15g",i,d->name,s.safe(),b.freqShiftValue);
-	tmp << "\r\n";
-	tmp.append(buf,n);
+	buf.printf("%-5d %-4s %-5s %.15g",i,d->name,s.safe(),b.freqShiftValue);
+	tmp << "\r\n" << buf;
 #endif
     }
     if (tmp)
@@ -2863,9 +2862,8 @@ void TransceiverQMF::radioPowerOnStarting()
 		*d++ = omega;
 	}
 #ifdef TRANSCEIVER_DUMP_RX_DEBUG
-	String dumphb = "hb:";
-	m_halfBandFltCoeff.dump(dumphb,SigProcUtils::appendFloat);
-	::printf("%s",dumphb.c_str());
+	m_halfBandFltCoeff.output(20,SigProcUtils::appendFloat,"-----",",",
+	    "Transceiver half band filter:\r\n");
 #endif
     }
 }
@@ -2900,18 +2898,12 @@ void TransceiverQMF::arfcnListChanged()
 void TransceiverQMF::dumpFreqShift(unsigned int index) const
 {
     if (index > 14) {
-	Debug(this,DebugNote,"Invalid qmf index!");
+	Debug(this,DebugNote,"Invalid qmf index %u",index);
 	return;
     }
-    String tmp;
-    char t[100];
-    for (unsigned int i = 0;i < m_qmf[index].freqShift.length();i++) {
-	int l = ::sprintf(t,"%g%+g",m_qmf[index].freqShift[i].real(),m_qmf[index].freqShift[i].imag());
-	tmp.append(t,l);
-	if (i != m_qmf[index].freqShift.length() - 1)
-	    tmp << ",";
-    }
-    printf("\nqmf(%d).fs:%s\n",index,tmp.c_str());
+    String info;
+    info << "QMF[" << index << "] frequency shifting vector:\r\n";
+    m_qmf[index].freqShift.output(20,SigProcUtils::appendComplex,"-----",",",info);
 }
 
 // Process received radio data

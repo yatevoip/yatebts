@@ -980,6 +980,20 @@ public:
 	{ return compare(*this,other); }
 
     /**
+     * Outputs data
+     * @param len Data length
+     * @param lineLen The number of elements to dump on each output
+     * @param func Pointer to function who appends the object to a String
+     * @param blockSep Optional text to be displayed before and after output
+     * @param sep Vector elements separator
+     * @param info Optional info
+     */
+    inline void output(unsigned int lineLen,
+	String& (*func)(String& dest, const Obj& item, const char* sep),
+	const char* blockSep, const char* sep = ",", const char* info = 0) const
+	{ output(data(),length(),lineLen,func,blockSep,sep,info); }
+
+    /**
      * Dump data to a string
      * @param buf Destination string
      * @param data Data to dump
@@ -1007,23 +1021,24 @@ public:
 
     /**
      * Outputs data
-     * @param buf Destination string
      * @param data Data to dump
      * @param len Data length
      * @param lineLen The number of elements to dump on each output
      * @param func Pointer to function who appends the object to a String
      * @param blockSep Optional text to be displayed before and after output
      * @param sep Vector elements separator
-     * @return Destination string address
+     * @param info Optional info
      */
     static void output(const Obj* data, unsigned int len, unsigned int lineLen,
 	String& (*func)(String& dest, const Obj& item, const char* sep),
-	const char* blockSep, const char* sep = ",") {
+	const char* blockSep, const char* sep = ",", const char* info = 0) {
 	    if (!(func && data && len && lineLen))
 		return;
 	    if (lineLen > len)
 		lineLen = len;
-	    if (blockSep)
+	    if (info)
+		Output("%s%s",info,TelEngine::c_safe(blockSep));
+	    else if (blockSep)
 		Output("%s",blockSep);
 	    for (unsigned int i = 0; i < len; data += lineLen) {
 		String tmp;
