@@ -1018,6 +1018,7 @@ Transceiver::Transceiver(const char* name)
     m_txPowerScale(1.0f),
     m_radioClockMutex(false,"TrxRadioClock"),
     m_txSync(1,"TrxTxSync",0),
+    m_txSilenceDebugTime(0),
     m_loopbackMutex(false,"TrxLoopbackData"),
     m_loopback(false),
     m_loopbackSleep(0),
@@ -1112,6 +1113,11 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	if (dumpFile)
 	    FileDataDumper::start(s_dumper,*dumpFile);
 	// TODO end test
+	unsigned int tmp = params.getIntValue(YSTRING("tx_silence_debug_interval"),2000,0,10000);
+	if (tmp)
+	    // Round up to frame boundary (~ 4.615ms)
+	    tmp = 1 + ((float)tmp / 4.615);
+	m_txSilenceDebugTime = tmp * 8;
 	break;
     }
     if (!ok) {
@@ -1458,9 +1464,10 @@ bool Transceiver::sendBurst(GSMTime time)
     XDebug(this,DebugAll,"sendBurst(%s) T2=%d T3=%d [%p]",time.c_str(t),t2,t3,this);
     // Build send data
     bool first = true;
+    bool warn = txTimeDebugOk(time);
     for (unsigned int i = 0; i < m_arfcnCount; i++) {
 	ARFCN* a = m_arfcn[i];
-	a->moveBurstsToFillers(time,m_radio && !m_loopback);
+	a->moveBurstsToFillers(time,warn && m_radio && !m_loopback);
 	// Get the burst to send
 	bool addFiller = true;
 	bool sync = (i == 0) && shouldBeSync(time);
@@ -1476,7 +1483,7 @@ bool Transceiver::sendBurst(GSMTime time)
 	    if (sync) {
 		m_sendBurstBuf.resize(m_sendBurstBuf.length());
 		a->m_txStats.burstsMissedSyncOnSend++;
-		if (statistics())
+		if (warn)
 		    Debug(this,DebugNote,"Missing SYNC burst at %s T2=%d T3=%d [%p]",
 			time.c_str(t),t2,t3,this);
 		continue;
@@ -3446,12 +3453,8 @@ void ARFCN::moveBurstsToFillers(const GSMTime& time, bool warnExpired)
 {
     unsigned int expired = 0;
     Lock lck(m_txMutex);
-    for (ObjList* o = m_expired.skipNull(); o; o = o->skipNull()) {
-	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
-	if (!b->filler())
-	    expired++;
+    for (ObjList* o = m_expired.skipNull(); o; o = o->skipNull())
 	m_fillerTable.set(static_cast<GSMTxBurst*>(o->remove(false)));
-    }
     for (ObjList* o = m_txQueue.skipNull(); o; o = o->skipNull()) {
 	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
 	if (b->time() >= time)
@@ -3593,8 +3596,9 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     m_txStats.burstsDwInSlot[burst->time().tn()]++;
     if (burst->filler() || txTime > burst->time()) {
 	if (!burst->filler()) {
-	    Debug(this,DebugNote,"%sReceived delayed burst %s at %s [%p]",
-		prefix(),burst->time().c_str(t),txTime.c_str(tmp),this);
+	    if (txTimeDebugOk(txTime))
+		Debug(this,DebugNote,"%sReceived delayed burst %s at %s [%p]",
+		    prefix(),burst->time().c_str(t),txTime.c_str(tmp),this);
 	    m_txStats.burstsExpiredOnRecv++;
 	}
 	m_expired.insert(burst);
@@ -3602,11 +3606,11 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     }
     GSMTime tmpTime = txTime + 204 * 8;
     if (burst->time() > tmpTime) {
-	if (debugAt(DebugNote)) {
-	    GSMTime diff(burst->time().time() - txTime);
-	    Debug(this,DebugNote,"%sReceived burst too far in future by %s at %s [%p]",
-		prefix(),diff.c_str(t),txTime.c_str(tmp),this);
-	}
+	if (txTimeDebugOk(txTime))
+	    Debug(this,DebugNote,
+		"%sReceived burst %s too far in future at %s by %d timeslots [%p]",
+		prefix(),burst->time().c_str(t),txTime.c_str(tmp),
+		burst->time().diff(txTime),this);
 	m_txStats.burstsFutureOnRecv++;
 	m_expired.insert(burst);
 	return;
@@ -3621,7 +3625,8 @@ void ARFCN::addBurst(GSMTxBurst* burst)
 	    return;
 	}
 	if (burst->time() == b->time()) {
-	    Debug(this,DebugAll,"%sDuplicate burst received at %s [%p]",
+	    // Don't use tx silence debug status: this is a bad thing (should never happen)
+	    Debug(this,DebugNote,"%sDuplicate burst received at %s [%p]",
 		prefix(),burst->time().c_str(t),this);
 	    TelEngine::destruct(burst);
 	    m_txStats.burstsDupOnRecv++;

@@ -529,6 +529,14 @@ public:
 	{ m_statistics = on; }
 
     /**
+     * Check if TX time related debug is not silenced
+     * @param time Time to check
+     * @return True if TX time related debug is not silenced
+     */
+    inline bool txTimeDebugOk(const GSMTime& time) const
+	{ return m_statistics && time.time() > m_txSilenceDebugTime; }
+
+    /**
      * Execute a command
      * @param str Command string
      * @param rsp Optional response
@@ -770,6 +778,7 @@ protected:
     Semaphore m_txSync;                  // Semaphore used to sync TX/RX data
     TrxRadioIO m_txIO;                   // TX related data
     TrxRadioIO m_rxIO;                   // RX related data
+    uint64_t m_txSilenceDebugTime;       // TX: threshold used to silence some debug messages (time related)
     // Test data
     Mutex m_loopbackMutex;               // Loopback mutex
     bool m_loopback;                     // Loopback mode flag
@@ -1178,6 +1187,14 @@ public:
      */
     inline uint8_t chans() const
 	{ return m_chans; }
+
+    /**
+     * Check if TX time related debug is not silenced
+     * @param time Time to check
+     * @return True if TX time related debug is not silenced
+     */
+    inline bool txTimeDebugOk(const GSMTime& time) const
+	{ return !transceiver() || transceiver()->txTimeDebugOk(time); }
 
     /**
      * Dump channels type
