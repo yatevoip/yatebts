@@ -20,7 +20,6 @@
  */
 
 #include "transceiver.h"
-#include <stdio.h>
 #include <string.h>
 
 // Socket read/write
@@ -175,9 +174,7 @@ public:
 	    Debug(DebugWarn,"Unable to find Input Data!!");
 	    return;
 	}
-	String dump;
-	Complex::dump(dump,d->m_data.data(),d->m_data.length());
-	::printf("input-data:%s",dump.c_str());
+	d->m_data.output(20,SigProcUtils::appendComplex,"----"," ","input-data:\r\n");
 	TelEngine::destruct(d);
     }
 };
@@ -585,13 +582,6 @@ static inline const char* encloseDashes(String& s, bool extra = false)
     if (s)
 	s = s1 + (extra ? "\r\n" : "") + s + s1;
     return s.safe();
-}
-
-static inline String& appendTime(String& buf, const GSMTime& time, const char* prefix = 0)
-{
-    buf << prefix << time.time();
-    buf << " " << time.fn() << "/" << time.tn();
-    return buf;
 }
 
 static inline String& dumpBits(String& buf, const void* b, unsigned int len)
@@ -1248,34 +1238,26 @@ void Transceiver::recvRadioData(RadioRxData* d)
 {
     if (!d)
 	return;
-    XDebug(this,DebugAll,
-	"Enqueueing radio data (%p) time=" FMT64U " (FN=%u TN=%u) len=%u [%p]",
-	d,d->m_time.time(),d->m_time.fn(),d->m_time.tn(),d->m_data.length(),this);
-
-    if (m_dumpOneRx) { // For TEST purposes
-	m_dumpOneRx = false;
-	String x;
-	for (unsigned int i = 0;i < d->m_data.length();i++) {
-	    d->m_data[i].dump(x);
-	    x << " ";
-	}
-	printf("\n%s\n",x.c_str());
-    }
+    String t;
+    XDebug(this,DebugAll,"Enqueueing radio data (%p) time=%s len=%u [%p]",
+	d,d->m_time.appendTo(t).c_str(),d->m_data.length(),this);
 
 #ifdef TRANSCEIVER_DUMP_RX_DEBUG
-    if (debugAt(DebugAll)) {
-	String dumprx;
-	for (unsigned int i = 0;i < d->m_data.length();i++)
-	    d->m_data[i].dump(dumprx);
-	::printf("\r\ninput-data:%s\n",dumprx.c_str());
-    }
+    if (debugAt(DebugAll))
+	m_dumpOneRx = true;
 #endif
+    if (m_dumpOneRx) {
+	m_dumpOneRx = false;
+	t = "Transceiver recv radio data at ";
+	t << d->m_time << "\r\n";
+	d->m_data.output(6,SigProcUtils::appendComplex,"-----"," ",t);
+    }
     m_rxIO.bursts++;
     if (m_rxQueue.add(d,this))
 	return;
     if (!thShouldExit(this))
-	Debug(this,DebugWarn,"Dropping radio data (%p) TN=%u FN=%u: queue full [%p]",
-	    d,d->m_time.tn(),d->m_time.fn(),this);
+	Debug(this,DebugWarn,"Dropping radio data (%p) time %s: queue full [%p]",
+	    d,d->m_time.c_str(t),this);
     TelEngine::destruct(d);
 }
 
@@ -1332,9 +1314,9 @@ void Transceiver::runRadioSendData()
 	    if (printStatus > 0)
 		printStatus--;
 	    String s;
-	    appendTime(s,radioTime,"\r\nRadioClock:\t");
-	    appendTime(s,m_lastClockUpd,"\r\nLastSyncUpper:\t");
-	    appendTime(s,m_txTime,"\r\nTxTime:\t\t");
+	    s << "\r\nRadioClock:\t" << radioTime;
+	    s << "\r\nLastSyncUpper:\t" << m_lastClockUpd;
+	    s << "\r\nTxTime:\t\t" << m_txTime;
 	    if (printBursts) {
 		s << "\r\nTxBursts:\t" << m_txIO.bursts;
 		s << "\r\nRxBursts:\t" << m_rxIO.bursts;
@@ -1344,8 +1326,8 @@ void Transceiver::runRadioSendData()
 		s << "\r\nARFCN[" << i << "]";
 		ARFCN* a = m_arfcn[i];
 		a->getTxStats(aStats);
-		appendTime(s,a->m_lastUplinkBurstOutTime,"\r\n  UplinkLastOutTime:\t");
-		appendTime(s,aStats.burstLastInTime,"\r\n  DownlinkLastInTime:\t");
+		s << "\r\n  UplinkLastOutTime:\t" << a->m_lastUplinkBurstOutTime;
+		s << "\r\n  DownlinkLastInTime:\t" << aStats.burstLastInTime;
 		if (printBursts) {
 		    uint64_t rx = a->m_rxBursts;
 		    String tmp;
@@ -1469,15 +1451,11 @@ bool Transceiver::waitSendTx()
 
 bool Transceiver::sendBurst(GSMTime time)
 {
+    String t;
     uint32_t fn = time.fn();
     int t3 = fn % 51;
     int t2 = fn % 26;
-#ifdef DEBUG
-    if (t3 == 0 && time.tn() == 0)
-	Debug(this,DebugAll,"Sending Time FN=%d",time.fn());
-#endif
-    XDebug(this,DebugAll,"sendBurst(" FMT64U ") FN=%u TN=%u T2=%d T3=%d [%p]",
-	time.time(),fn,time.tn(),t2,t3,this);
+    XDebug(this,DebugAll,"sendBurst(%s) T2=%d T3=%d [%p]",time.c_str(t),t2,t3,this);
     // Build send data
     bool first = true;
     for (unsigned int i = 0; i < m_arfcnCount; i++) {
@@ -1498,11 +1476,9 @@ bool Transceiver::sendBurst(GSMTime time)
 	    if (sync) {
 		m_sendBurstBuf.resize(m_sendBurstBuf.length());
 		a->m_txStats.burstsMissedSyncOnSend++;
-		if (statistics()) {
-		    String tmp;
+		if (statistics())
 		    Debug(this,DebugNote,"Missing SYNC burst at %s T2=%d T3=%d [%p]",
-			appendTime(tmp,time).c_str(),t2,t3,this);
-		}
+			time.c_str(t),t2,t3,this);
 		continue;
 	    }
 	    burst = a->m_fillerTable.get(time);
@@ -1539,10 +1515,9 @@ bool Transceiver::sendBurst(GSMTime time)
 	m_signalProcessing.sumFreqShift(m_sendBurstBuf,m_sendArfcnFS);
     if (m_dumpOneTx) {
 	m_dumpOneTx = false;
-	String d;
-	m_sendBurstBuf.dump(d,SigProcUtils::appendComplex);
-	::printf("TX %u at fn=%u tn=%u:\r\n%s\r\n",
-	    m_sendBurstBuf.length(),time.fn(),time.tn(),d.c_str());
+	t = "Transceiver sending ";
+	t << m_sendBurstBuf.length() << " at " << time << "\r\n";
+	m_sendBurstBuf.output(6,SigProcUtils::appendComplex,"-----"," ",t);
     }
     // Send data
     ComplexVector& data = m_sendBurstBuf;
@@ -1984,11 +1959,8 @@ bool Transceiver::syncGSMTime()
     String sent;
     String crt;
     String next;
-    appendTime(sent,m_lastClockUpd);
-    appendTime(crt,m_txTime);
-    appendTime(next,m_nextClockUpdTime);
     Debug(this,DebugInfo,"Sending radio time sync %s at %s next %s [%p]",
-	sent.c_str(),crt.c_str(),next.c_str(),this);
+	m_lastClockUpd.c_str(sent),m_txTime.c_str(crt),m_nextClockUpdTime.c_str(next),this);
 #endif
     if (m_clockIface.m_socket.valid()) {
 	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0)
@@ -3622,8 +3594,7 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     if (burst->filler() || txTime > burst->time()) {
 	if (!burst->filler()) {
 	    Debug(this,DebugNote,"%sReceived delayed burst %s at %s [%p]",
-		prefix(),appendTime(t,burst->time()).c_str(),
-		appendTime(tmp,txTime).c_str(),this);
+		prefix(),burst->time().c_str(t),txTime.c_str(tmp),this);
 	    m_txStats.burstsExpiredOnRecv++;
 	}
 	m_expired.insert(burst);
@@ -3634,7 +3605,7 @@ void ARFCN::addBurst(GSMTxBurst* burst)
 	if (debugAt(DebugNote)) {
 	    GSMTime diff(burst->time().time() - txTime);
 	    Debug(this,DebugNote,"%sReceived burst too far in future by %s at %s [%p]",
-		prefix(),appendTime(t,diff).c_str(),appendTime(tmp,txTime).c_str(),this);
+		prefix(),diff.c_str(t),txTime.c_str(tmp),this);
 	}
 	m_txStats.burstsFutureOnRecv++;
 	m_expired.insert(burst);
@@ -3644,14 +3615,14 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     for (ObjList* o = m_txQueue.skipNull();o;o = o->skipNext()) {
 	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
 	if (burst->time() > b->time()) {
-	    XDebug(this,DebugAll,"%sInsert burst %s [%p]",
-		prefix(),appendTime(t,burst->time()).c_str(),this);
+	    XDebug(this,DebugAll,"%sInsert burst %s before %s [%p]",
+		prefix(),burst->time().c_str(t),b->time().c_str(tmp),this);
 	    o->insert(burst);
 	    return;
 	}
 	if (burst->time() == b->time()) {
 	    Debug(this,DebugAll,"%sDuplicate burst received at %s [%p]",
-		prefix(),appendTime(t,burst->time()).c_str(),this);
+		prefix(),burst->time().c_str(t),this);
 	    TelEngine::destruct(burst);
 	    m_txStats.burstsDupOnRecv++;
 	    return;

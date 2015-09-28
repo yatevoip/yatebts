@@ -247,6 +247,26 @@ public:
     }
 
     /**
+     * Append this time to a String
+     * @param buf Destination string
+     * @return Destination string reference
+     */
+    inline String& appendTo(String& buf) const {
+	    buf << time() << " " << fn() << "/" << tn();
+	    return buf;
+	}
+
+    /**
+     * Append this time to a String. Clear it before
+     * @param buf Destination string
+     * @return Destination string c_str
+     */
+    inline const char* c_str(String& buf) const {
+	    buf.clear();
+	    return appendTo(buf);
+	}
+
+    /**
      * Convert an absolute time in timeslots to frame number
      * @param time Value to convert
      * @return Frame number
@@ -257,6 +277,18 @@ public:
 private:
     uint64_t m_time;
 };
+
+
+/**
+ * Append operator: append a GSMTime to a String
+ * @param str Destination string
+ * @param time GSMTime to append
+ * @return Destination string reference
+ */
+inline String& operator<<(String& str, const GSMTime& time)
+{
+    return time.appendTo(str);
+}
 
 
 /**
