@@ -1498,8 +1498,8 @@ bool Transceiver::sendBurst(GSMTime time)
 	if (first) {
 	    if (m_sendBurstBuf.length() != burst->txData().length())
 		m_sendBurstBuf.resize(burst->txData().length());
-	    m_sendBurstBuf.copy(burst->txData());
 	    Complex::multiply(m_sendBurstBuf.data(),m_sendBurstBuf.length(),
+		burst->txData().data(),burst->txData().length(),
 		m_signalProcessing.arfcnFS(i)->data(),m_signalProcessing.arfcnFS(i)->length());
 	    first = false;
 	}
