@@ -1040,11 +1040,14 @@ public:
 		Output("%s%s",info,TelEngine::c_safe(blockSep));
 	    else if (blockSep)
 		Output("%s",blockSep);
-	    for (unsigned int i = 0; i < len; data += lineLen) {
+	    while (len) {
+		if (len < lineLen)
+		    lineLen = len;
 		String tmp;
 		dump(tmp,data,lineLen,func,0,-1,sep);
-		i += lineLen;
-		Output("%s%s",tmp.c_str(),(i < len ? "," : ""));
+		data += lineLen;
+		len -= lineLen;
+		Output("%s%s",tmp.c_str(),(len ? sep : ""));
 	    }
 	    if (blockSep)
 		Output("%s",blockSep);
@@ -1233,7 +1236,7 @@ public:
 	LaurentPATable lpaTbl = LaurentPADef);
 
     /**
-     * Modulate bits
+     * Modulate bits using optimized algorithm
      * @param out Destination vector for modulated data
      * @param bits Input bits (it will be used as received, no 0/1 checking is done)
      * @param len Input bits buffer length
@@ -1241,6 +1244,17 @@ public:
      * @param tmpW Optional temporary buffer (used to avoid re-allocating memory)
      */
     void modulate(ComplexVector& out, const uint8_t* bits, unsigned int len,
+	FloatVector* tmpV = 0, ComplexVector* tmpW = 0) const;
+
+    /**
+     * Modulate bits using common convolution
+     * @param out Destination vector for modulated data
+     * @param bits Input bits (it will be used as received, no 0/1 checking is done)
+     * @param len Input bits buffer length
+     * @param tmpV Optional temporary buffer (used to avoid re-allocating memory)
+     * @param tmpW Optional temporary buffer (used to avoid re-allocating memory)
+     */
+    void modulateCommon(ComplexVector& out, const uint8_t* bits, unsigned int len,
 	FloatVector* tmpV = 0, ComplexVector* tmpW = 0) const;
 
     /**
@@ -1414,6 +1428,10 @@ public:
 private:
     // Init oversampling rate and related data
     void setOversample(unsigned int oversample);
+    // Modulate: prepare W vector
+    // Return true on success, false on failure (no input data)
+    bool modulatePrepareW(ComplexVector& out, ComplexVector& tmpW,
+	const uint8_t* b, unsigned int len, FloatVector* tmpV) const;
 
     unsigned int m_oversample;           // Oversampling
     unsigned int m_gsmSlotLen;           // GSM slot length

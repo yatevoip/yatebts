@@ -120,57 +120,63 @@ void SignalProcessing::initialize(unsigned int oversample, unsigned int arfcns,
 {
     setOversample(oversample);
     generateLaurentPulseAproximation(m_laurentPA,lpaTbl,m_oversample);
+    if (m_oversample != 8)
+	Debug(DebugWarn,
+	    "SignalProcessing::initialize: modulate/convolution not tested for oversample %u",
+	    oversample);
     generateARFCNsFreqShift(m_arfcnFS,arfcns,m_oversample);
 }
 
 void SignalProcessing::modulate(ComplexVector& out, const uint8_t* b, unsigned int len,
     FloatVector* tmpV, ComplexVector* tmpW) const
 {
-    static const float s_real[] = {1.0F, 0.0F, -1.0F, 0.0F};
-    static const float s_imag[] = {0.0F, 1.0F, 0.0F, -1.0F};
-    FloatVector localV;
     ComplexVector localW;
-
-    if (!(b && len)) {
-	out.resize(m_gsmSlotLen,true);
-	return;
-    }
-    if (!tmpV)
-	tmpV = &localV;
     if (!tmpW)
 	tmpW = &localW;
-
-    // Calculate v: v[n] = 2 * buf[n] - 1
-    // David Burgess: Note the shift to allow for power ramp shaping
-    tmpV->resize(m_gsmSlotLen,true);
-    float* v = tmpV->data() + m_rampOffset;
-    unsigned int n = sigProcIters(m_gsmSlotLen - m_rampOffset,m_oversample);
-    for (; len && n; --len, --n, ++b, v += m_oversample)
-	*v = *b ? 1 : -1;//2.0F * *b - 1.0F;
-    v = tmpV->data();
-    // David Burgess's comment:
-    //   The spec for power ramping is GSM 05.05 Annex B.
-    //   The signal must start down-ramp within 10 us (2.7 symbols), down at least 6 dB.
-    //   The signal falls at least 30 dB within 18 us (4.9 symbols); 6 dB per symbol.
-    //   -6 dB is amplitude factor of 0.5.
-    if (m_rampOffset) {
-	// Power ramping - leading edge.
-	v[m_rampOffset - m_oversample] = v[m_rampOffset] * 0.5F;
-	// Power ramping - trailing edge
-	v[m_rampTrailIdx] = v[m_rampTrailIdx - m_oversample] * 0.71F;
+    if (!modulatePrepareW(out,*tmpW,b,len,tmpV))
+	return;
+    // Specialized (optimized) convolution
+    // Take into account the following:
+    // - all values in 'tmpW' until Lp_2 index are NULL
+    // - starting with Lp_2 only values at oversample boundary are not NULL
+    // - all non null values have either real or imaginary part non 0 BUT NOT BOTH OF THEM
+    // Formula: x[n] = SUM(i=0..Lp)(f[n + i] * g[Lp - 1 - i])
+    out.resize(tmpW->length() - m_laurentPA.length(),true);
+    const Complex* tmpWData = tmpW->data();
+    int skip = 0;
+    int gLastIndex = m_laurentPA.length() - 1;
+    // First index with non 0 value in 'f'
+    unsigned int Lp_2 = m_laurentPA.length() / 2;
+    Complex* x = out.data();
+    for (unsigned int i = 0; i < out.length(); ++i, ++x, ++tmpWData) {
+	if (i > Lp_2) {
+	    // Skip until next multiple of oversample (non 0) element in 'f'
+	    skip = (i - Lp_2) % m_oversample;
+	    if (skip)
+		skip = m_oversample - skip;
+	}
+	else
+	    // Skip until first non 0 element in 'f'
+	    skip = Lp_2 - i;
+	const Complex* f = tmpWData + skip;
+	int gIndex = gLastIndex - skip;
+	const float* g = m_laurentPA.data() + gIndex;
+	for (; gIndex >= 0; gIndex -= m_oversample, g -= m_oversample, f += m_oversample)
+	    if (f->real() != 0.0F)
+		x->real(x->real() + f->real() * *g);
+	    else
+		x->imag(x->imag() + f->imag() * *g);
     }
+}
 
-    // Calculate w: w[n] = v[n] * s[n]
-    // We exploit the fact that most of the values in v[] and w[] are zero.
-    tmpW->resize(m_gsmSlotLen + m_laurentPA.length(),true);
-    Complex* w = tmpW->data() + m_laurentPA.length() / 2;
-    n = sigProcIters(m_gsmSlotLen,m_oversample);
-    unsigned int idx = 0;
-    for (; n; --n, idx = (idx + 1) % 4, w += m_oversample, v += m_oversample)
-	w->set(*v * s_real[idx],*v * s_imag[idx]);
-
-    // Calculate the convolution
-    convolution(out,*tmpW,m_laurentPA);
+void SignalProcessing::modulateCommon(ComplexVector& out, const uint8_t* b, unsigned int len,
+    FloatVector* tmpV, ComplexVector* tmpW) const
+{
+    ComplexVector localW;
+    if (!tmpW)
+	tmpW = &localW;
+    if (modulatePrepareW(out,*tmpW,b,len,tmpV))
+	convolution(out,*tmpW,m_laurentPA);
 }
 
 // NOTE Specialized convolution method
@@ -446,6 +452,53 @@ void SignalProcessing::correlate(ComplexVector& out, const ComplexVector& a1, un
 	    Complex::sumMulF(*x,a1[tindex + j],a2[j]);
     }
 }
+
+// Modulate: prepare W vector
+bool SignalProcessing::modulatePrepareW(ComplexVector& out, ComplexVector& tmpW,
+	const uint8_t* b, unsigned int len, FloatVector* tmpV) const
+{
+    static const float s_real[] = {1.0F, 0.0F, -1.0F, 0.0F};
+    static const float s_imag[] = {0.0F, 1.0F, 0.0F, -1.0F};
+
+    if (!(b && len)) {
+	out.resize(m_gsmSlotLen,true);
+	return false;
+    }
+    FloatVector localV;
+    if (!tmpV)
+	tmpV = &localV;
+
+    // Calculate v: v[n] = 2 * buf[n] - 1
+    // David Burgess: Note the shift to allow for power ramp shaping
+    tmpV->resize(m_gsmSlotLen,true);
+    float* v = tmpV->data() + m_rampOffset;
+    unsigned int n = sigProcIters(m_gsmSlotLen - m_rampOffset,m_oversample);
+    for (; len && n; --len, --n, ++b, v += m_oversample)
+	*v = *b ? 1 : -1;//2.0F * *b - 1.0F;
+    v = tmpV->data();
+    // David Burgess's comment:
+    //   The spec for power ramping is GSM 05.05 Annex B.
+    //   The signal must start down-ramp within 10 us (2.7 symbols), down at least 6 dB.
+    //   The signal falls at least 30 dB within 18 us (4.9 symbols); 6 dB per symbol.
+    //   -6 dB is amplitude factor of 0.5.
+    if (m_rampOffset) {
+	// Power ramping - leading edge.
+	v[m_rampOffset - m_oversample] = v[m_rampOffset] * 0.5F;
+	// Power ramping - trailing edge
+	v[m_rampTrailIdx] = v[m_rampTrailIdx - m_oversample] * 0.71F;
+    }
+
+    // Calculate w: w[n] = v[n] * s[n]
+    // We exploit the fact that most of the values in v[] and w[] are zero.
+    tmpW.resize(m_gsmSlotLen + m_laurentPA.length(),true);
+    Complex* w = tmpW.data() + m_laurentPA.length() / 2;
+    n = sigProcIters(m_gsmSlotLen,m_oversample);
+    unsigned int idx = 0;
+    for (; n; --n, idx = (idx + 1) % 4, w += m_oversample, v += m_oversample)
+	w->set(*v * s_real[idx],*v * s_imag[idx]);
+    return true;
+}
+
 
 //
 // SigProcUtils
