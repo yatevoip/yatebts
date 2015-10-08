@@ -819,6 +819,19 @@ public:
 	}
 
     /**
+     * Exchange data with another vector
+     * @param other Vector to exchange data with
+     */
+    inline void exchange(SigProcVector& other) {
+	    Obj* tmpData = m_data;
+	    unsigned int tmpLen = m_length;
+	    m_data = other.m_data;
+	    m_length = other.m_length;
+	    other.m_data = tmpData;
+	    other.m_length = tmpLen;
+	}
+
+    /**
      * Vector indexing operator
      * @param index Index to retrieve
      * @return The address of the object at the given index
@@ -1157,6 +1170,101 @@ typedef SigProcVector<Complex,false> ComplexVector;
 typedef SigProcVector<float> FloatVector;
 typedef SigProcVector<int> IntVector;
 typedef SigProcVector<ComplexVector,false,false> ComplexVectorVector;
+
+
+//#define SIGPROC_OBJ_STORE_DEBUG
+
+/**
+ * Store objects to avoid re-alloc/re-init for large objects.
+ * Template object must inherit GenObject
+ * @short Object store/factory
+ */
+template <class Obj> class ObjStore : protected String
+{
+public:
+    /**
+     * Constructor
+     * @param maxLen Maximum number of objects to store
+     * @param name Store name
+     */
+    inline ObjStore(unsigned int maxLen, const char* name)
+	: m_name(name), m_mutex(false,m_name.c_str()),
+	m_max(maxLen), m_count(0),
+	m_requested(0), m_created(0), m_returned(0), m_deleted(0)
+	{}
+
+    /**
+     * Destructor
+     */
+    ~ObjStore() {
+	    if (m_requested)
+		printStatistics();
+	}
+	
+    /**
+     * Print statistics
+     */
+    inline void printStatistics() {
+#ifdef SIGPROC_OBJ_STORE_DEBUG
+	    Output("ObjStore(%s) created=" FMT64U "/" FMT64U " deleted=" FMT64U "/" FMT64U,
+		m_name.c_str(),m_created,m_requested,m_deleted,m_returned);
+#endif
+	}
+
+    /**
+     * Retrieve an object from store
+     * @return Valid pointer (may be a newly created one)
+     */
+    inline Obj* get() {
+#ifdef SIGPROC_OBJ_STORE_DEBUG
+	    m_requested++;
+#endif
+	    Lock lck(m_mutex);
+	    Obj* o = static_cast<Obj*>(m_list.remove(false));
+	    if (o) {
+		m_count--;
+		return o;
+	    }
+#ifdef SIGPROC_OBJ_STORE_DEBUG
+	    m_created++;
+#endif
+	    return new Obj;
+	}
+
+    /**
+     * Store an object
+     * @param o Object to store
+     */
+    inline void store(Obj*& o) {
+	    if (!o)
+		return;
+#ifdef SIGPROC_OBJ_STORE_DEBUG
+	    m_returned++;
+#endif
+	    Lock lck(m_mutex);
+	    if (m_count < m_max) {
+		m_list.insert(o);
+		m_count++;
+		o = 0;
+		return;
+	    }
+#ifdef SIGPROC_OBJ_STORE_DEBUG
+	    m_deleted++;
+#endif
+	    TelEngine::destruct(o);
+	}
+
+private:
+    String m_name;
+    Mutex m_mutex;
+    ObjList m_list;
+    unsigned int m_max;
+    unsigned int m_count;
+    uint64_t m_requested;
+    uint64_t m_created;
+    uint64_t m_returned;
+    uint64_t m_deleted;
+};
 
 
 /**

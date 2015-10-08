@@ -33,12 +33,12 @@ class GenQueue;                          // A queue of GenObject
 class TransceiverObj;                    // A tranceiver related object
 class TransceiverSockIface;              // Transceiver socket interface
 class TrxRadioIO;                        // Radio tx/rx related data
+class RadioRxData;                       // Radio read data
 class Transceiver;                       // A transceiver
 class TransceiverQMF;                    // A QMF transceiver
 class TxFillerTable;                     // A transmit filler table
 class ARFCN;                             // A transceiver ARFCN
 class ARFCNSocket;                       // A transceiver ARFCN with socket interface
-class RadioRxData;                       // Radio read data
 class TransceiverWorker;                 // Private worker thread
 
 
@@ -372,6 +372,28 @@ protected:
 
 
 /**
+ * This class holds data read from radio device
+ * @short Radio read data
+ */
+class RadioRxData : public GenObject
+{
+    YCLASS(RadioRxData,GenObject)
+    YNOCOPY(RadioRxData);
+public:
+    /**
+     * Constructor
+     */
+    inline RadioRxData()
+	{}
+
+    GSMTime m_time;
+    ComplexVector m_data;
+};
+
+typedef ObjStore<RadioRxData> RadioRxDataStore;
+
+
+/**
  * This class implements the interface to a transceiver
  * @short A transceiver
  */
@@ -610,12 +632,13 @@ public:
     static const TokenDict* dictStateName();
 
     /**
-     * Get TX test burst
-     * @return TX test burst or 0 if not setted,
-     * NOTE the caller does not own the burst
+     * Get a copy of TX test burst
+     * @return GSMTxBurst pointer, NULL if not set
      */
-    GSMTxBurst* getTxTestBurst()
-	{ return m_txTestBurst; }
+    inline GSMTxBurst* getTxTestBurstCopy() {
+	    Lock lck(m_testMutex);
+	    return GSMTxBurst::getCopy(m_txTestBurst);
+	}
 
 protected:
     /**
@@ -768,6 +791,7 @@ protected:
     ComplexVector m_sendBurstBuf;        // Send burst buffer
     SignalProcessing m_signalProcessing; // SignalProcessing class initialized for this tranceiver
     unsigned int m_tsc;                  // GSM TSC index
+    RadioRxDataStore m_radioRxStore;     // Radio rx bursts store
     double m_rxFreq;                     // Rx frequency
     double m_txFreq;                     // Tx frequency
     int m_txPower;                       // Tx power level (in dB)
@@ -1057,7 +1081,7 @@ public:
 	    if (*tmp == burst)
 		return;
 	    if (*tmp != m_filler)
-		TelEngine::destruct(*tmp);
+		store(*tmp);
 	    *tmp = burst;
 	}
 
@@ -1078,6 +1102,7 @@ public:
 
 private:
     GSMTxBurst** fillerHolder(const GSMTime& time);
+    void store(GSMTxBurst* burst);
     void clear();
 
     GSMTxBurst* m_filler;                // Filler
@@ -1328,7 +1353,9 @@ public:
 	    Lock lck(m_txMutex);
 	    dest = m_txStats;
 	}
-	
+
+    GSMTxBurstStore m_txBurstStore;
+
 protected:
     /**
      * Move expired and filler bursts filler table
@@ -1387,6 +1414,7 @@ protected:
 
     Mutex m_mutex;                       // Protect data changes
     GenQueue m_rxQueue;                  // Radio input
+    RadioRxDataStore m_radioRxStore;     // Radio rx bursts store
     Thread* m_radioInThread;             // Radio input processor
     uint8_t m_chans;                     // The number of channels whose type is not ChanNone
     ArfcnSlot m_slots[8];                // Channels
@@ -1506,28 +1534,6 @@ protected:
 
     TransceiverSockIface m_data;         // Data interface
     Thread* m_dataReadThread;            // Worker (read data socket) thread
-};
-
-
-/**
- * This class holds data read from radio device
- * @short Radio read data
- */
-class RadioRxData : public GenObject
-{
-    YCLASS(RadioRxData,GenObject)
-    YNOCOPY(RadioRxData);
-public:
-    /**
-     * Constructor
-     * @param t Burst GSM time
-     */
-    inline RadioRxData(unsigned int samples, const GSMTime& t = GSMTime())
-	: m_time(t), m_data(samples)
-	{}
-
-    GSMTime m_time;
-    ComplexVector m_data;
 };
 
 

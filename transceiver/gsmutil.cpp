@@ -65,16 +65,13 @@ const int8_t* GSMUtils::abSyncTable()
 // GSMTxBurst
 //
 // Build TX data
-const ComplexVector& GSMTxBurst::buildTxData( const SignalProcessing& proc,
-	FloatVector* tmpV, ComplexVector* tmpW,const DataBlock& buf)
+void GSMTxBurst::buildTxData(const SignalProcessing& proc,
+    FloatVector* tmpV, ComplexVector* tmpW, const DataBlock& buf)
 {
-    if (m_txData.length())
-	return m_txData;
     const DataBlock& tmp = buf.length() ? buf : *static_cast<const DataBlock*>(this);
     if (tmp.length())
 	proc.modulate(m_txData,tmp.data(0),tmp.length(),tmpV,tmpW);
     // Due testing purposes the frequency shifting is done on send time.
-    return m_txData;
 }
 
 // Parse received (from upper layer) TX burst
@@ -90,7 +87,8 @@ const ComplexVector& GSMTxBurst::buildTxData( const SignalProcessing& proc,
 // power = 10 ^ (decibels / 10)
 // Maximum decibels level is 0 so the power level received will be <= 0
 // In conclusion  powerLevel = 10^(-receivedPowerLevel/10)
-GSMTxBurst* GSMTxBurst::parse(const uint8_t* buf, unsigned int len, DataBlock* dataBits)
+GSMTxBurst* GSMTxBurst::parse(const uint8_t* buf, unsigned int len,
+    ObjStore<GSMTxBurst>& store, DataBlock* dataBits)
 {
 #ifdef XDEBUG
     String tmp;
@@ -104,7 +102,7 @@ GSMTxBurst* GSMTxBurst::parse(const uint8_t* buf, unsigned int len, DataBlock* d
 	    len,GSM_BURST_TXPACKET);
 	return 0;
     }
-    GSMTxBurst* burst = new GSMTxBurst;
+    GSMTxBurst* burst = store.get();
     burst->m_filler = (buf[0] & 0x10) != 0;
     burst->m_time.assign(net2uint32(buf + 1),buf[0] & 0x0f);
     burst->m_type = buf[5];
@@ -136,7 +134,8 @@ GSMTxBurst* GSMTxBurst::buildFiller()
 	1,0,0,1,1,1,1,0,1,0,0,1,1,1,1,1,0,0,0,1,0,0,1,0,1,1,1,1,1,0,1,0,1,0,0,0,0
     };
 
-    GSMTxBurst* b = parse(s_dummyBurst,sizeof(s_dummyBurst));
+    GSMTxBurstStore store(1,"GSMTxBurst::buildFiller()");
+    GSMTxBurst* b = parse(s_dummyBurst,sizeof(s_dummyBurst),store);
     if (b)
 	b->m_filler = true;
     return b;

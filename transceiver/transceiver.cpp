@@ -1011,6 +1011,7 @@ Transceiver::Transceiver(const char* name)
     m_printStatusChanged(false),
     m_radioSendChanged(false),
     m_tsc(0),
+    m_radioRxStore(100,"TrxRadioRx"),
     m_rxFreq(0),
     m_txFreq(0),
     m_txPower(-10),
@@ -1217,11 +1218,12 @@ void Transceiver::runReadRadio()
 	    continue;
 	GSMTime time = m_signalProcessing.ts2slots(io.timestamp);
 	if (v && time.time() >= s_gsmUpDownOffset) {
-	    RadioRxData* r = new RadioRxData(0,time.time() - s_gsmUpDownOffset);
-	    r->m_data.steal(*v);
+	    RadioRxData* r = m_radioRxStore.get();
+	    r->m_time = time.time() - s_gsmUpDownOffset;
+	    r->m_data.exchange(*v);
 	    recvRadioData(r);
 	    // Allocate space for used buffer
-	    v->assign(bufs.bufSamples());
+	    v->resize(bufs.bufSamples());
 	    bufs.crt.samples = (float*)v->data();
 	}
 	// Advance radio clock. Signal TX
@@ -1264,7 +1266,7 @@ void Transceiver::recvRadioData(RadioRxData* d)
     if (!thShouldExit(this))
 	Debug(this,DebugWarn,"Dropping radio data (%p) time %s: queue full [%p]",
 	    d,d->m_time.c_str(t),this);
-    TelEngine::destruct(d);
+    m_radioRxStore.store(d);
 }
 
 void Transceiver::runRadioDataProcess()
@@ -1427,7 +1429,8 @@ void Transceiver::checkType(const GSMTxBurst& burst, const GSMTime& time, bool i
 	case 40:
 	    if (burst.type() == 2)
 		break;
-	    Debug(this,DebugNote,"Sending Burst type %d on FCCH t3=%d FN=%d TN=%d burst FN=%d TN=%d filler=%u",burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
+	    Debug(this,DebugNote,"Sending Burst type %d on FCCH t3=%d FN=%d TN=%d burst FN=%d TN=%d filler=%u",
+		burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
 	    break;
 	case 1:
 	case 11:
@@ -1436,11 +1439,13 @@ void Transceiver::checkType(const GSMTxBurst& burst, const GSMTime& time, bool i
 	case 41:
 	    if (burst.type() == 1)
 		break;
-	    Debug(this,DebugNote,"Sending Burst type %d on SCH t3 %d FN=%d TN=%d burst FN=%d TN=%d filler=%u",burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
+	    Debug(this,DebugNote,"Sending Burst type %d on SCH t3 %d FN=%d TN=%d burst FN=%d TN=%d filler=%u",
+		burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
 	    break;
 	default:
 	    if (burst.type() != 0)
-		Debug(this,DebugNote,"Sending Burst type %d on unknow channel t3 %d FN=%d TN=%d burst FN=%d TN=%d filler=%u",burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
+		Debug(this,DebugNote,"Sending Burst type %d on unknown channel t3 %d FN=%d TN=%d burst FN=%d TN=%d filler=%u",
+		    burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
 	    break;
     }
 }
@@ -1508,7 +1513,7 @@ bool Transceiver::sendBurst(GSMTime time)
 		burst->txData().data(),burst->txData().length(),
 		m_signalProcessing.arfcnFS(i)->data(),m_signalProcessing.arfcnFS(i)->length());
 	if (delBurst) {
-	    TelEngine::destruct(burst);
+	    a->m_txBurstStore.store(burst);
 	    continue;
 	}
 	if (addFiller)
@@ -2221,7 +2226,8 @@ void Transceiver::sendLoopback(ComplexVector& buf, const GSMTime& time)
 	Thread::idle();
 	return;
     }
-    RadioRxData* r = new RadioRxData(buf.length());
+    RadioRxData* r = m_radioRxStore.get();
+    r->m_data.resize(buf.length());
     m_loopbackNextSend = Time::now() + m_loopbackSleep;
     GSMTime t = time;
     if (m_loopbackData) {
@@ -2338,9 +2344,10 @@ int Transceiver::handleCmdCustom(String& cmd, String* rspParam, String* reason)
 	uint8_t* testData = (uint8_t*)d.data();
 	for (int i = GSM_BURST_TXHEADER; i < GSM_BURST_LENGTH && increment > 0; i += increment)
 	    testData[i] = 1;
+	GSMTxBurstStore store(1,"TrxTestBurst");
 	Lock myLock(m_testMutex);
 	TelEngine::destruct(m_txTestBurst);
-	m_txTestBurst = GSMTxBurst::parse(d);
+	m_txTestBurst = GSMTxBurst::parse(d,store);
 	if (!m_txTestBurst)
 	    return CmdEFailure;
 	return CmdEOk;
@@ -2890,14 +2897,15 @@ void TransceiverQMF::processRadioData(RadioRxData* d)
 {
     if (!d)
 	return;
+    GSMTime time = d->m_time;
     XDebug(this,DebugAll,"Processing radio input TN=%u FN=%u len=%u [%p]",
-	d->m_time.tn(),d->m_time.fn(),d->m_data.length(),this);
-    m_qmf[0].data.steal(d->m_data);
+	time.tn(),time.fn(),d->m_data.length(),this);
+    m_qmf[0].data.exchange(d->m_data);
+    m_radioRxStore.store(d);
 #ifdef TRANSCEIVER_DUMP_RX_INPUT_OUTPUT
-    RxInData::add(m_qmf[0].data,d->m_time);
+    RxInData::add(m_qmf[0].data,time);
 #endif
-    qmf(d->m_time);
-    TelEngine::destruct(d);
+    qmf(time);
 }
 
 // Run the QMF algorithm
@@ -2923,11 +2931,12 @@ void TransceiverQMF::qmf(const GSMTime& time, unsigned int index)
 	crt.power /= crt.data.length();
     }
 
-    bool final = (index > 6);
+    ARFCN* a = 0;
     int indexLo = -1;
     int indexHi = -1;
-    if (final) {
-	if (crt.arfcn >= m_arfcnCount) {
+    if (index > 6) {
+	a = (crt.arfcn < m_arfcnCount) ? m_arfcn[crt.arfcn] : 0;
+	if (!a) {
 	    Debug(this,DebugFail,"No ARFCN in QMF block at index %d [%p]",index,this);
 	    fatalError();
 	    return;
@@ -2942,7 +2951,6 @@ void TransceiverQMF::qmf(const GSMTime& time, unsigned int index)
 	    indexHi = -1;
 	if (indexLo < 0 && indexHi < 0)
 	    return;
-	final = false;
     }
 
     crt.power = SignalProcessing::power2db(crt.power);
@@ -2963,12 +2971,13 @@ void TransceiverQMF::qmf(const GSMTime& time, unsigned int index)
     if ((crt.power < m_burstMinPower) && (time.timeslot() % 9))
 	return;
     // Forward data to ARFCNs
-    if (final) {
-	RadioRxData* r = new RadioRxData(0,time);
-	r->m_data.steal(crt.data);
+    if (a) {
+	RadioRxData* r = a->m_radioRxStore.get();
+	r->m_time = time;
+	r->m_data.exchange(crt.data);
 	XDebug(this,DebugAll,"Forwarding radio data ARFCN=%u len=%u TN=%u FN=%u [%p]",
-	    crt.arfcn,r->m_data.length(),time.tn(),time.fn(),this);
-	m_arfcn[crt.arfcn]->recvRadioData(r);
+	    a->arfcn(),r->m_data.length(),time.tn(),time.fn(),this);
+	a->recvRadioData(r);
 	return;
     }
     // Frequency shift
@@ -3342,11 +3351,11 @@ GSMTxBurst* TrafficShaper::getShaped(const GSMTime& t)
     if (sh == -2)
 	return GSMTxBurst::getVoidAirBurst(m_arfcn->transceiver()->signalProcessing());
     if (sh == -3)
-	return GSMTxBurst::getCopy(m_arfcn->transceiver()->getTxTestBurst());
+	return m_arfcn->transceiver()->getTxTestBurstCopy();
     if (sh == -4) {
 	uint8_t tmp[154];
 	::memset(tmp,0,154);
-	GSMTxBurst* d =  GSMTxBurst::parse(tmp,154);
+	GSMTxBurst* d =  GSMTxBurst::parse(tmp,154,m_arfcn->m_txBurstStore);
 	if (!d)
 	    return 0;
 	d->buildTxData(m_arfcn->transceiver()->signalProcessing());
@@ -3407,12 +3416,23 @@ GSMTxBurst** TxFillerTable::fillerHolder(const GSMTime& time)
     return &(m_fillers[time.fn() % modulus][time.tn()]);
 }
 
+void TxFillerTable::store(GSMTxBurst* burst)
+{
+    if (m_owner)
+	m_owner->m_txBurstStore.store(burst);
+    else
+	TelEngine::destruct(burst);
+}
+
+
 //
 // ARFCN
 //
 ARFCN::ARFCN(unsigned int index)
-    : m_mutex(false,"ARFCN"),
+    : m_txBurstStore(200,String("ARFCNTx:") + String(index)),
+    m_mutex(false,"ARFCN"),
     m_rxQueue(24,"ARFCNRx"),
+    m_radioRxStore(50,String("ARFCNRx:") + String(index)),
     m_radioInThread(0),
     m_chans(0),
     m_rxBurstsStart(0),
@@ -3628,7 +3648,7 @@ void ARFCN::addBurst(GSMTxBurst* burst)
 	    // Don't use tx silence debug status: this is a bad thing (should never happen)
 	    Debug(this,DebugNote,"%sDuplicate burst received at %s [%p]",
 		prefix(),burst->time().c_str(t),this);
-	    TelEngine::destruct(burst);
+	    m_txBurstStore.store(burst);
 	    m_txStats.burstsDupOnRecv++;
 	    return;
 	}
@@ -3706,8 +3726,8 @@ void ARFCN::runRadioDataProcess()
 	if (!burst)
 	    burst = new GSMRxBurst;
 	burst->time(d->m_time);
-	burst->m_data.steal(d->m_data);
-	TelEngine::destruct(d);
+	burst->m_data.exchange(d->m_data);
+	m_radioRxStore.store(d);
 	ArfcnSlot& slot = m_slots[burst->time().tn()];
 	if (!transceiver()->processRadioBurst(arfcn(),slot,*burst) ||
 	    recvBurst(burst))
@@ -3802,7 +3822,7 @@ void ARFCN::dropRxBurst(int dropReason, const GSMTime& t, unsigned int len, int 
 {
     bool fatal = (level == DebugFail);
     if (!fatal && transceiver() && !transceiver()->statistics()) {
-	TelEngine::destruct(d);
+	m_radioRxStore.store(d);
 	return;
     }
     bool debug = fatal;
@@ -3838,7 +3858,7 @@ void ARFCN::dropRxBurst(int dropReason, const GSMTime& t, unsigned int len, int 
     }
     if (dropReason < RxDropCount)
 	m_rxDroppedBursts[dropReason]++;
-    TelEngine::destruct(d);
+    m_radioRxStore.store(d);
     if (fatal && transceiver())
 	transceiver()->fatalError();
 }
@@ -3964,7 +3984,7 @@ void ARFCNSocket::runReadDataSocket()
 	if (!r)
 	    continue;
 	DataBlock tmp;
-	GSMTxBurst* burst = GSMTxBurst::parse(m_data.m_readBuffer.data(0),r,&tmp);
+	GSMTxBurst* burst = GSMTxBurst::parse(m_data.m_readBuffer.data(0),r,m_txBurstStore,&tmp);
 	if (!burst)
 	    continue;
 	// Transform (modulate + freq shift)

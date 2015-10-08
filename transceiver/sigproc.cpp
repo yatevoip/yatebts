@@ -141,7 +141,7 @@ void SignalProcessing::modulate(ComplexVector& out, const uint8_t* b, unsigned i
     // - starting with Lp_2 only values at oversample boundary are not NULL
     // - all non null values have either real or imaginary part non 0 BUT NOT BOTH OF THEM
     // Formula: x[n] = SUM(i=0..Lp)(f[n + i] * g[Lp - 1 - i])
-    out.resize(tmpW->length() - m_laurentPA.length(),true);
+    out.resize(tmpW->length() - m_laurentPA.length());
     const Complex* tmpWData = tmpW->data();
     int skip = 0;
     int gLastIndex = m_laurentPA.length() - 1;
@@ -149,6 +149,7 @@ void SignalProcessing::modulate(ComplexVector& out, const uint8_t* b, unsigned i
     unsigned int Lp_2 = m_laurentPA.length() / 2;
     Complex* x = out.data();
     for (unsigned int i = 0; i < out.length(); ++i, ++x, ++tmpWData) {
+	x->set();
 	if (i > Lp_2) {
 	    // Skip until next multiple of oversample (non 0) element in 'f'
 	    skip = (i - Lp_2) % m_oversample;
@@ -221,6 +222,7 @@ void SignalProcessing::convolution(ComplexVector& out, const ComplexVector& fVec
     unsigned int Lp_1 = gVect.length() / 2;
     const Complex* parseF = fVect.data();
     for (unsigned int n = 0;n < out.length(); n++, ++x, ++parseF) {
+	x->set();
 	const Complex* f = parseF;
 	const Complex* fe = parseF + gVect.length() - 1;
 	const float* g = gVect.data();

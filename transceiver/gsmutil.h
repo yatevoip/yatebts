@@ -356,14 +356,13 @@ public:
 	{ return m_txData; }
 
     /**
-     * Build TX data if not already done
+     * Build TX data
      * @param proc The signal processor
      * @param tmpV Optional temporary buffer to be passed to signal processing
      * @param tmpW Optional temporary buffer to be passed to signal processing
      * @param buf Optional buffer to parse, use this burst if empty
-     * @return TX data
      */
-    const ComplexVector& buildTxData(const SignalProcessing& proc,
+    void buildTxData(const SignalProcessing& proc,
 	FloatVector* tmpV = 0, ComplexVector* tmpW = 0,
 	const DataBlock& buf = DataBlock::empty());
 
@@ -372,21 +371,23 @@ public:
      * Copy burst data (excluding the header) in DataBlock if dataBits is 0
      * @param buf The data to parse
      * @param len The data length
+     * @param store Store to retrieve a new burst from
      * @param dataBits Optional destination for burst data bits.
      *  If set it will be filled with burst data (bits) without owning the buffer.
      *  The caller is responsable of calling DataBlock::clear(false) on it
      * @return A new burst if the data is valid
      */
     static GSMTxBurst* parse(const uint8_t* buf, unsigned int len,
-	DataBlock* dataBits = 0);
+	ObjStore<GSMTxBurst>& store, DataBlock* dataBits = 0);
 
     /**
      * Obtain a burst from the given data
      * @param data The data to parse
+     * @param store Store to retrieve a new burst from
      * @return A new burst if the data is valid
      */
-    static inline GSMTxBurst* parse(const DataBlock& data)
-	{ return parse(data.data(0),data.length()); }
+    static inline GSMTxBurst* parse(const DataBlock& data, ObjStore<GSMTxBurst>& store)
+	{ return parse(data.data(0),data.length(),store); }
 
     /**
      * Build a filler burst
@@ -408,35 +409,36 @@ public:
      * @param sigproc The signal processor
      * @return The void air burst.
      */
-    static GSMTxBurst* getVoidAirBurst(const SignalProcessing& sig)
-    {
-	GSMTxBurst* t = new GSMTxBurst();
-	t->m_txData.resize(sig.gsmSlotLen());
-	return t;
-    }
+    static GSMTxBurst* getVoidAirBurst(const SignalProcessing& sig) {
+	    GSMTxBurst* t = new GSMTxBurst();
+	    t->m_txData.resize(sig.gsmSlotLen());
+	    return t;
+	}
 
     /**
      * Get a copy of the burst.
      * @param burst The original burst or 0
      * @return A copy of the burst or 0.
      */
-    static GSMTxBurst* getCopy(const GSMTxBurst* burst)
-    {
-	if (!burst)
-	    return 0;
-	GSMTxBurst* ret = new GSMTxBurst();
-	ret->m_txData.copy(burst->m_txData);
-	ret->m_powerLevel = burst->m_powerLevel;
-	ret->m_filler = burst->m_filler;
-	ret->m_type = ret->m_type;
-	return ret;
-    }
+    static GSMTxBurst* getCopy(const GSMTxBurst* burst) {
+	    if (!burst)
+		return 0;
+	    GSMTxBurst* ret = new GSMTxBurst();
+	    ret->m_txData.copy(burst->m_txData);
+	    ret->m_powerLevel = burst->m_powerLevel;
+	    ret->m_filler = burst->m_filler;
+	    ret->m_type = burst->m_type;
+	    return ret;
+	}
+
 private:
     ComplexVector m_txData;
     float m_powerLevel;
     bool m_filler;                       // Filler burst
     int m_type;
 };
+
+typedef ObjStore<GSMTxBurst> GSMTxBurstStore;
 
 
 /**
