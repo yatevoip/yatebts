@@ -28,6 +28,11 @@
 
 namespace TelEngine {
 
+// Enable ObjStore statistics
+//#define SIGPROC_OBJ_STORE_DEBUG
+// Disable ObjStore: can be used when running memcheck to detect invalid access
+//#define SIGPROC_OBJ_STORE_DISABLE
+
 class SigProcUtils;                      // Utility functions
 class Complex;                           // A Complex (float) number
 class SignalProcessing;                  // Signal processing
@@ -1172,8 +1177,6 @@ typedef SigProcVector<int> IntVector;
 typedef SigProcVector<ComplexVector,false,false> ComplexVectorVector;
 
 
-//#define SIGPROC_OBJ_STORE_DEBUG
-
 /**
  * Store objects to avoid re-alloc/re-init for large objects.
  * Template object must inherit GenObject
@@ -1189,7 +1192,12 @@ public:
      */
     inline ObjStore(unsigned int maxLen, const char* name)
 	: m_name(name), m_mutex(false,m_name.c_str()),
-	m_max(maxLen), m_count(0),
+#ifdef SIGPROC_OBJ_STORE_DISABLE
+	m_max(0),
+#else
+	m_max(maxLen),
+#endif
+	m_count(0),
 	m_requested(0), m_created(0), m_returned(0), m_deleted(0)
 	{}
 

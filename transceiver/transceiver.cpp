@@ -1114,7 +1114,7 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	if (dumpFile)
 	    FileDataDumper::start(s_dumper,*dumpFile);
 	// TODO end test
-	unsigned int tmp = params.getIntValue(YSTRING("tx_silence_debug_interval"),2000,0,10000);
+	unsigned int tmp = params.getIntValue(YSTRING("tx_silence_debug_interval"),5000,0,10000);
 	if (tmp)
 	    // Round up to frame boundary (~ 4.615ms)
 	    tmp = 1 + ((float)tmp / 4.615);
@@ -1418,38 +1418,6 @@ static inline bool shouldBeSync(const GSMTime& time)
     return t3 == 1 || t3 == 11 || t3 == 21 || t3 == 31 || t3 == 41;
 }
 
-void Transceiver::checkType(const GSMTxBurst& burst, const GSMTime& time, bool isFiller)
-{
-    int t3 = time.fn() % 51;
-    switch (t3) {
-	case 0:
-	case 10:
-	case 20:
-	case 30:
-	case 40:
-	    if (burst.type() == 2)
-		break;
-	    Debug(this,DebugNote,"Sending Burst type %d on FCCH t3=%d FN=%d TN=%d burst FN=%d TN=%d filler=%u",
-		burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
-	    break;
-	case 1:
-	case 11:
-	case 21:
-	case 31:
-	case 41:
-	    if (burst.type() == 1)
-		break;
-	    Debug(this,DebugNote,"Sending Burst type %d on SCH t3 %d FN=%d TN=%d burst FN=%d TN=%d filler=%u",
-		burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
-	    break;
-	default:
-	    if (burst.type() != 0)
-		Debug(this,DebugNote,"Sending Burst type %d on unknown channel t3 %d FN=%d TN=%d burst FN=%d TN=%d filler=%u",
-		    burst.type(),t3,time.fn(),time.tn(),burst.time().fn(),burst.time().tn(),isFiller);
-	    break;
-    }
-}
-
 bool Transceiver::waitSendTx()
 {
     unsigned int wait = 3 * Thread::idleUsec();
@@ -1463,61 +1431,27 @@ bool Transceiver::waitSendTx()
 bool Transceiver::sendBurst(GSMTime time)
 {
     String t;
-    uint32_t fn = time.fn();
-    int t3 = fn % 51;
-    int t2 = fn % 26;
-    XDebug(this,DebugAll,"sendBurst(%s) T2=%d T3=%d [%p]",time.c_str(t),t2,t3,this);
+    XDebug(this,DebugAll,"sendBurst(%s) T2=%d T3=%d [%p]",
+	time.c_str(t),(time.fn() % 26),(time.fn() % 51),this);
     // Build send data
     bool first = true;
-    bool warn = txTimeDebugOk(time);
     for (unsigned int i = 0; i < m_arfcnCount; i++) {
-	ARFCN* a = m_arfcn[i];
-	a->moveBurstsToFillers(time,warn && m_radio && !m_loopback);
-	// Get the burst to send
-	bool addFiller = true;
-	bool sync = (i == 0) && shouldBeSync(time);
-	bool delBurst = false;
-	GSMTxBurst* burst = a->m_shaper.getShaped(time);
-	if (!burst)
-	    burst = a->getBurst(time);
-	else
-	    delBurst = true;
-	if (burst && a->m_slots[time.tn()].type == ARFCN::ChanIGPRS)
-	    delBurst = true;
-	if (!burst) {
-	    if (sync) {
-		m_sendBurstBuf.resize(m_sendBurstBuf.length());
-		a->m_txStats.burstsMissedSyncOnSend++;
-		if (warn)
-		    Debug(this,DebugNote,"Missing SYNC burst at %s T2=%d T3=%d [%p]",
-			time.c_str(t),t2,t3,this);
-		continue;
-	    }
-	    burst = a->m_fillerTable.get(time);
-	    addFiller = false;
-	}
+	bool owner = false;
+	GSMTxBurst* burst = m_arfcn[i]->getBurst(time,owner);
 	if (!burst)
 	    continue;
-	if (time.tn() == 0 && i == 0 && burst->type() != 0)
-	    checkType(*burst,time,!addFiller);
+	const ComplexVector* fs = m_signalProcessing.arfcnFS(i);
 	if (first) {
-	    if (m_sendBurstBuf.length() != burst->txData().length())
-		m_sendBurstBuf.resize(burst->txData().length());
-	    Complex::multiply(m_sendBurstBuf.data(),m_sendBurstBuf.length(),
-		burst->txData().data(),burst->txData().length(),
-		m_signalProcessing.arfcnFS(i)->data(),m_signalProcessing.arfcnFS(i)->length());
 	    first = false;
+	    m_sendBurstBuf.resize(burst->txData().length());
+	    Complex::multiply(m_sendBurstBuf.data(),m_sendBurstBuf.length(),
+		burst->txData().data(),burst->txData().length(),fs->data(),fs->length());
 	}
 	else
 	    Complex::sumMul(m_sendBurstBuf.data(),m_sendBurstBuf.length(),
-		burst->txData().data(),burst->txData().length(),
-		m_signalProcessing.arfcnFS(i)->data(),m_signalProcessing.arfcnFS(i)->length());
-	if (delBurst) {
-	    a->m_txBurstStore.store(burst);
-	    continue;
-	}
-	if (addFiller)
-	    a->m_fillerTable.set(burst);
+		burst->txData().data(),burst->txData().length(),fs->data(),fs->length());
+	if (owner)
+	    m_arfcn[i]->m_txBurstStore.store(burst);
     }
     // Reset TX buffer if nothing was set there
     if (first)
@@ -2120,11 +2054,6 @@ int Transceiver::handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String*
 	if (!cmd)
 	    TRX_SET_ERROR_BREAK(CmdEInvalidParam);
 	int freq = cmd.toInteger();
-	const RadioCapability* caps = m_radio->capabilities();
-	if (caps)
-	    clampInt(freq,caps->minTuneFreq,caps->maxTuneFreq,
-		rx ? "RXTUNE" : "TXTUNE");
-	// NOTE: Should we add some extra value when using multiple ARFCNs?
 	// Frequency is given in KHz, radio expects it in Hz
 	freq *= 1000;
 	// Adjust frequency (we are using multiple ARFCNs)
@@ -2177,13 +2106,6 @@ int Transceiver::handleCmdSetGain(bool rx, String& cmd, String* rspParam)
 	if (!cmd)
 	    TRX_SET_ERROR_BREAK(CmdEInvalidParam);
 	int gain = cmd.toInteger();
-	const RadioCapability* caps = m_radio->capabilities();
-	if (caps) {
-	    if (rx)
-		clampInt(gain,caps->rxGain2MinVal,caps->rxGain2MaxVal,"SETRXGAIN");
-	    else
-		clampInt(gain,caps->txGain2MinVal,caps->txGain2MaxVal,"SETTXGAIN");
-	}
 	int newGain = 0;
 	unsigned int code = m_radio->setGain(!rx,gain,0,&newGain);
 	if (!radioCodeOk(code))
@@ -3467,29 +3389,6 @@ void ARFCN::dumpChanType(String& buf, const char* sep)
     }
 }
 
-// Extract expired bursts from this ARFCN's queue.
-// Move them to filler table
-void ARFCN::moveBurstsToFillers(const GSMTime& time, bool warnExpired)
-{
-    unsigned int expired = 0;
-    Lock lck(m_txMutex);
-    for (ObjList* o = m_expired.skipNull(); o; o = o->skipNull())
-	m_fillerTable.set(static_cast<GSMTxBurst*>(o->remove(false)));
-    for (ObjList* o = m_txQueue.skipNull(); o; o = o->skipNull()) {
-	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
-	if (b->time() >= time)
-	    break;
-	m_fillerTable.set(static_cast<GSMTxBurst*>(o->remove(false)));
-	expired++;
-    }
-    if (!expired)
-	return;
-    m_txStats.burstsExpiredOnSend += expired;
-    if (warnExpired)
-	Debug(this,DebugNote,"%s%u burst(s) expired at " FMT64U " (%u/%u) [%p]",
-	    prefix(),expired,time.time(),time.fn(),time.tn(),this);
-}
-
 // Initialize a timeslot and related data
 void ARFCN::initTimeslot(unsigned int slot, int t)
 {
@@ -3657,15 +3556,109 @@ void ARFCN::addBurst(GSMTxBurst* burst)
     last->append(burst);
 }
 
-GSMTxBurst* ARFCN::getBurst(const GSMTime& time)
+static inline GSMTxBurst* checkType(ARFCN* arfcn, GSMTxBurst* burst, const GSMTime& time,
+    bool isFiller)
 {
-    Lock myLock(m_txMutex);
-    for (ObjList* o = m_txQueue.skipNull(); o; o = o->skipNext()) {
-	GSMTxBurst* b = static_cast<GSMTxBurst*>(o->get());
-	if (b->time() > time)
-	    continue;
-	o->remove(false);
-	return b;
+    if (!burst)
+	return 0;
+    if (!(arfcn->arfcn() == 0 && time.tn() == 0 && burst->type() != 0))
+	return burst;
+    unsigned int t3 = time.fn() % 51;
+    const char* chan = "unknown channel";
+    switch (t3) {
+	case 0:
+	case 10:
+	case 20:
+	case 30:
+	case 40:
+	    if (burst->type() == 2)
+		return burst;
+	    chan = "FCCH";
+	    break;
+	case 1:
+	case 11:
+	case 21:
+	case 31:
+	case 41:
+	    if (burst->type() == 1)
+		return burst;
+	    chan = "SCH";
+	    break;
+	default:
+	    if (burst->type() == 0)
+		return burst;
+    }
+    String t, tb;
+    Debug(arfcn,DebugNote,
+	"%sSending burst type %d on %s T3=%u at %s burst %s filler=%s [%p]",
+	arfcn->prefix(),burst->type(),chan,t3,time.c_str(t),burst->time().c_str(tb),
+	String::boolText(isFiller),arfcn);
+    return burst;
+}
+
+// Obtain the burst that has to be sent at the specified time
+GSMTxBurst* ARFCN::getBurst(const GSMTime& time, bool& owner)
+{
+    String t;
+    GSMTxBurst* burst = m_shaper.getShaped(time);
+    owner = (burst != 0);
+    Lock lck(m_txMutex);
+    // Move filler/expired bursts to filler table
+    ObjList* found = m_expired.skipNull();
+    for (; found; found = found->skipNull())
+	m_fillerTable.set(static_cast<GSMTxBurst*>(found->remove(false)));
+    // Check if we have a burst to send
+    for (found = m_txQueue.skipNull(); found; found = found->skipNext()) {
+	GSMTxBurst* b = static_cast<GSMTxBurst*>(found->get());
+	if (b->time() <= time)
+	    break;
+    }
+    // found: burst time equals requested time or is in the past
+    if (found) {
+	unsigned int expired = 0;
+	GSMTxBurst* b = static_cast<GSMTxBurst*>(found->remove(false));
+	// Same time: don't use as filler if chan type is GPRS
+	// NOTE:
+	//  See why we are doing it only if time matches
+	//  Why don't we do the same for expired, non filler, bursts?
+	//  We should do the same for all GPRS chans assuming the upper
+	//   layer is using fixed allocation
+	if (b->time() == time) {
+	    if (!burst)
+		burst = b;
+	    if (m_slots[time.tn()].type != ChanIGPRS)
+		m_fillerTable.set(b);
+	    else if (burst == b)
+		owner = true;
+	    else
+		m_txBurstStore.store(b);
+	}
+	else {
+	    m_fillerTable.set(b);
+	    expired++;
+	}
+	for (found = found->skipNull(); found; found = found->skipNull()) {
+	    m_fillerTable.set(static_cast<GSMTxBurst*>(found->remove(false)));
+	    expired++;
+	}
+	if (expired) {
+	    m_txStats.burstsExpiredOnSend += expired;
+	    if (txTimeDebugOk(time))
+		Debug(this,DebugNote,"%s%u burst(s) expired at %s [%p]",
+		    prefix(),expired,time.c_str(t),this);
+	}
+    }
+    lck.drop();
+    if (burst)
+	return checkType(this,burst,time,false);
+    bool sync = (arfcn() == 0) && shouldBeSync(time);
+    if (!sync)
+	return checkType(this,m_fillerTable.get(time),time,true);
+    m_txStats.burstsMissedSyncOnSend++;
+    if (debugAt(DebugNote) && txTimeDebugOk(time)) {
+        uint32_t fn = time.fn();
+	Debug(this,DebugNote,"%sMissing SYNC burst at %s T2=%d T3=%d [%p]",
+	    prefix(),time.c_str(t),(fn % 26),(fn % 51),this);
     }
     return 0;
 }

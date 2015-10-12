@@ -1084,7 +1084,7 @@ public:
 		store(*tmp);
 	    *tmp = burst;
 	}
-
+	
     /**
      * Get a burst from the filler table
      * @param time The time of the filler burst
@@ -1236,9 +1236,10 @@ public:
     /**
      * Obtain the burst that has to be sent at the specified time
      * @param time The burst time
+     * @param owner Set to true on exit if the returned burst will be owned by the caller
      * @return GSMTxBurst pointer or 0
      */
-    GSMTxBurst* getBurst(const GSMTime& time);
+    GSMTxBurst* getBurst(const GSMTime& time, bool& owner);
 
     /**
      * Process received radio data
@@ -1357,13 +1358,6 @@ public:
     GSMTxBurstStore m_txBurstStore;
 
 protected:
-    /**
-     * Move expired and filler bursts filler table
-     * @param time Time base for expire calculation
-     * @param warnExpired True to put a debug message if there are expired bursts
-     */
-    void moveBurstsToFillers(const GSMTime& time, bool warnExpired);
-
     /**
      * Initialize a timeslot and related data
      * @param slot Timeslot number
