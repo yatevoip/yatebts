@@ -188,13 +188,19 @@ Radio.C0=
 
 ; tx_slots: integer: The number of timeslots to send in one loop
 ; This parameter is applied on reload
-; Defaults to 16. Allowed interval [1..1024]
+; Defaults to 16 if no radio capabilities are available
+; Otherwise: the default value will be taken from radio capabilities
+; I.e. this parameter may be used to override radio capabilities
+; Allowed interval [1..1024]
 ;tx_slots=16
 
 ; radio_latency_slots: integer: Estimated radio latency in timeslots
 ; This value is used to drop old bursts from send queue (avoid sending old data to radio)
 ; This parameter is applied on reload
-; Defaults to 5. Allowed interval [0..256]
+; Defaults to 5 if no radio capabilities are available
+; Otherwise: the default value will be taken from radio capabilities
+; I.e. this parameter may be used to override radio capabilities
+; Allowed interval [0..256]
 ;radio_latency_slots=5
 
 ; radio_read_priority: keyword: Radio read thread priority

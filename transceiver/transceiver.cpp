@@ -69,6 +69,7 @@
 #define TX_ATTEN_OFFS_MIN 0
 #define TX_ATTEN_OFFS_MAX 100
 
+#define RADIO_TX_SLOTS_DEF 16
 #define RADIO_LATENCY_SLOTS_DEF 5
 
 namespace TelEngine {
@@ -1004,8 +1005,8 @@ Transceiver::Transceiver(const char* name)
     m_clockIface("clock"),
     m_clockUpdMutex(false,"TrxClockUpd"),
     m_clockUpdOffset(16),
-    m_txSlots(16),
-    m_radioLatencySlots(RADIO_LATENCY_SLOTS_DEF),
+    m_txSlots(1),
+    m_radioLatencySlots(0),
     m_printStatus(0),
     m_printStatusBursts(true),
     m_printStatusChanged(false),
@@ -1069,7 +1070,6 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	Debug(this,DebugNote,"No radio interface [%p]",this);
 	return false;
     }
-    reInit(params);
     bool ok = false;
     while (true) {
 	m_oversamplingRate = getUInt(params,"oversampling");
@@ -1125,6 +1125,7 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	TelEngine::destruct(m_radio);
 	return false;
     }
+    reInit(params);
     Debug(this,DebugInfo,"Transceiver initialized radio=(%p) '%s' [%p]",
 	m_radio,m_radio->debugName(),this);
     m_nextClockUpdTime = 0;
@@ -1146,9 +1147,19 @@ void Transceiver::reInit(const NamedList& params)
     m_maxPropDelay = params.getIntValue(YSTRING("max_prop_delay"),m_maxPropDelay);
     m_upPowerThreshold = params.getIntValue(YSTRING("up_power_warn"),m_upPowerThreshold);
     change(this,m_clockUpdOffset,params,YSTRING("clock_update_offset"),16,0,256);
-    change(this,m_txSlots,params,YSTRING("tx_slots"),16,1,1024);
-    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),
-	RADIO_LATENCY_SLOTS_DEF,0,256);
+    unsigned int latency = RADIO_LATENCY_SLOTS_DEF;
+    unsigned int txSlots = RADIO_TX_SLOTS_DEF;
+    const RadioCapability* caps = m_radio ? m_radio->capabilities() : 0;
+    if (caps && m_signalProcessing.gsmSlotLen()) {
+	latency = caps->rxLatency / m_signalProcessing.gsmSlotLen();
+	if (!latency && caps->rxLatency)
+	    latency = 1;
+	txSlots = caps->txLatency / m_signalProcessing.gsmSlotLen();
+	if (!txSlots)
+	    txSlots = 1;
+    }
+    change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),latency,0,256);
+    change(this,m_txSlots,params,YSTRING("tx_slots"),txSlots,1,1024);
     m_printStatus = params.getIntValue(YSTRING("print_status"));
     m_printStatusBursts = m_printStatus &&
 	params.getBoolValue(YSTRING("print_status_bursts"),true);
