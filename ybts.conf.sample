@@ -461,6 +461,13 @@ Radio.C0=
 ; Defaults to 14 (32 slots).
 ;RACH.TxInteger=14
 
+; RACH.AC: integer: Access Class flags.
+; This is the raw parameter sent on BCCH, see GSM 04.08 10.5.2.29 for encoding.
+; DO NOT ALTER THIS UNLESS YOU ARE A REAL OPERATOR!
+; Interval allowed: 0..65535 (16 bits, 0x0000..0xffff).
+; Defaults to 0x0400 (No emergency services access).
+;RACH.AC=0x0400
+
 ; Radio.ARFCNs: integer: The number of ARFCNs to use.
 ; The ARFCN set will be C0, C0+2, C0+4, ...
 ; Interval allowed: 1..10.
@@ -1023,6 +1030,7 @@ Radio.C0=
 ; Default: GSM;text="Handover".
 ;reason=GSM;text="Handover"
 
+
 [roaming]
 ; This section controls parameters used by roaming.js when connecting YateBTS to a core network.
 
@@ -1055,6 +1063,11 @@ Radio.C0=
 ;  associated to each base station by the network operator.
 ; REQUIRED!
 ;gstn_location=
+
+; sos_sip: string: host:port where SIP emergency calls are sent.
+; If not set any emergency calls will be delivered to reg_sip or nodes_sip
+; Ex: sos_sip=192.168.1.215:5059
+;sos_sip=
 
 ; text_sms: boolean: If possible decode and send the SMS as text/plain SIP MESSAGE body.
 ; By default the binary type application/vnd.3gpp.sms is used.

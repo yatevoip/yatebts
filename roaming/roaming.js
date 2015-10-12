@@ -784,7 +784,11 @@ function onRoute(msg)
 	    return false;
 	}
 
-	var sip_server = getSIPRegistrar(tmsi);
+	var sip_server = null;
+	if ("sos" == msg.called)
+	    sip_server = sos_sip;
+	if (!sip_server)
+	    sip_server = getSIPRegistrar(tmsi);
 	if (!sip_server) {
 	    msg.error = "noconn";
 	    return false;
@@ -803,6 +807,24 @@ function onRoute(msg)
 	if (msg.phy_info)
 	    msg["osip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
 	msg.retValue("sip/sip:"+msg.called+"@"+sip_server);
+    }
+    else if ("sos" == msg.called) {
+	// Emergency call, most likely SIMless
+	var sip_server = sos_sip;
+	if (!sip_server)
+	    sip_server = getSIPRegistrar();
+	if (!sip_server) {
+	    msg.error = "noconn";
+	    return false;
+	}
+
+	// if we are here TMSI is missing or unknown, use IMEI instead
+	if ("" != msg.imei)
+	    msg.caller = "IMEI" + msg.imei;
+	msg["osip_P-Access-Network-Info"] = accnet_header;
+	if (msg.phy_info)
+	    msg["osip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
+	msg.retValue("sip/sip:sos@"+sip_server);
     }
     else {
 	// MT call
@@ -1001,7 +1023,8 @@ function readYBTSConf()
         }
     }
     my_sip = roaming_section.getValue("my_sip");
-    
+    sos_sip = roaming_section.getValue("sos_sip");
+
     if (my_sip=="") {
 	var address;
 	

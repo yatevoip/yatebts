@@ -94,12 +94,14 @@ static const String s_PLMNidentity = "PLMNidentity";
 static const String s_LAC = "LAC";
 static const String s_mobileIdent = "MobileIdentity";
 static const String s_imsi = "IMSI";
+static const String s_imei = "IMEI";
 static const String s_tmsi = "TMSI";
 static const String s_cause = "Cause";
 static const String s_causeLocation = "location";
 static const String s_causeCoding = "coding";
 static const String s_cmServType = "CMServiceType";
 static const String s_cmMOCall = "MO-call-establishment-or-PM-connection-establishment";
+static const String s_cmEmgCall = "emergency-call-establishment";
 static const String s_cmSMS = "SMS";
 static const String s_cmSS = "SS-activation";
 static const String s_facility = "Facility";
@@ -626,6 +628,8 @@ public:
 	    if (0 != (m_authOrigin & flag))
 		m_authenticated = true;
 	}
+    inline void setEmergency()
+	{ m_emergency = true; }
     inline int authSent(int flag)
 	{ return (m_authOrigin & flag); }
     inline void setFlag(int mask)
@@ -674,6 +678,8 @@ public:
 	{ m_extraRelease = hexa; }
     inline int hoReference() const
 	{ return m_reference; }
+    inline bool isEmergency() const
+	{ return m_emergency; }
     inline bool isCSFB() const
 	{ return m_csfb; }
     inline bool hasSS()
@@ -761,6 +767,7 @@ protected:
     YBTSSignalling* m_owner;
     bool m_removed;                      // Removed from owner
     bool m_hardRelease;                  // Should hard release (after handover)
+    bool m_emergency;                    // Emergency SIMless connection
     bool m_csfb;                         // Connection caused by CSFB
     XmlElement* m_xml;
     RefPointer<YBTSUE> m_ue;
@@ -3605,6 +3612,7 @@ YBTSConn::YBTSConn(YBTSSignalling* owner, uint16_t connId)
     m_owner(owner),
     m_removed(false),
     m_hardRelease(false),
+    m_emergency(false),
     m_csfb(false),
     m_xml(0),
     m_ss(0),
@@ -6352,8 +6360,9 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    return;
 	}
 	const String& type = cmServType->getText();
+	bool isEmg = (type == s_cmEmgCall);
 	isSms = (type == s_cmSMS);
-	if (isSms || type == s_cmMOCall || type == s_cmSS)
+	if (isSms || isEmg || type == s_cmMOCall || type == s_cmSS)
 	    ;
 	else {
 	    Debug(this,DebugNote,
@@ -6363,16 +6372,26 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    return;
 	}
 	bool haveTMSI = false;
+	bool haveIMEI = false;
 	const String* ident = 0;
-	uint8_t cause = getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
+	if (isEmg) {
+	    ident = identity->childText(s_imei);
+	    if (ident)
+		haveIMEI = true;
+	    conn->setEmergency();
+	}
+	uint8_t cause = ident ? 0 : getMobileIdentTIMSI(m,xml,*identity,ident,haveTMSI);
 	if (cause) {
 	    sendCMServiceRsp(m,conn,cause);
 	    return;
 	}
 	Debug(this,DebugAll,"Handling CMServiceRequest conn=%u: ident=%s/%s type=%s [%p]",
-	    conn->connId(),(haveTMSI ? "TMSI" : "IMSI"),
+	    conn->connId(),(haveIMEI ? "IMEI" : (haveTMSI ? "TMSI" : "IMSI")),
 	    ident->c_str(),type.c_str(),this);
-	getUESafeIdent(ue,*ident,haveTMSI);
+	if (haveIMEI)
+	    getUESafe(ue,String::empty(),String::empty(),*ident);
+	else
+	    getUESafeIdent(ue,*ident,haveTMSI);
 	bool dropConn = false;
 	if (ue) {
 	    Lock lck(conn);
@@ -6387,6 +6406,10 @@ void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSC
 	    if (dropConn || !ue)
 		__plugin.signalling()->dropConn(conn,true);
 	    return;
+	}
+	if (isEmg && !ue->imei()) {
+	    ue->m_askIMEI = true;
+	    sendIdentityRequest(conn,YBTSConn::FAskIMEI);
 	}
     }
     ue->stopPagingNow();
@@ -6825,11 +6848,15 @@ bool YBTSChan::initIncoming(const XmlElement& xml, bool regular, const String* c
     ue()->addCaller(*m_route);
     ue()->addParams(*m_route);
     ue()->unlock();
-    m_route->addParam("called",call->m_called,false);
+    if (call->m_called)
+	m_route->addParam("called",call->m_called);
+    else if ((m_conn && m_conn->isEmergency()) || !call->m_regular)
+	m_route->addParam("called","sos");
     m_route->addParam("callednumtype",call->m_calledType,false);
     m_route->addParam("callednumplan",call->m_calledPlan,false);
     m_route->addParam("username",ue()->imsi(),false);
-    m_route->addParam("imei",ue()->imei(),false);
+    if (ue()->imei())
+	m_route->setParam("imei",ue()->imei());
     m_route->addParam("emergency",String::boolText(!call->m_regular));
     if (xml.findFirstChild(&s_ccSsCLIR))
 	m_route->addParam("privacy",String::boolText(true));

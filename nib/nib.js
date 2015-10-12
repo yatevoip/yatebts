@@ -368,6 +368,7 @@ function readConfiguration(return_subscribers)
     country_code = configuration["general"]["country_code"];
     if (country_code.length==0)
 	Engine.alarm(alarm_conf,"Please configure country code. See subscribers.conf or use the NIB web interface");
+    gw_sos = configuration["general"]["gw_sos"];
 
     var reg = configuration["general"]["regexp"];
     regexp = new RegExp(reg);
@@ -410,7 +411,7 @@ function readConfiguration(return_subscribers)
     }
 
     if (count>0)
-    	subscribers = upd_subscribers;
+	subscribers = upd_subscribers;
 }
  
 // Allocate an unused TMSI
@@ -600,7 +601,6 @@ function getSubscriberIMSI(msisdn,tmsi)
 function updateCaller(msg,imsi)
 {
     var caller = msg.caller;
-    var tmsi;
 
     // if caller is in IMSI format then find it's MSISDN
     if (caller.match(/IMSI/)) {
@@ -612,10 +612,12 @@ function updateCaller(msg,imsi)
 	    return false;
 	}
     } else if (caller.match(/TMSI/)) {
-	tmsi = caller.substr(4);
+	var tmsi = caller.substr(4);
 	for (var imsi_key in registered_subscribers) {
-	    if (registered_subscribers[imsi_key].tmsi == tmsi)
+	    if (registered_subscribers[imsi_key].tmsi == tmsi) {
 		msg.caller = registered_subscribers[imsi_key].msisdn;
+		break;
+	    }
 	}
     }
 
@@ -655,6 +657,22 @@ function routeOutside(msg)
     msg.retValue("line/"+msg.called);
 
     return true;
+}
+
+function routeSOS(msg)
+{
+    if ("ybts" != msg.module || "sos" != msg.called)
+	return false;
+    if (gw_sos.length) {
+	if (gw_sos.match(/^\+?[0-9]+$/)) {
+	    // Route to a number (registered user)
+	    msg.called = gw_sos;
+	    return false;
+	}
+	msg.retValue(gw_sos);
+	return true;
+    }
+    return routeOutside(msg);
 }
 
 function routeToRegUser(msg,called)
@@ -896,6 +914,9 @@ function onRoute(msg)
 
     // rewrite caller param to msisdn in case it's in IMSI format
     if (!updateCaller(msg))
+	return true;
+
+    if (routeSOS(msg))
 	return true;
 
     var called = msg.called;

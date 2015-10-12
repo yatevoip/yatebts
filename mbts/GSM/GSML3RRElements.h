@@ -336,7 +336,7 @@ class L3RACHControlParameters : public L3ProtocolElement {
 		// Configurable values.
 		mMaxRetrans = gConfig.getNum("GSM.RACH.MaxRetrans");
 		mTxInteger = gConfig.getNum("GSM.RACH.TxInteger");
-		mAC = 0x0400; //NO EMERGENCY SERVICE - kurtis
+		mAC = gConfig.getNum("GSM.RACH.AC"); // By default no emergency service
 	}
 
 	size_t lengthV() const { return 3; }

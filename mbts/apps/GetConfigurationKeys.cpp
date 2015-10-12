@@ -1486,6 +1486,19 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
+	tmp = new ConfigurationKey("GSM.RACH.AC","0x0400",
+		"",
+		ConfigurationKey::CUSTOMERTUNE,
+		ConfigurationKey::VALRANGE,
+		"0:65535",
+		false,
+		"Access Class flags.  "
+			"This is the raw parameter sent on the BCCH.  "
+			"See GSM 04.08 10.5.2.29 for encoding."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
+
 	tmp = new ConfigurationKey("GSM.Radio.ARFCNs","1",
 		"ARFCNs",
 		ConfigurationKey::CUSTOMERWARN,
