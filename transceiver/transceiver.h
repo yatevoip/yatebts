@@ -532,8 +532,9 @@ public:
 
     /**
      * Stop the transceiver upper layer interface, power off the radio
+     * @param dumpStat True to dump transceiver status
      */
-    void stop();
+    void stop(bool dumpStat = false);
 
     /**
      * Check if the transceiver is collecting statistics
@@ -756,6 +757,19 @@ protected:
      * @return True on success, false if the calling thread should exit
      */
     bool waitSendTx();
+
+    /**
+     * Dump transceiver status to output
+     * @param printBursts Print burst counters
+     * @param radioTime Optional pointer to current radio time
+     */
+    void dumpStatus(bool printBursts, GSMTime* radioTime = 0);
+
+    /**
+     * Notification of GSM time sync sent
+     * @param time Sent time
+     */
+    virtual void syncGSMTimeSent(const GSMTime& time);
 
     int m_state;                         // Transceiver state
     Mutex m_stateMutex;                  // Serialize state change

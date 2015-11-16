@@ -48,6 +48,8 @@ class GsmTrxQMF : public TransceiverQMF
 public:
     GsmTrxQMF();
     virtual void fatalError();
+protected:
+    virtual void syncGSMTimeSent(const GSMTime& time);
 };
 
 class GsmTrxModule : public Module
@@ -66,6 +68,13 @@ public:
     inline void setCheckTrx() {
 	    Lock lck(m_stateMutex);
 	    m_checkTrx = true;
+	}
+    inline void syncGSMTimeSent(const GSMTime& time) {
+	    if (!m_syncGsmTimeUs)
+		return;
+	    Lock lck(m_stateMutex);
+	    m_syncGsmTimeLast = time;
+	    m_syncGsmTimeTout = Time::now() + m_syncGsmTimeUs;
 	}
     void readCtrlLoop();
     void workerTerminated(GsmTrxThread* thread);
@@ -93,7 +102,7 @@ protected:
     void ctrlStop();
     // Transceiver management (create/stop)
     int trxStart(String& cmdLine);
-    void trxStop(const char* reason, int level = DebugNote);
+    void trxStop(const char* reason, int level = DebugNote, bool dumpStat = true);
     void changeState(int newState);
     RadioInterface* createRadio(const NamedList& params);
 
@@ -109,6 +118,9 @@ private:
     bool m_checkTrx;                     // Flag used to check the transceiver in timer handler
     uint64_t m_nextCtrlStart;            // Next time to try control start
     uint64_t m_ctrlStartInterval;        // Last interval used for control start
+    GSMTime m_syncGsmTimeLast;           // GSM time sync last sent value
+    uint64_t m_syncGsmTimeTout;          // GSM time sync timeout
+    uint64_t m_syncGsmTimeUs;            // GSM time sync interval
 };
 
 INIT_PLUGIN(GsmTrxModule);
@@ -162,6 +174,11 @@ void GsmTrxQMF::fatalError()
     __plugin.setCheckTrx();
 }
 
+void GsmTrxQMF::syncGSMTimeSent(const GSMTime& time)
+{
+    __plugin.syncGSMTimeSent(time);
+}
+
 
 //
 // GsmTrxModule
@@ -177,7 +194,9 @@ GsmTrxModule::GsmTrxModule()
     m_port(0),
     m_checkTrx(false),
     m_nextCtrlStart(0),
-    m_ctrlStartInterval(0)
+    m_ctrlStartInterval(0),
+    m_syncGsmTimeTout(0),
+    m_syncGsmTimeUs(0)
 {
     Output("Loaded module GSM Transceiver");
     Engine::extraPath("radio");
@@ -213,7 +232,7 @@ void GsmTrxModule::readCtrlLoop()
 	    stopRecv = (m_trx == 0);
 	}
 	else if (s == YSTRING("CMD STOP")) {
-	    trxStop("received STOP command");
+	    trxStop("received STOP command",DebugNote,!startRecv);
 	    rsp << "RSP STOP 0";
 	    stopRecv = true;
 	}
@@ -273,7 +292,7 @@ void GsmTrxModule::workerTerminated(GsmTrxThread* thread)
     else {
 	Alarm(this,"system",DebugWarn,"'%s' thread abnormally terminated",what.c_str());
 	if (stop) {
-	    trxStop("Worker thread abnormally terminated");
+	    trxStop("Worker thread abnormally terminated",DebugWarn);
 	    ctrlStop();
 	}
     }
@@ -386,6 +405,20 @@ void GsmTrxModule::onTimer(const Time& time)
 	    }
 	}
     }
+    else if (m_syncGsmTimeTout && m_syncGsmTimeTout < time) {
+	Lock lck(m_stateMutex);
+	if (m_syncGsmTimeTout && m_syncGsmTimeTout < time) {
+	    m_syncGsmTimeTout = 0;
+	    if (m_trx) {
+		String l;
+		Debug(this,DebugFail,"GSM time sync send gap %ums last sent %s",
+		    (unsigned int)(m_syncGsmTimeUs / 1000),m_syncGsmTimeLast.c_str(l));
+		// Avoid too much debug if we don't terminate
+		if (m_syncGsmTimeUs)
+		    m_syncGsmTimeUs += 1000000;
+	    }
+	}
+    }
 }
 
 bool GsmTrxModule::onCmdControl(Message& msg)
@@ -469,6 +502,12 @@ int GsmTrxModule::trxStart(String& cmdLine)
     if (Engine::exiting())
 	return Transceiver::CmdEInvalidState;
     NamedList params(*m_cfg.createSection("transceiver"));
+    m_syncGsmTimeLast = 0;
+    m_syncGsmTimeTout = 0;
+    m_syncGsmTimeUs = params.getIntValue("gsm_time_sync_check",0,0,10000);
+    if (m_syncGsmTimeUs && m_syncGsmTimeUs < 2000)
+	m_syncGsmTimeUs = 2000;
+    m_syncGsmTimeUs *= 1000;
     lck.drop();
     RadioInterface* r = createRadio(params);
     if (!r)
@@ -498,14 +537,15 @@ int GsmTrxModule::trxStart(String& cmdLine)
     return Transceiver::CmdEFailure;
 }
 
-void GsmTrxModule::trxStop(const char* reason, int level)
+void GsmTrxModule::trxStop(const char* reason, int level, bool dumpStat)
 {
     RefPointer<GsmTrxQMF> trx;
     if (!getTransceiver(trx,true))
 	return;
     Debug(this,level,"Stopping transceiver: %s",reason);
-    trx->stop();
+    trx->stop(dumpStat && level < DebugAll);
     trx = 0;
+    m_syncGsmTimeTout = 0;
 }
 
 void GsmTrxModule::changeState(int newState)

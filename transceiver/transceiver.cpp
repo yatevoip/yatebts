@@ -1329,45 +1329,9 @@ void Transceiver::runRadioSendData()
 	    wait = true;
 	}
 	if (printStatus) {
-	    // Note: some values are taken without protection
 	    if (printStatus > 0)
 		printStatus--;
-	    String s;
-	    s << "\r\nRadioClock:\t" << radioTime;
-	    s << "\r\nLastSyncUpper:\t" << m_lastClockUpd;
-	    s << "\r\nTxTime:\t\t" << m_txTime;
-	    if (printBursts) {
-		s << "\r\nTxBursts:\t" << m_txIO.bursts;
-		s << "\r\nRxBursts:\t" << m_rxIO.bursts;
-	    }
-	    ARFCNStatsTx aStats;
-	    for (unsigned int i = 0; i < m_arfcnConf; i++) {
-		s << "\r\nARFCN[" << i << "]";
-		ARFCN* a = m_arfcn[i];
-		a->getTxStats(aStats);
-		s << "\r\n  UplinkLastOutTime:\t" << a->m_lastUplinkBurstOutTime;
-		s << "\r\n  DownlinkLastInTime:\t" << aStats.burstLastInTime;
-		if (printBursts) {
-		    uint64_t rx = a->m_rxBursts;
-		    String tmp;
-		    uint64_t dropped = a->dumpDroppedBursts(&tmp);
-		    s << "\r\n  RxBursts:\t\t" << rx;
-		    s << "\r\n  RxDroppedBursts:\t" << dropped << " " << tmp;
-		    tmp.clear();
-		    for (uint8_t j = 0; j < 8; j++) {
-			if (tmp)
-			    tmp << "/";
-			tmp << aStats.burstsDwInSlot[j];
-		    }
-		    s << "\r\n  DownlinkInBursts:\t" << aStats.burstsDwIn << " (" << tmp << ")";
-		    s << "\r\n  TxMissSyncOnSend:\t" << aStats.burstsMissedSyncOnSend;
-		    s << "\r\n  TxExpiredOnSend:\t" << aStats.burstsExpiredOnSend;
-		    s << "\r\n  TxExpiredOnRecv:\t" << aStats.burstsExpiredOnRecv;
-		    s << "\r\n  TxFutureOnRecv:\t" << aStats.burstsFutureOnRecv;
-		    s << "\r\n  TxDupOnRecv:\t\t" << aStats.burstsDupOnRecv;
-		}
-	    }
-	    Output("Transceiver(%s) status: [%p]%s",debugName(),this,encloseDashes(s));
+	    dumpStatus(printBursts,&radioTime);
 	}
 	GSMTime radioCurrentTime = radioTime + radioLatencySlots;
 	GSMTime txTime = m_txTime;
@@ -1437,6 +1401,56 @@ bool Transceiver::waitSendTx()
 	    return false;
     }
     return true;
+}
+
+void Transceiver::dumpStatus(bool printBursts, GSMTime* radioTime)
+{
+    GSMTime r;
+    if (!radioTime) {
+	getRadioClock(r);
+	radioTime = &r;
+    }
+    // Note: some values are taken without protection
+    String s;
+    s << "\r\nRadioClock:\t" << *radioTime;
+    s << "\r\nLastSyncUpper:\t" << m_lastClockUpd;
+    s << "\r\nTxTime:\t\t" << m_txTime;
+    if (printBursts) {
+	s << "\r\nTxBursts:\t" << m_txIO.bursts;
+	s << "\r\nRxBursts:\t" << m_rxIO.bursts;
+    }
+    ARFCNStatsTx aStats;
+    for (unsigned int i = 0; i < m_arfcnConf; i++) {
+	s << "\r\nARFCN[" << i << "]";
+	ARFCN* a = m_arfcn[i];
+	a->getTxStats(aStats);
+	s << "\r\n  UplinkLastOutTime:\t" << a->m_lastUplinkBurstOutTime;
+	s << "\r\n  DownlinkLastInTime:\t" << aStats.burstLastInTime;
+	if (printBursts) {
+	    uint64_t rx = a->m_rxBursts;
+	    String tmp;
+	    uint64_t dropped = a->dumpDroppedBursts(&tmp);
+	    s << "\r\n  RxBursts:\t\t" << rx;
+	    s << "\r\n  RxDroppedBursts:\t" << dropped << " " << tmp;
+	    tmp.clear();
+	    for (uint8_t j = 0; j < 8; j++) {
+		if (tmp)
+		    tmp << "/";
+		tmp << aStats.burstsDwInSlot[j];
+	    }
+	    s << "\r\n  DownlinkInBursts:\t" << aStats.burstsDwIn << " (" << tmp << ")";
+	    s << "\r\n  TxMissSyncOnSend:\t" << aStats.burstsMissedSyncOnSend;
+	    s << "\r\n  TxExpiredOnSend:\t" << aStats.burstsExpiredOnSend;
+	    s << "\r\n  TxExpiredOnRecv:\t" << aStats.burstsExpiredOnRecv;
+	    s << "\r\n  TxFutureOnRecv:\t" << aStats.burstsFutureOnRecv;
+	    s << "\r\n  TxDupOnRecv:\t\t" << aStats.burstsDupOnRecv;
+	}
+    }
+    Output("Transceiver(%s) status: [%p]%s",debugName(),this,encloseDashes(s));
+}
+
+void Transceiver::syncGSMTimeSent(const GSMTime& time)
+{
 }
 
 bool Transceiver::sendBurst(GSMTime time)
@@ -1536,7 +1550,7 @@ bool Transceiver::start()
 }
 
 // Stop the transceiver
-void Transceiver::stop()
+void Transceiver::stop(bool dumpStat)
 {
     DBGFUNC_TRXOBJ("Transceiver::stop()",this);
     TrxWorker::softCancel();
@@ -1552,6 +1566,8 @@ void Transceiver::stop()
     }
     TrxWorker::cancelThreads(this,0,&m_radioInThread);
     m_stateMutex.unlock();
+    if (dumpStat)
+	dumpStatus(true);
     radioPowerOff();
     m_stateMutex.lock();
     stopARFCNs();
@@ -1920,8 +1936,12 @@ bool Transceiver::syncGSMTime()
 	m_lastClockUpd.c_str(sent),m_txTime.c_str(crt),m_nextClockUpdTime.c_str(next),this);
 #endif
     if (m_clockIface.m_socket.valid()) {
-	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0)
+	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0) {
+	    GSMTime t = m_lastClockUpd;
+	    lck.drop();
+	    syncGSMTimeSent(t);
 	    return true;
+	}
     }
     else
 	Debug(this,DebugFail,"Clock interface is invalid [%p]",this);
