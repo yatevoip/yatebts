@@ -914,6 +914,15 @@ Radio.C0=
 ; E.g. extra_yatepeer_args=-Dm
 ;extra_yatepeer_args=
 
+; peer_abort: integer: Abort peer counter
+; Send a SIGABRT signal to peer when heartbeat receive times out or heartbeat send fails
+; This parameter should be used when debugging
+; This parameter is not applied on reload
+; Allowed interval [0 .. 100]
+; The counter is decreased each time the peer is aborted by yate
+; A SIGTERM signal will be sent to peer when this counter is 0 or the peer is terminated for other reason
+;peer_abort=0
+
 ; print_msg: boolean/string: Print sent/received messages to output if debug is at level 9.
 ; Allowed values are boolean values or string.
 ; If a non boolean value is specified, the message buffer will be shown.

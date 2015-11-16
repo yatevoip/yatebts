@@ -1069,7 +1069,7 @@ protected:
 	bool removed = false);
     bool findConnInternal(RefPointer<YBTSConn>& conn, const YBTSUE* ue);
     bool findConnInternal(RefPointer<YBTSGprsConn>& conn, uint16_t connId, bool create);
-    void changeState(int newStat);
+    void changeState(int newStat, bool peerAbort = false);
     int handlePDU(YBTSMessage& msg);
     void handleRRM(YBTSMessage& msg);
     int handleHandshake(YBTSMessage& msg);
@@ -1776,7 +1776,7 @@ public:
 	{ m_peerAlive = true; }
     inline bool stopping() const
 	{ return m_stopping; }
-    void stopPeer();
+    void stopPeer(bool peerAbort = false);
     inline YBTSMedia* media()
 	{ return m_media; }
     inline YBTSSignalling* signalling()
@@ -2082,6 +2082,7 @@ static String s_format = "gsm";          // Format to use
 static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
+static unsigned int s_peerAbort = 0;
 static String s_opMode = "";             // YBTS mode of operation (nib/roaming)
 static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_pagingTout = YBTS_PAGING_TIMEOUT_DEF;// Paging timeout to be used on MT services
@@ -4141,7 +4142,7 @@ int YBTSSignalling::checkTimers(const Time& time)
     if (m_timeout && m_timeout <= time) {
 	Alarm(this,"system",DebugWarn,"Timeout while waiting for %s [%p]",
 	    (m_state != WaitHandshake  ? "heartbeat" : "handshake"),this);
-	changeState(Closing);
+	changeState(Closing,true);
 	return Error;
     }
     if (m_hbTime && m_hbTime <= time) {
@@ -4153,7 +4154,7 @@ int YBTSSignalling::checkTimers(const Time& time)
 	if (ok)
 	    setHeartbeatTime(time);
 	else if (m_state == Running) {
-	    changeState(Closing);
+	    changeState(Closing,true);
 	    return Error;
 	}
     }
@@ -4795,7 +4796,7 @@ void YBTSSignalling::dropGprsConn(uint16_t connId, bool notifyPeer)
     conn = 0;
 }
 
-void YBTSSignalling::changeState(int newStat)
+void YBTSSignalling::changeState(int newStat, bool peerAbort)
 {
     if (m_state == newStat)
 	return;
@@ -4807,7 +4808,7 @@ void YBTSSignalling::changeState(int newStat)
 	    setTimer(m_timeout,"Timeout",0,0);
 	    resetHeartbeatTime();
 	    if (Closing == newStat)
-		__plugin.stopPeer();
+		__plugin.stopPeer(peerAbort);
 	    break;
 	case WaitHandshake:
 	    setToutHandshake();
@@ -9819,7 +9820,7 @@ static int waitPid(pid_t pid, unsigned int interval)
     return ret;
 }
 
-void YBTSDriver::stopPeer()
+void YBTSDriver::stopPeer(bool peerAbort)
 {
     if (!m_peerPid)
 	return;
@@ -9831,7 +9832,12 @@ void YBTSDriver::stopPeer()
     }
     if (w == 0) {
 	Debug(this,DebugNote,"Peer pid %d has not exited - we'll kill it",m_peerPid);
-	::kill(m_peerPid,SIGTERM);
+	if (peerAbort && s_peerAbort) {
+	    s_peerAbort--;
+	    ::kill(m_peerPid,SIGABRT);
+	}
+	else
+	    ::kill(m_peerPid,SIGTERM);
 	w = waitPid(m_peerPid,100);
     }
     if (w == 0) {
@@ -10491,6 +10497,7 @@ void YBTSDriver::initialize()
 	m_media = new YBTSMedia;
 	m_signalling = new YBTSSignalling;
 	m_mm = new YBTSMM;
+	s_peerAbort = ybts.getIntValue("peer_abort",0,0,100);
     }
     m_signalling->init(cfg);
     startIdle();
