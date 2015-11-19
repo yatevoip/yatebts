@@ -1562,6 +1562,7 @@ void Transceiver::stop(bool dumpStat)
     m_exiting = true;
     if (m_state > Idle) {
 	Debug(this,DebugAll,"Stopping [%p]",this);
+	syncGSMTime("EXITING");
 	changeState(Idle);
     }
     TrxWorker::cancelThreads(this,0,&m_radioInThread);
@@ -1920,31 +1921,39 @@ void Transceiver::stopARFCNs()
 }
 
 // Sync upper layer GSM clock (update time)
-bool Transceiver::syncGSMTime()
+bool Transceiver::syncGSMTime(const char* msg)
 {
-    String tmp("IND CLOCK ");
+    String tmp(msg ? msg : "IND CLOCK ");
     Lock lck(m_clockUpdMutex);
-    m_lastClockUpd = m_txTime + m_clockUpdOffset;
-    tmp << m_lastClockUpd.fn();
-    // Next update in 1 second
-    m_nextClockUpdTime = m_txTime + GSM_SLOTS_SEC;
+    if (!msg) {
+	m_lastClockUpd = m_txTime + m_clockUpdOffset;
+	tmp << m_lastClockUpd.fn();
+	// Next update in 1 second
+	m_nextClockUpdTime = m_txTime + GSM_SLOTS_SEC;
 #ifdef XDEBUG
-    String sent;
-    String crt;
-    String next;
-    Debug(this,DebugInfo,"Sending radio time sync %s at %s next %s [%p]",
-	m_lastClockUpd.c_str(sent),m_txTime.c_str(crt),m_nextClockUpdTime.c_str(next),this);
+	String sent;
+	String crt;
+	String next;
+	Debug(this,DebugInfo,"Sending radio time sync %s at %s next %s [%p]",
+	    m_lastClockUpd.c_str(sent),m_txTime.c_str(crt),m_nextClockUpdTime.c_str(next),this);
 #endif
+    }
+    else
+	Debug(this,DebugAll,"Sending '%s' on clock interface [%p]",msg,this);
     if (m_clockIface.m_socket.valid()) {
 	if (m_clockIface.writeSocket(tmp.c_str(),tmp.length() + 1,*this) > 0) {
-	    GSMTime t = m_lastClockUpd;
-	    lck.drop();
-	    syncGSMTimeSent(t);
+	    if (!msg) {
+		GSMTime t = m_lastClockUpd;
+		lck.drop();
+		syncGSMTimeSent(t);
+	    }
 	    return true;
 	}
     }
-    else
+    else if (msg && !m_exiting)
 	Debug(this,DebugFail,"Clock interface is invalid [%p]",this);
+    if (msg && !m_exiting)
+	return false;
     lck.drop();
     fatalError();
     return false;

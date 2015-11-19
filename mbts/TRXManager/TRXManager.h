@@ -60,6 +60,8 @@ class TransceiverManager {
 	Mutex mControlLock;			///< lock to prevent overlapping transactions
 	UDPSocket mControlSocket;		///< socket for radio control
 
+	bool mExitRecv;                         ///< Exiting received from lower layer
+
 	public:
 
 	enum ChannelCombination {
@@ -98,6 +100,7 @@ class TransceiverManager {
 	//@}
 
 	bool haveClock() const { return mHaveClock; }
+	bool exiting() const { return mExitRecv; }
 
 	unsigned C0() const;
 	unsigned numARFCNs() const { return mARFCNs.size(); }

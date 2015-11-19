@@ -46,7 +46,8 @@ TransceiverManager::TransceiverManager(int numARFCNs,
 		const char* wTRXAddress, int wBasePort)
 	:mHaveClock(false),
 	mClockSocket(wBasePort+100),
-	mControlSocket(wBasePort+101,wTRXAddress,wBasePort + 1)
+	mControlSocket(wBasePort+101,wTRXAddress,wBasePort + 1),
+	mExitRecv(false)
 {
 	// set up the ARFCN managers
 	for (int i=0; i<numARFCNs; i++) {
@@ -65,6 +66,9 @@ void TransceiverManager::start()
 
 int TransceiverManager::sendCommandPacket(const char* command, char* response)
 {
+	if (exiting())
+		return -2;
+
 	int msgLen = 0;
 	response[0] = '\0';
 
@@ -75,7 +79,7 @@ int TransceiverManager::sendCommandPacket(const char* command, char* response)
 	int n = mControlSocket.write(command);
 	if (n <= 0)
 		maxRetries = 0;
-	for (int retry=0; retry<maxRetries; retry++) {
+	for (int retry=0; retry<maxRetries && !exiting(); retry++) {
 		msgLen = mControlSocket.read(response,1000);
 		if (msgLen>0) {
 			response[msgLen] = '\0';
@@ -86,6 +90,9 @@ int TransceiverManager::sendCommandPacket(const char* command, char* response)
 
 	LOG(INFO) << "response " << response;
 	mControlLock.unlock();
+
+	if (exiting())
+		return 0;
 
 	if ((msgLen>4) && (strncmp(response,"RSP ",4)==0)) {
 		return msgLen;
@@ -123,6 +130,8 @@ bool TransceiverManager::sendCommand(const char* cmd, int* iParam, const char* s
 	}
 	if (status == 0)
 		return true;
+	if (exiting())
+		return false;
 	LOG(ALERT) << cmd << " failed with status " << status;
 	return false;
 }
@@ -178,6 +187,15 @@ void TransceiverManager::clockHandler()
 		gBTS.clock().set(FN);
 		mHaveClock = true;
 		return;
+	}
+
+	if (strncmp(buffer,"EXITING",7)==0) {
+		LOG(NOTICE) << "TRX clock 'EXITING' indication";
+		mExitRecv = true;
+		mHaveClock = false;
+		// Give some time to upper layer to terminate us
+		::sleep(3);
+		::exit(0);
 	}
 
 	buffer[msgLen]='\0';
@@ -482,7 +500,9 @@ bool ::ARFCNManager::setPower(int dB)
 {
 	int status = sendCommand("SETPOWER",dB);
 	if (status!=0) {
-		LOG(ALERT) << "SETPOWER failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "SETPOWER failed with status " << status;
+		}
 		return false;
 	}
 	return true;
@@ -494,7 +514,9 @@ bool ::ARFCNManager::setTSC(unsigned TSC)
 	assert(TSC<8);
 	int status = sendCommand("SETTSC",TSC);
 	if (status!=0) {
-		LOG(ALERT) << "SETTSC failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "SETTSC failed with status " << status;
+		}
 		return false;
 	}
 	return true;
@@ -506,7 +528,9 @@ bool ::ARFCNManager::setBSIC(unsigned BSIC)
 	assert(BSIC < 64);
 	int status = sendCommand("SETBSIC",BSIC);
 	if (status!=0) {
-		LOG(ALERT) << "SETBSIC failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "SETBSIC failed with status " << status;
+		}
 		return false;
 	}
 	return true;
@@ -522,7 +546,9 @@ bool ::ARFCNManager::setSlot(unsigned TN, unsigned combination)
 	sprintf(paramBuf,"%d %d", TN, combination);
 	int status = sendCommand("SETSLOT",paramBuf);
 	if (status!=0) {
-		LOG(ALERT) << "SETSLOT failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "SETSLOT failed with status " << status;
+		}
 		return false;
 	}
 	return true;
@@ -532,8 +558,10 @@ bool ::ARFCNManager::setMaxDelay(unsigned km)
 {
         int status = sendCommand("SETMAXDLY",km);
         if (status!=0) {
-                LOG(ALERT) << "SETMAXDLY failed with status " << status;
-                return false;
+		if (!mTransceiver.exiting()) {
+		    LOG(ALERT) << "SETMAXDLY failed with status " << status;
+		}
+		return false;
         }
         return true;
 }
@@ -543,8 +571,10 @@ signed ::ARFCNManager::setRxGain(signed rxGain)
         signed newRxGain;
         int status = sendCommand("SETRXGAIN",rxGain,&newRxGain);
         if (status!=0) {
-                LOG(ALERT) << "SETRXGAIN failed with status " << status;
-                return false;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "SETRXGAIN failed with status " << status;
+		}
+		return false;
         }
         return newRxGain;
 }
@@ -555,7 +585,9 @@ bool ::ARFCNManager::setHandover(unsigned TN)
 	assert(TN<8);
 	int status = sendCommand("HANDOVER",TN);
 	if (status!=0) {
-		LOG(ALERT) << "HANDOVER failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "HANDOVER failed with status " << status;
+		}
 		return false;
 	}
 	return true;
@@ -567,7 +599,9 @@ bool ::ARFCNManager::clearHandover(unsigned TN)
 	assert(TN<8);
 	int status = sendCommand("NOHANDOVER",TN);
 	if (status!=0) {
-		LOG(WARNING) << "NOHANDOVER failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(WARNING) << "NOHANDOVER failed with status " << status;
+		}
 		return false;
 	}
 	return true;
@@ -579,7 +613,9 @@ signed ::ARFCNManager::setTxAtten(signed txAtten)
         signed newTxAtten;
         int status = sendCommand("SETTXATTEN",txAtten,&newTxAtten);
         if (status!=0) {
-                LOG(ALERT) << "SETTXATTEN failed with status " << status;
+		if (!mTransceiver.exiting()) {
+		    LOG(ALERT) << "SETTXATTEN failed with status " << status;
+		}
                 return false;
         }
         return newTxAtten;
@@ -590,8 +626,10 @@ signed ::ARFCNManager::setFreqOffset(signed offset)
         signed newFreqOffset;
         int status = sendCommand("SETFREQOFFSET",offset,&newFreqOffset);
         if (status!=0) {
-                LOG(ALERT) << "SETFREQOFFSET failed with status " << status;
-                return false;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "SETFREQOFFSET failed with status " << status;
+		}
+		return false;
         }
         return newFreqOffset;
 }
@@ -602,8 +640,10 @@ signed ::ARFCNManager::getNoiseLevel(void)
 	signed noiselevel;
 	int status = sendCommand("NOISELEV",0,&noiselevel);
         if (status!=0) {
-                LOG(ALERT) << "NOISELEV failed with status " << status;
-                return false;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "NOISELEV failed with status " << status;
+		}
+		return false;
         }
         return noiselevel;
 }
@@ -612,8 +652,10 @@ bool ::ARFCNManager::runCustom(const char* command)
 {
         int status = sendCommand("CUSTOM",command);
         if (status !=0) {
-                LOG(WARNING) << "CUSTOM failed with status " << status;
-                return false;
+		if (!mTransceiver.exiting()) {
+			LOG(WARNING) << "CUSTOM failed with status " << status;
+		}
+		return false;
         }
         return true;
 }
@@ -623,7 +665,9 @@ signed ::ARFCNManager::getFactoryCalibration(const char * param)
 	signed value;
 	int status = sendCommand("READFACTORY", param, &value);
 	if (status!=0) {
-		LOG(ALERT) << "READFACTORY failed with status " << status;
+		if (!mTransceiver.exiting()) {
+			LOG(ALERT) << "READFACTORY failed with status " << status;
+		}
 		return false;
 	}
 	return value;

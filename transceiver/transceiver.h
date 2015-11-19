@@ -848,7 +848,7 @@ private:
     // Stop all ARFCNs
     void stopARFCNs();
     // Sync upper layer GSM clock (update time)
-    bool syncGSMTime();
+    bool syncGSMTime(const char* msg = 0);
     // Handle (NO)HANDOVER commands. Return status code
     int handleCmdHandover(bool on, unsigned int arfcn, String& cmd, String* rspParam);
     // Handle SETSLOT command. Return status code
