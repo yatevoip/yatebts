@@ -1337,18 +1337,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("GSM.Identity.ShortName","YateBTS",
-		"",
-		ConfigurationKey::CUSTOMERSITE,
-		ConfigurationKey::STRING,
-		"^[[:alnum:]]+$",
-		false,
-		"Network short name, displayed on some phones.  "
-			"Optional but must be defined if you also want the network to send time-of-day."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("GSM.MS.Power.Damping","50",
 		"?damping value",
 		ConfigurationKey::CUSTOMERTUNE,
@@ -1654,17 +1642,6 @@ ConfigurationKeyMap getConfigurationKeys()
 		"Receiver gain setting in dB.  "
 			"Ideal value is dictated by the hardware; 47 dB for RAD1, less for USRPs  "
 			"This database parameter is static but the receiver gain can be modified in real time with the CLI rxgain command."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
-	tmp = new ConfigurationKey("GSM.ShowCountry","no",
-		"",
-		ConfigurationKey::CUSTOMER,
-		ConfigurationKey::BOOLEAN,
-		"",
-		false,
-		"Tell the phone to show the country name based on the MCC."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

@@ -57,11 +57,6 @@ Radio.C0=
 ; Defaults to 0.
 ;Identity.BSIC.NCC=0
 
-; Identity.ShortName: string: Network short name, displayed on some phones.
-; Optional, but must be defined if you want the network to send time-of-day.
-; Defaults to YateBTS.
-;Identity.ShortName=YateBTS
-
 ; Radio.PowerManager.MaxAttenDB: integer: Maximum transmitter attenuation level
 ;  in dB wrt full scale on the D/A output.
 ; This sets the minimum power output level in the output power control loop.
@@ -539,10 +534,6 @@ Radio.C0=
 ; Interval allowed: 0..75.
 ; Defaults to 0 (but some radios provide their own calibrated default).
 ;Radio.RxGain=0
-
-; ShowCountry: boolean: Tell the MS to show the country name based on the MCC.
-; Defaults to no.
-;ShowCountry=no
 
 ; Timer.T3103: integer: Handover timeout, in milliseconds, see GSM 04.08 11.1.2.
 ; This is the timeout for a handset to seize a channel during handover. Allowed: 2500:7500(100).
