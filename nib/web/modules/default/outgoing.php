@@ -32,7 +32,8 @@ $sip_fields = array(
 	"domain"=>array("advanced"=>true, "comment"=>"Domain in which the server is in."),
 	"localaddress"=>array("advanced"=>true, "comment"=>"Insert when you wish to force a certain address to be considered as the default address. Set it to 'yes' to detect NAT and re-register with public IP when NAT is detected. Set it to 'no' or ipaddress (e.g. 1.2.3.4 or 1.2.3.4:5060) to disable NAT detection."),
 	"interval"=>array("advanced"=>true, "comment"=>"Represents the interval in which the registration will expires. Default value is 600 seconds."),
-//	"formats"=>array("advanced"=>true,"display"=>"include_formats", "comment"=>"Codecs to be used. If none of the formats is checked then server will try to negociate formats automatically"), 
+	"formats"=>array("advanced"=>true,"display"=>"include_formats", "comment"=>"Codecs to be used. If none of the formats is checked then server will try to negociate formats automatically"), 
+	"caller" => array(array("Use username", "Keep msisdn", "Custom", "selected"=>"Keep msisdn"), "advanced"=>true, "display"=>"select", "comment"=>"Caller parameter to be set when routing calls using this outbound connection.<br/>Use username - use same value as the account's username<br/>Keep msisdn - keep the msisdn of the user making the call<br/>Custom - insert custom caller to be used when routing call to this gateway"),
 //	"rtp_forward"=> array("advanced"=>true,"display"=>"checkbox", "comment"=>"Check this box so that the rtp won't pass  through yate(when possible)."),
 
 //	"callerid"=>array("advanced"=>true, "comment"=>"Use this to set the caller number when call is routed to this gateway. If none set then the System's CallerID will be used."),
@@ -151,6 +152,8 @@ function edit_outgoing($read_account=true, $error=NULL, $error_fields=array())
 	$ip_transport["selected"] = (get_param($account,"ip_transport")) ? get_param($account,"ip_transport") : "UDP";
 	$sip_fields["ip_transport"][0] = $ip_transport;
 
+	$trigger_custom_field = false;
+
 	start_form(NULL,"post",false,"outbound");
 	if (!count($account)) {
 		$protocol = getparam("regprotocol");
@@ -178,6 +181,11 @@ function edit_outgoing($read_account=true, $error=NULL, $error_fields=array())
 						${$fields}[$fieldname][0]["selected"] = $form_value;
 				}
 			}
+			if ($protocol=="sip") {
+				${$fields}["formats"]["value"] = get_formats("reg_sipformats");
+				${$fields}["caller"]["javascript"] = "onchange='custom_value_dropdown(\"\",\"reg_sipcaller\");'";
+				${$fields}["caller"][0]["selected"] = getparam("reg_sipcaller");
+			}
 			/*$gateway->formats = get_formats("reg_".$protocol."formats");*/
 			error_handle($error,${$fields},$error_fields);
 		}
@@ -204,12 +212,17 @@ function edit_outgoing($read_account=true, $error=NULL, $error_fields=array())
 				"Save",true,null,null,"reg_".$protocols[$i]);
 			?></div><?php
 		}
+		$custom_caller = getparam("custom_reg_sipcaller");
+		if ($custom_caller) {
+			?>
+			<script> custom_value_dropdown("<?php print $custom_caller; ?>","reg_sipcaller"); </script>
+			<?php
+		}
 	} else {
 		$protocol = get_param($account,"protocol");
 		$fields["protocol"] = array("value"=>strtoupper($protocol), "display"=>"fixed");
 
 		$fields = array_merge($fields,${$protocol."_fields"});
-
 		foreach($fields as $fieldname=>$fieldformat) {
 			$file_value = get_param($account,$fieldname);
 			if ($file_value) {
@@ -222,10 +235,28 @@ function edit_outgoing($read_account=true, $error=NULL, $error_fields=array())
 					$fields[$fieldname][0]["selected"] = $file_value;
 			}
 		}
+		if ($protocol=="sip") {
+			$value = (isset($account["out:caller"])) ? $account["out:caller"] : "";
+			if ($value) {
+				if ($value!=$account["username"]) {
+					$fields["caller"][0]["selected"] = "Custom";
+					$trigger_custom_field = $value;
+				} else
+					$fields["caller"][0]["selected"] = "Use username";
+			} else
+				$fields["caller"][0]["selected"] = "Keep msisdn";
+
+			$fields["caller"]["javascript"] = "onchange='custom_value_dropdown(\"$value\",\"caller\");'";
+		}
 
 		error_handle($error,$fields,$error_fields);
 		addHidden("write_to_file",array("protocol"=>$protocol));
 		editObject(NULL,$fields, "Edit outbound ".strtoupper($protocol)." gateway", "Save");
+		if ($trigger_custom_field) {
+			?>
+			<script> custom_value_dropdown("<?php print $trigger_custom_field; ?>","caller"); </script>
+			<?php
+		}
 	}
 	end_form();
 }
@@ -269,6 +300,14 @@ function edit_outgoing_write_to_file($prefix='',$prefix_protocol='')
 	if ($params["protocol"] == 'sip') {
 		$params["match_port"] = (getparam($prefix."match_port")=="on") ? "yes" : "no"; 
 		$params["match_user"] = (getparam($prefix."match_user")=="on") ? "yes" : "no";
+		$params["formats"] = get_formats($prefix."formats");
+		$caller = getparam("caller");
+		if ($caller=="Use username")
+			$params["out:caller"] = $params["username"];
+		elseif ($caller=="Custom")
+			$params["out:caller"] = getparam("custom_caller");
+		else
+			$params["out:caller"] = "";
 	} else {
 		$params["trunking"] = (getparam($prefix."trunking")=="on") ? "yes" : "no";
 		$params["trunk_timestamps"] = (getparam($prefix."trunk_timestamps")=="on") ? "yes" : "no";
@@ -292,6 +331,8 @@ function edit_outgoing_write_to_file($prefix='',$prefix_protocol='')
 		}
 	}
 
+	if (isset($params["out:caller"]) && $params["out:caller"]=="")
+		unset($params["out:caller"]);
 
 	$res = set_outgoing($params);
 	if (!$res[0])
@@ -324,6 +365,7 @@ function verify_modification_params($edited_params, $file_params)
 	}
 	return $modified;
 }
+
 function validate_account($params)
 {
 	if ($params['protocol'] == 'sip') {
@@ -347,7 +389,6 @@ function validate_account($params)
 	}
 
 	return array(true);
-
 }
 
 function delete_and_switch_outgoing()

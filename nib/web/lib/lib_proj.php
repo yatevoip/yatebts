@@ -48,6 +48,27 @@ function include_formats($formats,$form_identifier)
 	<?php
 }
 
+function get_formats($form_identifier = '')
+{
+	$codecs = array(
+		"alaw" => getparam($form_identifier."alaw"), 
+		"mulaw"=> getparam($form_identifier."mulaw"), 
+		"gsm"  => getparam($form_identifier."gsm"), 
+		"ilbc" => getparam($form_identifier."ilbc"), 
+		"g729" => getparam($form_identifier."g729"), 
+		"g723" => getparam($form_identifier."g723")
+	);
+	$formats = "";
+	foreach ($codecs as $codec=>$value) {
+		if ($value=="on") {
+			if ($formats!="") 
+				$formats .= ',';
+			$formats .= $codec;
+		}
+	}
+	return $formats;
+}
+
 function search_box($fields, $submit="Search", $title=NULL)
 {
 	if (!isset($fields[0])) {
