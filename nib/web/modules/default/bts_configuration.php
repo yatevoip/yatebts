@@ -110,6 +110,10 @@ function bts_configuration_database()
 			print "<div id=\"notice_$subsection\">";
 			message($res1[1], "no");
 			print "</div>";
+			$res = set_codecs_ysipchan(getparam("mode"));
+			if (!$res[0]) {
+				errormess($res[1]);
+			}
 		}
 		if (strlen($warnings))
 			message("Warning! ".$warnings,"no");
@@ -123,4 +127,31 @@ function bts_configuration_database()
 </table>
 <?php
 }
+
+function set_codecs_ysipchan($mode)
+{
+	global $yate_conf_dir;
+
+	$filename = $yate_conf_dir. "ysipchan.conf";
+	if (is_file($yate_conf_dir. "ysipchan.conf"))
+		$file = new ConfFile($filename,true,true);
+	else
+		$file = new ConfFile($filename,false,true);
+
+	if ($mode=="nib") {
+		$file->structure["codecs"] = array();
+		$file->structure["codecs"]["default"] = "enable";
+		$mess = "default=enable";
+	} else {
+		$file->structure["codecs"]["default"] = "disable";
+		$file->structure["codecs"]["gsm"] = "enable";
+		$mess = "<br/>default=disable<br/>gsm=enable<br/>";
+	}
+
+	$file->save();
+	if (!$file->status())
+		return array(false, "Could not set $mess"." in [codecs] section in ysipchan.conf: ".$file->getError());
+	return array(true);
+}
+
 ?>
