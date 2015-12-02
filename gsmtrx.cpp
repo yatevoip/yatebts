@@ -102,7 +102,8 @@ protected:
     void ctrlStop();
     // Transceiver management (create/stop)
     int trxStart(String& cmdLine);
-    void trxStop(const char* reason, int level = DebugNote, bool dumpStat = true);
+    void trxStop(const char* reason, int level = DebugNote, bool dumpStat = true,
+	bool notify = true);
     void changeState(int newState);
     RadioInterface* createRadio(const NamedList& params);
 
@@ -226,7 +227,7 @@ void GsmTrxModule::readCtrlLoop()
 	    continue;
 	XDebug(this,DebugAll,"CTRL received: %s",s.c_str());
 	if (s.startSkip("CMD RESET ",false)) {
-	    trxStop("received RESET command");
+	    trxStop("received RESET command",DebugNote,true,false);
 	    rsp << "RSP RESET " << trxStart(s);
 	    startRecv = true;
 	    stopRecv = (m_trx == 0);
@@ -537,13 +538,13 @@ int GsmTrxModule::trxStart(String& cmdLine)
     return Transceiver::CmdEFailure;
 }
 
-void GsmTrxModule::trxStop(const char* reason, int level, bool dumpStat)
+void GsmTrxModule::trxStop(const char* reason, int level, bool dumpStat, bool notify)
 {
     RefPointer<GsmTrxQMF> trx;
     if (!getTransceiver(trx,true))
 	return;
     Debug(this,level,"Stopping transceiver: %s",reason);
-    trx->stop(dumpStat && level < DebugAll);
+    trx->stop(dumpStat && level < DebugAll,notify);
     trx = 0;
     m_syncGsmTimeTout = 0;
 }

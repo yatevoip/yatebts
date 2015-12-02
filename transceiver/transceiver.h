@@ -533,8 +533,9 @@ public:
     /**
      * Stop the transceiver upper layer interface, power off the radio
      * @param dumpStat True to dump transceiver status
+     * @param notify Notify exiting event on clock interface
      */
-    void stop(bool dumpStat = false);
+    void stop(bool dumpStat = false, bool notify = true);
 
     /**
      * Check if the transceiver is collecting statistics

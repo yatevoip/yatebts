@@ -1550,7 +1550,7 @@ bool Transceiver::start()
 }
 
 // Stop the transceiver
-void Transceiver::stop(bool dumpStat)
+void Transceiver::stop(bool dumpStat, bool notify)
 {
     DBGFUNC_TRXOBJ("Transceiver::stop()",this);
     TrxWorker::softCancel();
@@ -1562,7 +1562,8 @@ void Transceiver::stop(bool dumpStat)
     m_exiting = true;
     if (m_state > Idle) {
 	Debug(this,DebugAll,"Stopping [%p]",this);
-	syncGSMTime("EXITING");
+	if (notify)
+	    syncGSMTime("EXITING");
 	changeState(Idle);
     }
     TrxWorker::cancelThreads(this,0,&m_radioInThread);
