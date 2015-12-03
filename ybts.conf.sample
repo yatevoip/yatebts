@@ -146,7 +146,17 @@ Radio.C0=
 
 
 [transceiver]
-; This section controls how the radio transceiver is started and operated.
+; This section controls how the radio transceiver is configured and operated.
+
+; In newer versions of YateBTS the transceiver is no longer an external executable.
+; The "gsmtrx" Yate module implements the device independent transceiver logic and
+;  uses the configuration from this section.
+; The radio device is implemented in another Yate module named "ybladerf". If you
+;  need to configure board specific parameters please edit ybladerf.conf
+; For compatibility the RadioFrequencyOffset, TX.OffsetI and TX.OffsetQ set in this
+;  section override any similar setting made in ybladerf.conf
+; If you install prebuilt packages the yate-bladerf package holds the ybladerf module
+;  as well as the FPGA images with which YateBTS is known to work.
 
 ; MinimumRxRSSI: integer: Minimum signal strength (in dB) of acceptable bursts.
 ; Bursts received at the physical layer below this threshold are ignored.
@@ -155,12 +165,22 @@ Radio.C0=
 ; Defaults to -63.
 ;MinimumRxRSSI=-63
 
-; RadioFrequencyOffset: integer: Master clock frequency adjustment.
-; Fine-tuning adjustment for the transceiver master clock, roughly 170 Hz/step.
+; RadioFrequencyOffset: integer: Master radio interface clock frequency adjustment.
+; Fine-tuning adjustment for the transceiver master clock.
 ; Set at the factory, do not adjust without proper calibration.
 ; Interval allowed: 64..192.
 ; Defaults to 128 (but some radios provide their own calibrated default).
 ;RadioFrequencyOffset=128
+
+; TX.OffsetI: integer: Radio interface transmitter DC offset correction for I
+; Set at the factory, do not adjust without proper calibration.
+; Interval allowed: -63..63.
+;TX.OffsetI=0
+
+; TX.OffsetQ: integer: Radio interface transmitter DC offset correction for Q
+; Set at the factory, do not adjust without proper calibration.
+; Interval allowed: -63..63.
+;TX.OffsetI=0
 
 ; TxAttenOffset: integer: Transmitter attenuation in dB.
 ; Hardware-specific gain adjustment for transmitter, matched to the amplifier.
