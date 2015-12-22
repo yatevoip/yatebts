@@ -4299,7 +4299,7 @@ int YBTSSignalling::authStart(YBTSConn* conn, YBTSConnAuth* auth, const String& 
 	return 2;
     XmlElement* ch = 0;
     XmlElement* xml = YBTSMM::buildMM(ch,"AuthenticationRequest");
-    ch->addChildSafe(new XmlElement("CipheringKeySequenceNumber",keySeq));
+    ch->addChildSafe(new XmlElement("CKSN",keySeq));
     ch->addChildSafe(new XmlElement("rand",rand));
     if (autn)
 	ch->addChildSafe(new XmlElement("autn",autn));
