@@ -9832,13 +9832,15 @@ void YBTSDriver::stopPeer(bool peerAbort)
     }
     if (w == 0) {
 	Debug(this,DebugNote,"Peer pid %d has not exited - we'll kill it",m_peerPid);
+	unsigned int interval = 100;
 	if (peerAbort && s_peerAbort) {
 	    s_peerAbort--;
+	    interval = 500;
 	    ::kill(m_peerPid,SIGABRT);
 	}
 	else
 	    ::kill(m_peerPid,SIGTERM);
-	w = waitPid(m_peerPid,100);
+	w = waitPid(m_peerPid,interval);
     }
     if (w == 0) {
 	Debug(this,DebugWarn,"Peer pid %d has still not exited yet?",m_peerPid);
