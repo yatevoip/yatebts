@@ -270,7 +270,7 @@ Radio.C0=
 
 ; LUR.AttachDetach: boolean: Use the attach/detach procedure.
 ; This will make initial LUR more prompt.
-; It will also cause an un-regstration if the handset powers off, and really
+; It will also cause an un-registration if the handset powers off, and really
 ;  heavy LUR loads in areas with spotty coverage.
 ; Defaults to yes.
 ;LUR.AttachDetach=yes
@@ -604,7 +604,7 @@ Radio.C0=
 ;Debug=1
 
 ; MS.Power.Alpha: integer: MS power control parameter, unitless, in steps of 0.1, so a parameter of 5 is an alpha value of 0.5.
-; Determines by how much the MS should turn up its power in relation with the measurement of BTS signal stregth.
+; Determines by how much the MS should turn up its power in relation with the measurement of BTS signal strength.
 ; Valid range is 0...10 for alpha values of 0.0 ... 1.0. See GSM 05.08 10.2.1.
 ; MS.Power.Alpha=10
 
@@ -620,7 +620,7 @@ Radio.C0=
 ; Valid range -75...-5
 ;MS.Power.RSSITarget=-25
 
-; MS.Power.RSSIInterval: integer: Interval around MS.Power.RSSITarget for which Gamma will not be ajusted
+; MS.Power.RSSIInterval: integer: Interval around MS.Power.RSSITarget for which Gamma will not be adjusted
 ; Interval for accepted RSSI values will be (MS.Power.RSSITarget - MS.Power.RSSIInterval,MS.Power.RSSITarget + MS.Power.RSSIInterval)
 ; Setting it to 0 will deactivate the power control loop.
 ; Valid range is 0...10
