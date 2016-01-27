@@ -106,14 +106,14 @@ $subscriber_comment = ";you have to put subscriber IMSI as a category and the su
 
 $subscriber_example =
 ";[001990010001014]
-;Oficial phone number. Should include configured country code
+;Official phone number. Should include configured country code
 ;Ex: msisdn=10744341111
 
 ;Whether this subscriber is allowed to use the service
 ;Allowed values: on, off
 ;Ex: active=off
 
-;Card secrety. Set or generated when SIMs are written
+;Card secret. Set or generated when SIMs are written
 ;Ex:ki=00112233445566778899aabbccddeeff
 
 ;Operator secret. 

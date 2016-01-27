@@ -1061,7 +1061,7 @@ Defaults to yes.",
 				"display" => "checkbox",
 				"value" => "1",
 				"comment" => "Use the attach/detach procedure. This will make initial LUR more prompt.
-It will also cause an un-regstration if the handset powers off and really heavy LUR loads in areas with spotty coverage.
+It will also cause an un-registration if the handset powers off and really heavy LUR loads in areas with spotty coverage.
 Defaults to yes."
 			),
 			"SACCHTimeout.BumpDown" => array(
