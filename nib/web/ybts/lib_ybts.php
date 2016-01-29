@@ -150,6 +150,7 @@ function create_fields_from_conffile($fields_from_file,$exists_in_file = false)
 		}
 	}
 
+	$network_map = "";
 	foreach($structure as $section => $data) {
 		foreach($data as $key => $subsection) {
 			if (isset($fields_from_file[$subsection])) {
@@ -158,9 +159,17 @@ function create_fields_from_conffile($fields_from_file,$exists_in_file = false)
 						continue;
 					if (!isset($fields[$section][$subsection]))
 						continue;
+					if ($subsection=="gprs_roaming" && substr($param,0,2)=="__") {
+						if (strlen($network_map))
+							$network_map .= "\n";
+						$network_map .= substr($param,2)."=$data";
+						continue;
+					}
+					if ($subsection=="gprs_roaming" && $param=="nnsf_bits")
+						$param = "gprs_nnsf_bits";
 					if (!isset($fields[$section][$subsection][$param])) 
 						continue;
-					
+
 					if ($fields[$section][$subsection][$param]["display"] == "select") 
 						$fields[$section][$subsection][$param][0]["selected"] = $data;
 					elseif ($fields[$section][$subsection][$param]["display"] == "checkbox") 
@@ -171,6 +180,8 @@ function create_fields_from_conffile($fields_from_file,$exists_in_file = false)
 			}
 		}
 	}
+	if (strlen($network_map)) 
+		$fields["YBTS"]["gprs_roaming"]["network_map"]["value"] = $network_map;
 
 	if (isset($fields['GSM']['gsm']['Radio.Band'][0]["selected"])) {
 		$particle = $fields['GSM']['gsm']['Radio.Band'][0]["selected"];
@@ -186,7 +197,7 @@ function create_fields_from_conffile($fields_from_file,$exists_in_file = false)
 function validate_fields_ybts($section, $subsection)
 {
         // this array contains the name of the params that can be empty in configuration file (ybts.conf)
-	$allow_empty_params = array("Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg", "RadioFrequencyOffset", "TxAttenOffset", "Radio.RxGain", "my_sip", "reg_sip", "nodes_sip", "gstn_location", "neighbors" );
+	$allow_empty_params = array("Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg", "RadioFrequencyOffset", "TxAttenOffset", "Radio.RxGain", "my_sip", "reg_sip", "nodes_sip", "gstn_location", "neighbors", "gprs_nnsf_bits", "nnsf_dns", "network_map", "local_breakout" );
 	
 	$fields = get_default_fields_ybts();
 	$new_fields = array();
@@ -241,6 +252,21 @@ function validate_fields_ybts($section, $subsection)
 			$warning_field[] = array($res[1], $param_name);
 	}
 
+	if (getparam("mode")=="dataroam" && $subsection=="gprs_roaming") {
+		$res = validate_dataroam_params();
+		if (!$res[0])
+			$error_field[] = array($res[1], $param_name);
+		elseif ($res[0] && isset($res[1]))
+			$warning_field[] = array($res[1], $param_name);
+	}
+	if (getparam("mode")=="dataroam" && $subsection=="roaming") {
+		$res = validate_piece_roaming();
+		if (!$res[0])
+			$error_field[] = array($res[1], $param_name);
+		elseif ($res[0] && isset($res[1]))
+			$warning_field[] = array($res[1], $param_name);
+	}
+
 	$warning = "";
 	$warning_fields = array();
 	foreach ($warning_field as $key => $err) {
@@ -275,6 +301,50 @@ function validate_roaming_params()
 	$nodes_sip = getparam("nodes_sip");
 	if (!$reg_sip && !$nodes_sip)
 		return array(false, "You need to set 'Reg sip' or 'Nodes sip' in roaming mode.", array("reg_sip", "nodes_sip"));
+
+	$nnsf_bits = getparam("nnsf_bits");
+	$expires = getparam("expires");
+	if (valid_param($expires) && !is_valid_number($expires))
+		return array(false, "Field 'Expires' field should be numeric.", array("expires"));
+	if (valid_param($nnsf_bits) && (!is_valid_number($nnsf_bits) || $nnsf_bits<0))
+		return array(false, "Field 'NNSF bits' should be a positive int.", array("nnsf_bits"));
+
+	return array(true);
+}
+
+function validate_piece_roaming()
+{
+	// verify fields from roaming as well, if set
+	$nnsf_bits = getparam("nnsf_bits");
+	$expires = getparam("expires");
+	if (valid_param($expires) && !is_valid_number($expires))
+		return array(false, "Field 'Expires' field should be numeric.", array("expires"));
+	if (valid_param($nnsf_bits) && (!is_valid_number($nnsf_bits) || $nnsf_bits<0))
+		return array(false, "Field 'NNSF bits' should be a positive int.", array("nnsf_bits"));
+
+
+	return array(true);
+}
+
+function validate_dataroam_params()
+{
+	$nnsf_bits = getparam("gprs_nnsf_bits");
+	if (valid_param($nnsf_bits) && (!is_valid_number($nnsf_bits) || $nnsf_bits<0))
+		return array(false, "NNSF bits must be a positive int, if set.", array("gprs_nnsf_bits"));
+
+	$map = getparam("network_map");
+	if (!strlen($map))
+		return array(true);
+	$map = explode("\n", $map);
+	foreach ($map as $map_entry) {
+		$entry = explode("=",$map_entry);
+		if (count($entry)!=2)
+			return array(false, "Invalid format for 'Network map'.", array("network_map"));
+		if (Numerify($entry[0])=="NULL")
+			return array(false, "Invalid value '".$entry[0]."'. Should be numeric.", array("network_map"));
+		if (filter_var(trim($entry[1]),FILTER_VALIDATE_IP)===false)
+			return array(false, "Invalid value '".$entry[1]."'. Should be a valid IP address.", array("network_map"));
+	}
 
 	return array(true);
 }
@@ -376,6 +446,9 @@ function write_params_conf($fields)
 				$dont_copy[$subsection] = array();
 				foreach ($data1 as $param => $data) {
 
+					if ($subsection=="gprs_roaming" && $param=="gprs_nnsf_bits")
+						$param = "nnsf_bits";
+
 					// if this is the ybts subsection and param is mode
 					// make sure we don't delete package markers
 					// are not deleted: Installed by ...
@@ -408,9 +481,16 @@ function write_params_conf($fields)
 					else
 						$value = $data["value"];
 
-					if (strlen($value))
-						$ybts->structure[$subsection][$param] = array($value);
-					else {
+					if (strlen($value)) {
+						if ($subsection=="gprs_roaming" && $param=="network_map") {
+							$network_map = explode("\n",$value);
+							foreach ($network_map as $map_entry) {
+								$expl = explode("=", $map_entry);
+								$ybts->structure[$subsection][$expl[0]] = array($expl[1]);
+							}
+						} else
+							$ybts->structure[$subsection][$param] = array($value);
+					} else {
 						$dont_copy[$subsection][] = $param;
 						// write field commented
 						$ybts->structure[$subsection][$i] = ";$param=\n";
@@ -421,7 +501,7 @@ function write_params_conf($fields)
 		}
 	}
 
-	// add unknown sections at the end of the file and unknown parameters at the end of each section
+	// add unknown sections at the end of the file and unknown parameters that don't start with __ at the end of each section
 	foreach($structure as $subsection_name=>$subsection) {
 		if (!isset($ybts->structure[$subsection_name]))
 			$ybts->structure[$subsection_name] = $subsection;
@@ -431,7 +511,7 @@ function write_params_conf($fields)
 					continue;
 				if (in_array($field_name,$dont_copy[$subsection_name]))
 					continue;
-				if (!isset($ybts->structure[$subsection_name][$field_name]))
+				if (!isset($ybts->structure[$subsection_name][$field_name]) && substr($field_name,0,2)!="__")
 					$ybts->structure[$subsection_name][$field_name] = $field_value;
 			}
 	}

@@ -21,6 +21,8 @@
 /* builds the structure of the to display the menu and the submenu */
 function get_menu_structure()
 {
+	global $private_version;
+
 	//The key is the MENU alias the sections from $fields 
 	//and for each menu is an array that has the submenu data with subsections 
 	$structure = array(
@@ -32,6 +34,10 @@ function get_menu_structure()
 		"Test" => array(),
 		"YBTS" => array("YBTS","Security","Roaming","Handover")
 	);
+
+	if (isset($private_version) && $private_version==true)
+		$structure["YBTS"] = "GPRS Roaming";
+
 	return $structure;
 }
 
@@ -171,7 +177,8 @@ function description_ybts_section()
 		"ybts" => "Section [ybts] configures ybts related parameters.",
 		"security" => "Section [security] configures security related parameters.",
 		"roaming" => "Section [roaming] controls parameters used by roaming.js when connecting YateBTS to a core network.",
-		"handover" => "Section [handover] controls handover parameters used by roaming.js."
+		"handover" => "Section [handover] controls handover parameters used by roaming.js.",
+		"gprs_roaming" => "Section [gprs_roaming] controls parameters used by dataroam.js when connecting YateBTS to a core data network."
 	);
 
 	foreach ($section_desc as $subsect => $desc) {

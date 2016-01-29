@@ -38,6 +38,8 @@ require_once("create_radio_band_select_array.php");
  */
 function get_default_fields_ybts()
 {
+	global $private_version;
+
 	$radio_c0 = prepare_gsm_field_radio_c0();
 	$fields = array();
 	$fields["GSM"] = array(
@@ -1128,7 +1130,7 @@ The IP address of receiving Wireshark, if you use it for real time traces.",
 				"comment" => "BTS mode of operation. This setting will specify which Javascript script 
 to load for the operation. Possible values are:
     - nib: loads script necessary for Network In a Box mode of operation
-    - roaming: loads script necessary for the roaming mode of operation"
+    - roaming: loads script necessary for the voice roaming mode of operation"
 			),
 			"heartbeat_ping"=> array(
 				"display" => "text",
@@ -1386,7 +1388,7 @@ Default is empty."
 An empty or boolean false value disables the Reason header.
 Default: GSM;text="Handover".'
 			)
-		)
+		),
 	);
 
 /*	$fields["Logging"] = array(
@@ -1402,13 +1404,50 @@ Defaults to NOTICE."
 	);
  */
 
+	if (isset($private_version) && $private_version===true) {
+		// add dataroam mode
+		$fields["YBTS"]["ybts"]["mode"][0][] = "dataroam";
+		$fields["YBTS"]["ybts"]["mode"]["comment"] .= "\n- dataroam: voice and data roaming modes. Available only in the private YateBTS version";
+
+		$fields["YBTS"]["gprs_roaming"] = array(
+			"local_breakout" => array(
+				"display" => "text",
+				"comment" => "boolean or regexp: Activate local IP address termination.
+If boolean enables or disables LBO for all subscribers.
+If regexp activates LBO only for matching IMSIs.
+Defaults to no",
+			),
+			"gprs_nnsf_bits" => array(
+				"display" => "text",
+				"column_name" => "NNSF bits",
+				"comment" => "Number of bits to use for SGSN
+Non Access Stratum (NAS) Node Selection Function (NNSF).
+Defaults to 0 (disabled)."
+			), 
+			"nnsf_dns" => array(
+				"display" => "text",
+				"column_name" => "NNSF DNS",
+				"comment" => "boolean or string: Use DNS for SGSN node mapping.
+Defaults to no if nnsf_bits is zero or an explicit node mapping exists.
+If a string is provided it will replace default domain mnc<NNN>.mcc<NNN>.gprs"
+			),
+			"network_map" => array(
+				"column_name" => "Explicitly map network nodes to IP addresses",
+				"display" => "textarea",
+				"comment" => "Example:
+20=10.0.0.1
+23=10.2.74.9"
+			)
+		    );
+	}
+
 	foreach($fields as $section => $subsections) {
 		foreach ($subsections as $subs => $data1) {
-	       		foreach ($data1 as $paramname => $data) {	
+			foreach ($data1 as $paramname => $data) {
 				if (isset($data["comment"])) {
 					$fields[$section][$subs][$paramname]["comment"] = str_replace(array("\t\t\t\t","\n"),array("","<br/>"), $data["comment"]);
 				}
-	       		}
+		}
 		}
 	}
 
