@@ -1014,8 +1014,8 @@ function authResync(msg,imsi,is_auth)
     var ki   = subscribers[imsi].ki;
     var op   = subscribers[imsi].op;
     var sqn  = subscribers[imsi].sqn;
-    var rand = msg.rand;
-    var auts = msg.auts;
+    var rand = msg["auth.rand"];
+    var auts = msg["auth.auts"];
 
     var m = new Message("gsm.auth");
     m.protocol = "milenage";
