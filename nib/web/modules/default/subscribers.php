@@ -205,18 +205,23 @@ function country_code_and_smsc()
 	$res = get_cc_smsc();
 	$country_code = "";
 	$smsc = "";
+	$gw_sos = "";
 	if (is_array($res[1])) {
 		$country_code = $res[1]["country_code"];
 		$smsc = $res[1]["smsc"];
+		$gw_sos = $res[1]["gw_sos"];
 	}
 
 	if (!is_file($filename) || !strlen($country_code)) 
 		edit_country_code_and_smsc();
 	else {
-		$fields = array("country_code"=>array("value"=>$country_code, "display"=>"fixed"),
-			"smsc" => array("value"=>$smsc, "display"=>"fixed", "column_name"=>"SMSC"));
+		$fields = array(
+			"country_code"=>array("value"=>$country_code, "display"=>"fixed"),
+			"smsc" => array("value"=>$smsc, "display"=>"fixed", "column_name"=>"SMSC"),
+			"gw_sos" => array("value"=>$gw_sos, "display"=>"fixed", "column_name"=>"Gateway SOS")
+		);
 		start_form();
-		addHidden(null,array("method"=>"edit_country_code_and_smsc", "country_code"=>$country_code, "smsc"=>$smsc));
+		addHidden(null,array("method"=>"edit_country_code_and_smsc", "country_code"=>$country_code, "smsc"=>$smsc, "gw_sos"=>$gw_sos));
 		editObject(null,$fields,"Country code and SMSC for the majority of your subscribers.",array("Modify"),null,true);
 		end_form();
 	}
@@ -230,16 +235,23 @@ function edit_country_code_and_smsc($error=null,$error_fields=array())
 
 	$country_code = getparam("country_code");
 	$smsc = getparam("smsc");
+	$gw_sos = getparam("gw_sos");
 	$fields = array(
 		"country_code"=>array("value"=>$country_code, "compulsory"=>true, "comment"=>" Your Country code (where YateBTS is installed). Ex: 1 for US, 44 for UK"),
-		"smsc"=>array("column_name"=>"SMSC", "value"=>$smsc, "compulsory"=>true, "comment"=>"A short message service center (SMSC) used to store, forward, convert and deliver SMS messages.")
+		"smsc"=>array("column_name"=>"SMSC", "value"=>$smsc, "compulsory"=>true, "comment"=>"A short message service center (SMSC) used to store, forward, convert and deliver SMS messages."),
+		"gw_sos"=>array("column_name"=>"Gateway SOS", "value"=>$gw_sos, "comment"=>"Resource for the emergency calls gateway.<br/>
+If not set any emergency calls will be delivered to the outbound gateway<br/>
+It is also possible to specify a short or international number (possibly MSISDN)<br/>
+Ex: gw_sos=sip/sip:sos@emergency.gw<br/>
+Ex: gw_sos=111<br/>
+Ex: gw_sos=+10744341111")
 	);
 
 	error_handle($error,$fields,$error_fields);
-        start_form();
+	start_form();
 	addHidden("write_file");
-       	editObject(NULL,$fields,"Set Country Code and SMSC","Save");
-        end_form();
+	editObject(NULL,$fields,"Set Country Code and SMSC","Save");
+	end_form();
 }
 
 function edit_country_code_and_smsc_write_file()
@@ -254,6 +266,11 @@ function edit_country_code_and_smsc_write_file()
 
 	$cc_param = getparam("country_code");
 	$smsc_param = getparam("smsc");
+	$gw_sos_param = getparam("gw_sos");
+
+	if ($gw_sos_param) {
+		warning_note("In order to route emergency calls you also need to set RACH.AC to '0'(or another value as stated in GSM 04.08 10.5.2.29) in BTS Configuration>GSM>GSM advanced. <font class='error'>DON'T MODIFY \"Gateway SOS\" UNLESS YOU ARE A REAL OPERATOR</font>. You might catch real emergency calls than won't ever be answered.");
+	}
 
 	if (!$cc_param)
 		return edit_country_code_and_smsc("Please set the country code!", array("country_code"));
@@ -261,12 +278,12 @@ function edit_country_code_and_smsc_write_file()
 		return edit_country_code_and_smsc("Country Code invalid!", array("country_code"));
 	if (!$smsc_param)
 		return edit_country_code_and_smsc("Please set SMSC!", array("smsc"));
-	if (is_array($cc_file) && in_array($cc_param, $cc_file) && in_array($smsc_param, $cc_file)) {
+	if (is_array($cc_file) && in_array($cc_param, $cc_file) && in_array($smsc_param, $cc_file) && in_array($gw_sos_param, $cc_file)) {
 		notice("Finished setting Country Code and SMSC.", "country_code_and_smsc");
 		return;
 	}
 
-	$res = set_cc_smsc($cc_param,$smsc_param);
+	$res = set_cc_smsc($cc_param,$smsc_param,$gw_sos_param);
 	if (!$res[0])
 		return edit_country_code_and_smsc($res[1]);
 	notice("Finished writting Country Code and SMSC into subscribers.conf.", "country_code_and_smsc");
@@ -288,6 +305,7 @@ function get_cc_smsc()
 		if ($name == "general") {
 			$content["country_code"] = isset($value["country_code"]) ? $value["country_code"] : "";
 			$content["smsc"] = isset($value["smsc"]) ? $value["smsc"] : "";
+			$content["gw_sos"] = isset($value["gw_sos"]) ? $value["gw_sos"] : "";
 		}
 	}
 
@@ -297,20 +315,22 @@ function get_cc_smsc()
 	return array(true, $content);
 }
 
-function set_cc_smsc($country_code, $smsc)
+function set_cc_smsc($country_code, $smsc, $gw_sos)
 {
-	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment, $subscriber_example;
+	global $yate_conf_dir, $global_comment, $country_code_comment, $regexp_comment, $subscriber_comment, $subscriber_example, $gw_sos_comment;
 
 	//if file subscribers doesn't exist; create the file with adecvate comments
 	if (!is_file($yate_conf_dir."subscribers.conf" )) {
 		$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
 		$subs_file->initial_comment = $global_comment;
-		$content[0] = rtrim($country_code_comment);
+		$content[] = rtrim($country_code_comment);
 		$content["country_code"] = $country_code."\n";
 		$content["smsc"] = $smsc."\n";
-		$content[1] = rtrim($regexp_comment);
-		$content[2] = $subscriber_comment;
-		$content[3] = $subscriber_example;	
+		$content[] = rtrim($gw_sos_comment);
+		$content["gw_sos"] = $gw_sos."\n";
+		$content[] = rtrim($regexp_comment);
+		$content[] = $subscriber_comment;
+		$content[] = $subscriber_example;	
 		$subs_file->structure["general"] = $content;
 	} else {
 		$subs = new ConfFile($yate_conf_dir."subscribers.conf");
@@ -329,11 +349,13 @@ function set_cc_smsc($country_code, $smsc)
 		if (!$have_regex) {
 			$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
 			$subs_file->initial_comment = $global_comment;
-			$content[0] = rtrim($country_code_comment);
+			$content[] = rtrim($country_code_comment);
 			$content["country_code"] = $country_code."\n";
 			$content["smsc"] = $smsc."\n";
-			$content[1] = $regexp_comment;
-			$content[2] = $subscriber_comment;
+			$content[] = rtrim($gw_sos_comment);
+			$content["gw_sos"] = $gw_sos."\n";
+			$content[] = $regexp_comment;
+			$content[] = $subscriber_comment;
 			$subs_file->structure["general"] = $content;
 
 			foreach ($old_data as $name => $value)
@@ -341,13 +363,15 @@ function set_cc_smsc($country_code, $smsc)
 		} else {
 			$subs_file = new ConfFile($yate_conf_dir."subscribers.conf", false);
 			$subs_file->initial_comment = $global_comment;
-			$content[0] = rtrim($country_code_comment);
+			$content[] = rtrim($country_code_comment);
 			$content["country_code"] = $country_code."\n";
 			$content["smsc"] = $smsc."\n";
-			$content[1] = rtrim($regexp_comment);
+			$content[] = rtrim($gw_sos_comment);
+			$content["gw_sos"] = $gw_sos."\n";
+			$content[] = rtrim($regexp_comment);
 			$content["regexp"] = $regex."\n";
-			$content[2] = $subscriber_comment;
-			$content[3] = $subscriber_example;
+			$content[] = $subscriber_comment;
+			$content[] = $subscriber_example;
 			$subs_file->structure["general"] = $content;
 		}
 	}

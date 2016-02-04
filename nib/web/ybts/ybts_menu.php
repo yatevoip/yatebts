@@ -36,7 +36,7 @@ function get_menu_structure()
 	);
 
 	if (isset($private_version) && $private_version==true)
-		$structure["YBTS"] = "GPRS Roaming";
+		$structure["YBTS"][] = "GPRS Roaming";
 
 	return $structure;
 }

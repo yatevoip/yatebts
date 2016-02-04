@@ -58,7 +58,7 @@ function create_form_ybts_section($section, $subsection, $fields_sect_err=false,
 		}
 	}
 
-	print "<div id=\"err_$subsection\">";	
+	print "<div id=\"err_$subsection\">";
 	error_handle($error, $fields[$section][$subsection],$error_fields);
 	print "</div>";
 	start_form();

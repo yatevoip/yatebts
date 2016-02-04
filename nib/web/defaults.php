@@ -95,6 +95,14 @@ $country_code_comment = "; Your Country code (where YateBTS is installed)
 ;Ex: 1 for US, 44 for UK
 ;country_code= \n";
 
+$gw_sos_comment = "; Resource for the emergency calls gateway
+; If not set any emergency calls will be delivered to the outbound gateway
+; It is also possible to specify a short or international number (possibly MSISDN)
+; Ex: gw_sos=sip/sip:sos@emergency.gw
+; Ex: gw_sos=111
+; Ex: gw_sos=+10744341111
+;gw_sos= \n";
+
 $regexp_comment = ";Subscribers are accepted by either matching the IMSI against this configured 
 ;regular expression or by setting subscribers individually
 ;Note! If a regular expression is used, 2G/3G authentication cannot be used.

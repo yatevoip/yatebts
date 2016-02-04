@@ -413,4 +413,38 @@ function valid_nodes_sip($field_name, $field_value)
 	return array(true);
 }
 
+function check_rach_ac($field_name, $field_value)
+{
+	global $yate_conf_dir;
+
+	if (!strlen($field_value))
+		return array(true);
+
+	if (substr($field_value,0,2)!="0x") {
+		$res = check_field_validity($field_name, $field_value, 0, 65535);
+		if (!$res[0])
+			return $res;
+		$emergency_disabled = $field_value & 0x0400;
+	} else {
+		$hex = substr($field_value,2);
+		if (!ctype_xdigit($hex))
+			return array(false, "Invalid hex value '$field_value' for $field_name.");
+		if (strcasecmp($hex,"ffff")>0)
+			return array(false, "Value '$field_value' for $field_name exceeds limit 0xffff.");
+		$hex = base_convert($hex,16,10);
+		$emergency_disabled = $hex & 0x0400;
+	}
+	if (!$emergency_disabled) {
+		if (is_file($yate_conf_dir."/subscribers.conf")) {
+			$conf = new ConfFile($yate_conf_dir."/subscribers.conf");
+			if (!isset($conf->sections["general"]["gw_sos"]) || !strlen($conf->sections["general"]["gw_sos"]))
+				return array(false, "You enabled emergency calls in RACH.CA. <font class='error'>DON'T MODIFY THIS UNLESS YOU ARE A REAL OPERATOR</font>. You might catch real emergency calls than won't ever be answered. If you really want to enable them, first set 'Gateway SOS' in Subscribers>Country code and SMSC.");
+		}
+
+		warning_note("You enabled emergency calls in RACH.CA. <font class='error'>DON'T MODIFY THIS UNLESS YOU ARE A REAL OPERATOR</font>. You might catch real emergency calls than won't ever be answered.");
+	}
+
+	return array(true);
+}
+
 ?>

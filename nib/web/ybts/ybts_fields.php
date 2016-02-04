@@ -342,7 +342,7 @@ Interval allowed: 1..5.
 Defaults to 2."
 			),
 			"Neighbors.NumToSend" => array(
-			       array("selected" => 8, 1,2,3,4,5,6,7,8,9,10),	
+			       array("selected" => 8, 1,2,3,4,5,6,7,8,9,10),
 				"display" => "select",
 				"comment" => "Maximum number of neighbors to send to handset in a neighbor list in BCCH.
 Interval allowed:1..10.
@@ -354,6 +354,16 @@ Defaults to 8."
 				"comment" => "Maximum number of repeats of the Physical Information Message during handover procedure, GSM 04.08 11.1.3.
 Interval allowed: 1..10
 Defaults to 5"
+			),
+			"RACH.AC" => array(
+				"value" => "0x0400",
+				"display" => "text",
+				"comment" => "Integer: Access Class flags.
+This is the raw parameter sent on BCCH, see GSM 04.08 10.5.2.29 for encoding.
+DO NOT ALTER THIS UNLESS YOU ARE A REAL OPERATOR!
+Interval allowed: 0..65535 (16 bits, 0x0000..0xffff).
+Defaults to 0x0400 (No emergency services access).",
+				"validity" => array("check_rach_ac")
 			),
 			"RACH.MaxRetrans" => array( 
 				array("selected" => "1", array("RACH.MaxRetrans_id"=>"0","RACH.MaxRetrans"=> "1 retransmission"),array("RACH.MaxRetrans_id"=>"1","RACH.MaxRetrans"=>"2 retransmission"),array("RACH.MaxRetrans_id"=>"2","RACH.MaxRetrans"=> "4 retransmission"),array("RACH.MaxRetrans_id"=>"3","RACH.MaxRetrans"=> "7 retransmission")),
