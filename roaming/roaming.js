@@ -1281,6 +1281,8 @@ function completeCommand(msg,line,part)
 	case "roaming":
 	   if (neighbors)
 		oneCompletion(msg,"neighbors",part);
+	   if (nodes_sip)
+		oneCompletion(msg,"nodes",part);
 	   oneCompletion(msg,"list",part);
 	   oneCompletion(msg,"forget",part);
 	   break;
@@ -1344,6 +1346,23 @@ function onCommand(msg)
 		}
 	    }
 	    msg.retValue(tmp);
+	    return true;
+
+	case "roaming nodes":
+	    if (nodes_sip) {
+		var tmp = "NRI  Hex SIP Server (MSC/VLR)\r\n"
+			+ "---- --- ---------------------\r\n";
+		for (var nri in nodes_sip) {
+		    nri = 1 * nri;
+		    if (!isNaN(nri))
+			tmp += strFix(nri,-4) + " " + strFix(nri.toString(16,2),-3) + " " + nodes_sip[nri] + "\r\n";
+		}
+		msg.retValue(tmp);
+	    }
+	    else if ("" != reg_sip)
+		msg.retValue("All SIP requests to: " + reg_sip + "\r\n");
+	    else
+		msg.retValue("SIP nodes are not configured!\r\n");
 	    return true;
 
 	case "roaming forget all":
@@ -1444,7 +1463,7 @@ mosms_translations = {
 	"480":"41"	// Temporarily Unavailable => Temporary failure
 };
 
-roamingHelp = "  roaming {neighbors|list|forget all/IMSI}\r\n";
+roamingHelp = "  roaming {neighbors|nodes|list|forget all/IMSI}\r\n";
 
 Engine.debugName("roaming");
 Message.trackName(Engine.debugName());
