@@ -194,9 +194,12 @@ function buildRegister(imsi,tmsi,exp,imei,warning,msg,unresponsive_server)
     sr.sip_Contact = uri + "; expires=" + exp;
     if (imei!="") {
 	imei = imei.substr(0,8) + "-" + imei.substr(8,6) + "-" + imei.substr(-1);
-	sr.sip_Contact = sr.sip_Contact + "; +sip.instance=\"<urn:gsma:imei:"+ imei +">\"";
+	sr.sip_Contact = sr.sip_Contact + '; +sip.instance="<urn:gsma:imei:'+ imei
+	    +'>"; +g.3gpp.smsip';
     }
     sr.sip_Expires = exp;
+    if (exp)
+	sr["sip_Supported"] = "auth-gsm,auth-umts,reg-tmsi";
     sr["sip_P-Access-Network-Info"] = accnet_header;
     if (msg.phy_info)
 	sr["sip_P-PHY-Info"] = "YateBTS; " + msg.phy_info;
@@ -641,6 +644,7 @@ function onMoSMS(msg)
     var m = new Message("xsip.generate");
     m.method = "MESSAGE";
     m.user = msisdn_caller; 
+    m["sip_Supported"] = "sms-response";
     m["sip_P-Called-Party-ID"] = "<tel:" + dest + ">";
     if (text_sms && msg.text != "") {
 	m.xsip_type = "text/plain";
