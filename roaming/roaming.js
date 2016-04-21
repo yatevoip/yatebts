@@ -237,7 +237,10 @@ function buildCallID()
 function getNewRegistrar(server)
 {
     var no_try = 0;
-    var max_tries = 100;
+    var max_tries = nodes_sip.length;
+    if (!max_tries)
+	max_tries = 1;
+
     var new_server = getSIPRegistrar();
 
     while (new_server==server) {
