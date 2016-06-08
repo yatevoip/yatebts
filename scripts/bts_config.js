@@ -22,10 +22,9 @@
 //#pragma trace "cachegrind.out.bts_config"
 
 #require "lib_str_util.js"
+#require "sdr_config.js"
 
 debug = true;
-
-#require "sdr_config.js"
 
 conf_node = "bts";
 // define configuration files that can be set/get 
@@ -35,11 +34,12 @@ YbtsConfig = function()
 {
     GenericConfig.apply(this);
     this.name = "bts";
-    this.error = new Object();
     this.file = "ybts";
+    this.error = new Object();
+    this.skip_empty_params = new Object();
     this.sections = ["gsm", "gprs", "ggsn", "transceiver", "control", "tapping", "gsm_advanced", "gprs_advanced", "sgsn", "logging", "test", "ybts", "security", "handover", "roaming", "gprs_roaming"];
     this.params_allowed_empty = ["Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg", "RadioFrequencyOffset", "TxAttenOffset", "Radio.RxGain", "gprs_nnsf_bits", "nnsf_dns", "network_map", "local_breakout", "neighbors", "reg_sip", "nodes_sip", "my_sip", "gstn_location"];
-    this.params_required = { "gsm": ["Radio.Band", "Radio.C0", "Identity.LAC", "Identity.CI", "Identity.BSIC.NCC", "Identity.BSIC.BCC", "Radio.PowerManager.MaxAttenDB", "Radio.PowerManager.MinAttenDB"]};
+    this.params_required = { "gsm": ["Radio.Band", "Radio.C0","Identity.MCC", "Identity.MNC", "Identity.LAC", "Identity.CI", "Identity.BSIC.NCC", "Identity.BSIC.BCC", "Radio.PowerManager.MaxAttenDB", "Radio.PowerManager.MinAttenDB"]};
     this.factory_calibrated = {"transceiver": ["TxAttenOffset","RadioFrequencyOffset"], "gsm_advanced": ["Radio.RxGain"]};
 };
 
@@ -51,6 +51,13 @@ YbtsConfig.prototype.genericValidateConfig = YbtsConfig.prototype.validateConfig
 
 YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_value)
 {
+    if (this.factory_calibrated[section_name]!=undefined && inArray(param_name,this.factory_calibrated[section_name]) && (param_value=="" || param_value=="Factory calibrated")) {
+	if (!skip_empty_params[section_name]) {
+	    skip_empty_params[section_name] = new Object();
+	    skip_empty_params[section_name][param_name] = true;
+	}
+    }
+
     if (!this.genericValidateConfig(section_name,param_name,param_value))
 	return false;
 
