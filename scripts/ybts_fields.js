@@ -17,15 +17,20 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+//#pragma trace "cachegrind.out.ybts_fields"
+
 /*---------------  YbtsFields validations  ---------------*/
 YbtsConfig.prototype.validations =  { 
     "gsm": {
 	"Radio.Band": {"select":[850, 900, 1800, 1900]},
 	"Radio.C0": {"callback":checkRadioBand},
+	"Identity.MCC": {"regex": "^[0-9]{3}$"},
+	"Identity.MNC": {"regex": "^[0-9]{2,3}$"},
 	"Identity.LAC": {"minimum":0, "maximum":65280}, 
 	"Identity.CI": {"minimum":0, "maximum":65535}, 
 	"Identity.BSIC.NCC":{"minimum":0, "maximum":7},
-	"Identity.BSIC.BCC":{"minimum":0, "maximum":7}, 
+	"Identity.BSIC.BCC":{"minimum":0, "maximum":7},
+	"Identity.ShortName": {"regex":"^[a-zA-Z0-9]+$"},	
 	"Radio.PowerManager.MaxAttenDB":{"minimum":0, "maximum":80}, 
 	"Radio.PowerManager.MinAttenDB":{"callback":checkRadioPowerManager}
     },
@@ -203,7 +208,7 @@ YbtsConfig.prototype.validations =  {
 function checkValidSelect(error, field_name, field_value, select_array, section_name)
 {
     if (!inArray(field_value, select_array)) {
-	error.reason = "The field '"+field_name+"' from '"+section_name+"' is not valid: '"+field_value+"', is different from the allowed values.";
+	error.reason = "The field '"+field_name+"' is not valid: '"+field_value+"', is different from the allowed values in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -216,7 +221,7 @@ function onOff(error, field_name, field_value, section_name)
 {
     var onOff_values = ["on", "1", "off", "0"];
     if (!inArray(field_value,onoff_values)) {
-	error.reason =  "Invalid checkbox value '"+field_value+"' for '"+field_name+"' from "+section_name+".";
+	error.reason =  "Invalid checkbox value '"+field_value+"' for '"+field_name+"' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -229,20 +234,20 @@ function checkFieldValidity(error, section_name, field_name, field_value, min, m
     if (min!==undefined && max!==undefined)  {
 	field_value = 1*field_value;
 	if (!isValidNumber(field_value)){
-	    error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: "+field_value;
+	    error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
 
 	if (field_value<min || field_value>max) {
-	    error.reason = "Field '"+field_name+"' is not valid: '"+field_value+"'. It has to be smaller then "+max+" and greater then "+min+".";
+	    error.reason = "Field '"+field_name+"' is not valid: '"+field_value+"'. It has to be smaller then "+max+" and greater then "+min+" in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
     }
 
     if (regex!=undefined) {
-	error.reason = "Field " + field_name +" is not valid.";
+	error.reason = "Field " + field_name +" is not valid in section '"+section_name+"'.";
 	error.error = 401;
 	var str = new RegExp(regex);
 	if (!str.test(field_value))
@@ -252,22 +257,20 @@ function checkFieldValidity(error, section_name, field_name, field_value, min, m
 }
 
 // Test if a parameter value is missing
-function isParamMissing(error,param,value)
+function isParamMissing(error,param,value,section_name)
 {
     if (isPresent(value))
 	return false;
-    setMissingParam(error,param);
+    setMissingParam(error,param,section_name);
     return true;
 }
 
 // Set the error object for a missing param 
-function setMissingParam(error,param,retVal)
+function setMissingParam(error,param,section_name)
 {
-    error.reason = "Missing '" + param + "' parameter.";
+    error.reason = "Missing required '" + param + "' parameter in section '"+section_name+"'.";
     error.error = 402;
-    if (undefined === retVal)
-	return null;
-    return retVal;
+    return false;
 }
 
 // Test a valid number using regex
@@ -278,13 +281,13 @@ function isValidNumber(field)
 }
 
 // Test an IP validity
-function checkValidIP(error, field_name, field_value)
+function checkValidIP(error, field_name, field_value, section_name)
 {
     var regex = '([0-9]{1,3}\.){3}[0-9]{1,3}';
 
     var str = new RegExp(regex);
     if (!str.test(field_value)) {
-	error.reason = "Field '"+field_name+"' is not valid. '"+field_value+"' is not a valid IP address!";
+	error.reason = "Field '"+field_name+"' is not a valid IP address: '"+field_value+"' is section '"+section_name+"'";
 	error.error = 401;
 	return false;	
     }	
@@ -316,7 +319,7 @@ function checkValidInteger(error, field_name, field_value, section_name)
     if (!field_value.length)
 	return true;
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' isn't a valid integer: '"+field_value+"'.";
+	error.reason = "Field '"+field_name+"' isn't a valid integer: '"+field_value+"' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -337,13 +340,13 @@ function checkRadioBand(error, field_name, field_value, section_name)
     var restricted_value = params.gsm["Radio.Band"];
 
     if (!permitted_values[restricted_value]) {
-	error.reason = "The given value for '"+field_name+"' from '"+section_name+"' is not a permitted one. Allowed values: 850,900,1800,1900";
+	error.reason = "The given value for '"+field_name+"': '"+restricted_value+"' is not a permitted one. Allowed values: 850,900,1800,1900 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: "+field_value;
+	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -358,7 +361,7 @@ function checkRadioBand(error, field_name, field_value, section_name)
 
     if (radio_c0_val[2]==undefined) {
 	if (int_value<min || int_value>max) {
-	    error.reason = "Field '"+ field_name +"' from '"+section_name+"' is not in the right range for the Radio.Band chosen.";
+	    error.reason = "Field '"+ field_name +"' is not in the right range for the Radio.Band chosen in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
@@ -368,7 +371,7 @@ function checkRadioBand(error, field_name, field_value, section_name)
 	var max2 = radio_c0_val[3];
 	if ((int_value>=min && int_value<=max) || (int_value>=min2 && int_value<=max2))
 	    return true;
-	error.reason = "Field "+field_name+" from '"+section_name+"' is not in the right range for the Radio.Band chosen.";
+	error.reason = "Field "+field_name+" is not in the right range for the Radio.Band chosen in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -381,13 +384,13 @@ function checkRadioPowerManager(error, field_name, field_value, section_name)
     max = 1*params.gsm['Radio.PowerManager.MaxAttenDB'];
 
     if (!isValidNumber(min)) {
-	error.reason =  "Field 'Radio.PowerManager.MinAttenDB' from '"+section_name+"' is not a valid number '" + min + "'.";
+	error.reason =  "Field 'Radio.PowerManager.MinAttenDB' is not a valid number '" + min + "' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     if (!isValidNumber(max)) {
-	error_reason = "Field 'Radio.PowerManager.MinAttenDB' from '"+section_name+"' is not a valid number '" + max + "'.";
+	error_reason = "Field 'Radio.PowerManager.MinAttenDB' is not a valid number '" + max + "' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -408,7 +411,7 @@ function checkRadioPowerManager(error, field_name, field_value, section_name)
 }
 
 // Validate a space-separated list of the DNS servers, in IP dotted notation, eg: 1.2.3.4 5.6.7.8.
-function checkValidDNS(error, field_name, field_value)
+function checkValidDNS(error, field_name, field_value, section_name)
 {
     //this field can be empty
     if (!validParam(field_value))
@@ -418,7 +421,7 @@ function checkValidDNS(error, field_name, field_value)
     dns_addresses = field_value.split(" ");
     total = dns_addresses.length;
     for (var i=0; i<total; i++)
-	res[] = checkValidIP(error, field_name, dns_addresses[i]);
+	res[] = checkValidIP(error, field_name, dns_addresses[i], section_name);
 
     for (var i=0; i<res.length; i++) {
 	if (!res[i][0])
@@ -431,7 +434,7 @@ function checkValidDNS(error, field_name, field_value)
 function validateNnsfRoaming(error, param_name, param_value, section_name)
 {
     if (validParam(param_value) && !isValidNumber(param_value)) {
-	error.reason = "Field '"+param_name+"' from '"+section_name+"' should be numeric.";
+	error.reason = "Field '"+param_name+"' should be numeric in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -441,7 +444,7 @@ function validateNnsfRoaming(error, param_name, param_value, section_name)
 function validateExpiresRoaming(error,param_name, param_value, section_name)
 {
     if (validParam(param_value) && !isValidNumber(param_value)) {
-	error.reason = "Field '"+param_name+"' from '"+section_name+"' should be numeric.";
+	error.reason = "Field '"+param_name+"' should be numeric in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -451,7 +454,7 @@ function validateExpiresRoaming(error,param_name, param_value, section_name)
 function validateNnsfDataroam(error, param_name, param_value, section_name)
 {
     if (validParam(param_value) && (!isValidNumber(param_value) || nnsf_bits<0)) {
-	error.reason = "Field '"+param_name+"' from '"+section_name+"' must be a positive int, if set.";
+	error.reason = "Field '"+param_name+"' must be a positive int, if set in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -466,17 +469,17 @@ function validateMapNetworkDataroam(error, param_name, param_value, section_name
     for (map in map_entry) {
 	entry = split.map_entry("=");
 	if (entry.length!=2) {
-	    error.reason = "Invalid format for '"+param_name+"' from '"+section_name+"'.";
+	    error.reason = "Invalid format for '"+param_name+"' in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
 	if (!isValidNumber(entry[0])) {
-	    error.reason = "Invalid value '"+entry[0]+"' for 'Network map' from '"+section_name+"'. Should be numeric.";
+	    error.reason = "Invalid value '"+entry[0]+"' for 'Network map', should be numeric in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
-	if (!checkValidIP(error, param_name, entry[1])) {
-	    error.reason = "Invalid value '"+entry[1]+"' for 'Network map' from '"+section_name+"'. Should be a valid IP address.";
+	if (!checkValidIP(error, param_name, entry[1], section_name)) {
+	    error.reason = "Invalid value '"+entry[1]+"' for 'Network map' from should be a valid IP address in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
@@ -490,7 +493,7 @@ function validateRoamingParams(error)
 
     for (var i=0; i<required.length; i++) {
 	if (!params.roaming[required[i]]) {
-	    error.reason = "Field '"+required[i]+"' from 'Roaming' section is required in roaming mode.";
+	    error.reason = "Field '"+required[i]+"' from 'Roaming' section is required in roaming mode in section 'roaming'.";
 	    error.error = 401;
 	    return false;
 	}
@@ -499,7 +502,7 @@ function validateRoamingParams(error)
     var reg_sip = params.roaming["reg_sip"];
     var nodes_sip = params.roaming["nodes_sip"];
     if (!validParam(reg_sip) && !validParam(nodes_sip)) {
-	error.reason = "Either 'Reg sip' or 'Nodes sip' must be set in roaming mode.";
+	error.reason = "Either 'Reg sip' or 'Nodes sip' must be set in roaming mode in section 'roaming'.";
 	error.error = 401;
 	return false;
     }
@@ -507,12 +510,12 @@ function validateRoamingParams(error)
     var nnsf_bits = params.roaming["nnsf_bits"];
     var expires = params.roaming["expires"];
     if (validParam(expires) && !isValidNumber(expires)) {
-	error.reason = "Field 'Expires' from 'Roaming' section should be numeric.";
+	error.reason = "Field 'Expires' should be numeric in section 'roaming'.";
 	error.error = 401;
 	return false;
     }
     if (validParam(nnsf_bits) && (!isValidNumber(nnsf_bits) || nnsf_bits<0)) {
-	error.reason = "Field 'NNSF bits' should be a positive int.";
+	error.reason = "Field 'NNSF bits' should be a positive int in section 'roaming'.";
 	error.error = 401;
 	return false;
     }
@@ -535,14 +538,14 @@ function checkTimerImplicitdetach(error, field_name, field_value, section_name)
     }
 
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: "+field_value+".";
+	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     //first test if field_value is in the allowed interval
     if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' is not valid. The value must be in interval [2000,4000] and should be a factor of 10.";
+	error.reason = "Field '"+field_name+"' is not valid. The value must be in interval [2000,4000] and should be a factor of 10 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -558,22 +561,18 @@ function checkTimerImplicitdetach(error, field_name, field_value, section_name)
  */
 function checkTimerRaupdate(error, field_name, field_value, section_name)
 {
-    var interval_allowed = new Array();
-    var j = 0;
-    for (var i=0; i<11160; i++) {
-	interval_allowed[j] = i;
-	i = i+1;
-	j++;
-    }
+    var val = parseInt(field_value); 
+    if (val > 12000)
+	return true;
 
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: "+field_value+".";
+    if (!(val >=0 && val <=11160)) { 
+	error.reason = "Field '"+field_name+"' is not in the allowed interval: "+field_value+". The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
-    if (!inArray(field_value, interval_allowed) && field_value<12000) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid:'"+field_value+"'. The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000.";
+    if (val%2!=0) {
+	error.reason = "Field '"+field_name+"' is not valid:'"+field_value+"'. The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -587,7 +586,7 @@ function checkTimerRaupdate(error, field_name, field_value, section_name)
  * This is broadcast in the beacon and it cannot be changed once BTS is started.
  * Allowed interval 0:6000(100).
  */
-function checkUplinkPersistent(error, field_name, field_value)
+function checkUplinkPersistent(error, field_name, field_value, section_name)
 {
     var interval_allowed = new Array();
     var j=0;
@@ -598,13 +597,13 @@ function checkUplinkPersistent(error, field_name, field_value)
     }
 
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: "+field_value+".";
+	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid. The value must be in interval [0,6000] and should be a factor of 100.";
+	error.reason = "Field '"+field_name+"' is not valid. The value must be in interval [0,6000] and should be a factor of 100 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -619,13 +618,13 @@ function checkUplinkPersistent(error, field_name, field_value)
 function checkDownlinkPersistent(error, field_name, field_value, section_name)
 {
     if (!isValidNumber(field_value)){
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: '"+field_value+"'.";
+	error.reason = "Field '"+field_name+"' is not a valid number: '"+field_value+"' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     if (field_value<0 || field_value>10000) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid. It has to be smaller than 10000.";
+	error.reason = "Field '"+field_name+"' is not valid. It has to be smaller than 10000 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -641,7 +640,7 @@ function checkDownlinkPersistent(error, field_name, field_value, section_name)
 function checkChannelcodingcontrolRssi(error, field_name, field_value, section_name)
 {
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: '"+field_value+"'.";
+	error.reason = "Field '"+field_name+"' is not a valid number: '"+field_value+"' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -654,7 +653,7 @@ function checkChannelcodingcontrolRssi(error, field_name, field_value, section_n
     }
 
     if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid. The value must be in interval [-65,-15].";
+	error.reason = "Field '"+field_name+"' is not valid, the value must be in interval [-65,-15] in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -668,7 +667,7 @@ function checkChannelcodingcontrolRssi(error, field_name, field_value, section_n
 function checkRadioRssiTarget(error, field_name, field_value, section_name)
 {
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: '"+field_value+"'.";
+	error.reason = "Field '"+field_name+"' is not a valid number: '"+field_value+"' in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -680,9 +679,8 @@ function checkRadioRssiTarget(error, field_name, field_value, section_name)
 	j++;
     }
 
-
     if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid: "+field_value+". The value must be in interval [-75,-25].";
+	error.reason = "Field '"+field_name+"' is not valid: "+field_value+". The value must be in interval [-75,-25] in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -696,13 +694,13 @@ function checkRadioRssiTarget(error, field_name, field_value, section_name)
 function checkT3260(error, field_name, field_value, section_name)
 {
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid. Interval allowed: 5000..3600000.";
+	error.reason = "Field '"+field_name+"' is not valid, interval allowed: 5000..3600000 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     if (field_value<5000 || field_value>3600000) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid. Interval allowed: 5000..3600000.";
+	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid, interval allowed: 5000..3600000 in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
@@ -722,7 +720,7 @@ function checkRachAc(error, field_name, field_value, section_name)
 	var regex = "^0x[0-9a-zA-Z]{1,4}$";
 	var str = new RegExp(regex);
 	if (!str.test(field_value)) {
-	    error.reason =  "Invalid hex value '"+field_value+"' for '"+field_name+"' from "+section_name+".";
+	    error.reason =  "Invalid hex value '"+field_value+"' for '"+field_name+"' in section  "+section_name+".";
 	    error.error = 401;
 	    return false;
 	}
@@ -737,13 +735,13 @@ function checkRachAc(error, field_name, field_value, section_name)
 function checkUssdSessTimeout(error, field_name, field_value, section_name)
 {
     if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not a valid number: "+field_value;
+	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
 
     if ((1*field_value)<30000) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is smaller than 30000: "+field_value;
+	error.reason = "Field '"+field_name+"' is smaller than 30000: "+field_value+" in section '"+section_name+"'.";
 	error.error = 401;
 	return false;
     }
