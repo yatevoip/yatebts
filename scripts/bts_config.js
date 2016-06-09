@@ -52,10 +52,9 @@ YbtsConfig.prototype.genericValidateConfig = YbtsConfig.prototype.validateConfig
 YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_value)
 {
     if (this.factory_calibrated[section_name]!=undefined && inArray(param_name,this.factory_calibrated[section_name]) && (param_value=="" || param_value=="Factory calibrated")) {
-	if (!skip_empty_params[section_name]) {
-	    skip_empty_params[section_name] = new Object();
-	    skip_empty_params[section_name][param_name] = true;
-	}
+	if (!this.skip_empty_params[section_name]) 
+	    this.skip_empty_params[section_name] = new Object();
+	this.skip_empty_params[section_name][param_name] = true;
     }
 
     if (!this.genericValidateConfig(section_name,param_name,param_value))
