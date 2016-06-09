@@ -19,7 +19,8 @@
 
 //#pragma cache "true"
 //#pragma compile "bts_config.jsc"
-//#pragma trace "cachegrind.out.bts_config"
+
+#pragma trace "cachegrind.out.bts_config"
 
 #require "lib_str_util.js"
 #require "sdr_config.js"
@@ -103,7 +104,27 @@ API.on_get_ybts_node = function(params,msg)
 API.on_set_ybts_node = function(params,msg,setNode)
 {
     var ybts = new YbtsConfig;
-    return API.on_set_generic_file(ybts,params,msg,setNode);
+    var res = API.on_set_generic_file(ybts,params,msg,setNode);
+
+    if (res.reason)
+	return res;
+
+    // set codecs in ysipchan.conf
+    var ysipchan = new ConfigFile(Engine.configFile("ysipchan"));
+    var codecs_section = ysipchan.getSection("codecs",true);
+
+    var mode = params["ybts"]["mode"];
+    Engine.output("YBTS mode is "+mode+". Setting codecs in ysipchan.conf");
+    if (mode=="nib") {
+	codecs_section.setValue("default","enable");
+    } else {
+	codecs_section.setValue("default","disable");
+	codecs_section.setValue("gsm","enable");
+    }
+    if (!ysipchan.save())
+	return { reason: "Could not save codecs setting in ysipchan.conf", error: 501 };
+
+    return res;
 };
 
 // use generic get and set functions
