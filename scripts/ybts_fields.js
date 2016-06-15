@@ -22,7 +22,7 @@
 /*---------------  YbtsFields validations  ---------------*/
 YbtsConfig.prototype.validations =  { 
     "gsm": {
-	"Radio.Band": {"select":[850, 900, 1800, 1900]},
+	"Radio.Band": {"select":["850", "900", "1800", "1900"]},
 	"Radio.C0": {"callback":checkRadioBand},
 	"Identity.MCC": {"regex": "^[0-9]{3}$"},
 	"Identity.MNC": {"regex": "^[0-9]{2,3}$"},
@@ -37,7 +37,7 @@ YbtsConfig.prototype.validations =  {
     "gsm_advanced": { 
 	"Channels.NumC1s": {"minimum":0, "maximum":100},
 	"Channels.NumC7s": {"minimum":0, "maximum":100},
-	"Channels.C1sFirst": {"callback":onOff},
+	"Channels.C1sFirst": {"callback":checkOnOff},
 	"Channels.SDCCHReserve": {"minimum":0, "maximum":10},
 	"CCCH.AGCH.QMax": {"minimum":3, "maximum":8},
 	"CCCH.CCCH-CONF": {"minimum":1, "maximum":2},
@@ -45,14 +45,14 @@ YbtsConfig.prototype.validations =  {
 	"CellSelection.CELL-RESELECT-HYSTERESIS": {"minimum":0, "maximum":7},
 	"CellSelection.MS-TXPWR-MAX-CCH": {"minimum":0, "maximum":31},
 	"CellSelection.NCCsPermitted": {"minimum":-1, "maximum":255},
-	"CellSelection.NECI": {"callback":onOff},
+	"CellSelection.NECI": {"select":["0","1"]},
 	"CellSelection.RXLEV-ACCESS-MIN": {"minimum":0, "maximum":63},
 	"Cipher.CCHBER": {"select":["0.0","0.1","0.2","0.3","0.4","0.5","0.6","0.7","0.8","0.9","1.0"]},
-	"Cipher.Encrypt": {"callback":onOff},
+	"Cipher.Encrypt": {"callback":checkOnOff},
 	"Cipher.RandomNeighbor": {"select":["0.0","0.1","0.2","0.3","0.4","0.5","0.6","0.7","0.8","0.9","1.0"]},
-	"Cipher.ScrambleFiller": {"callback":onOff},
+	"Cipher.ScrambleFiller": {"callback":checkOnOff},
 	"Control.GPRSMaxIgnore": {"minimum":3, "maximum":8},
-	"Handover.InitialHoldoff": {"select":[2000,3000,4000,5000,6000,7000]},
+	"Handover.InitialHoldoff": {"select":["2000","3000","4000","5000","6000","7000"]},
 	"Handover.LocalRSSIMin": {"minimum":-100, "maximum":-50},
 	"Handover.ThresholdDelta": {"minimum":5, "maximum":20},
 	"MS.Power.Damping": {"minimum":25, "maximum":75},
@@ -68,38 +68,38 @@ YbtsConfig.prototype.validations =  {
 	"RACH.TxInteger": {"minimum":0, "maximum":15},
 	"Radio.ARFCNs": {"minimum":1, "maximum":10},
 	"Radio.MaxExpectedDelaySpread": {"minimum":1, "maximum":4},
-	"Radio.NeedBSIC": {"callback":onOff},
+	"Radio.NeedBSIC": {"callback":checkOnOff},
 	"Radio.PowerManager.NumSamples": {"minimum":5, "maximum":20},
 	"Radio.PowerManager.Period": {"minimum":4500, "maximum":7500},
 	"Radio.PowerManager.SamplePeriod": {"minimum":1500, "maximum":2500},
 	"Radio.PowerManager.TargetT3122": {"minimum":3750, "maximum":6250},
 	"Radio.RSSITarget": {"callback":checkRadioRssiTarget},
-	"Radio.RxGain": {"select":["","Factory calibrated",0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75]},
-	"ShowCountry": {"callback":onOff},
-	"Timer.T3103": {"select":[2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200,5300,5400,5500,5600,5700,5800,5900,6000,6100,6200,6300,6400,6500,6600,6700,6800,6900,7000,7100,7200,7300,7400,7500]},
-	"Timer.T3105": {"select":[25,30,35,40,45,50,55,60,65,70,75]},
-	"Timer.T3113": {"select":[ 5000,5500,6000,6500,7000,7500,8000,8500,9000,9500,10000,10500,11000,11500,12000,12500,13000,13500,14000,14500,15000]},
+	"Radio.RxGain": {"select":["","Factory calibrated","0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59","60","61","62","63","64","65","66","67","68","69","70","71","72","73","74","75"]},
+	"ShowCountry": {"callback":checkOnOff},
+	"Timer.T3103": {"select":["2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000","5100","5200","5300","5400","5500","5600","5700","5800","5900","6000","6100","6200","6300","6400","6500","6600","6700","6800","6900","7000","7100","7200","7300","7400","7500"]},
+	"Timer.T3105": {"select":["25","30","35","40","45","50","55","60","65","70","75"]},
+	"Timer.T3113": {"select":[ "5000","5500","6000","6500","7000","7500","8000","8500","9000","9500","10000","10500","11000","11500","12000","12500","13000","13500","14000","14500","15000"]},
 	"Timer.T3122Max": {"minimum":127500, "maximum":382500},
-	"Timer.T3122Min": {"select":[1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300,2400,2500,2600,2700,2800,2900,3000]},
-	"Timer.T3212": {"select":[0,6,12,18,24,30,36,42,48,54,60,66,72,78,84,90,96,102,108,114,120,126,132,138,144,150,156,162,168,174,180,186,192,198,204,210,216,222,228,234,240,246,252,258,264,270,276,282,288,294,300,306,312,318,324,330,336,342,348,354,360,366,372,378,384,390,396,402,408,414,420,426,432,438,444,450,456,462,468,474,480,486,492,498,504,510,516,522,528,534,540,546,552,558,564,570,576,582,588,594,600,606,612,618,624,630,636,642,648,654,660,666,672,678,684,690,696,702,708,714,720,726,732,738,744,,750,756,762,768,774,780,786,792,798,804,810,816,822,828,834,840,846,852,858,864,870,876,882,888,894,900,906,912,918,924,930,936,942,948,954,960,966,972,978,984,990,996,1002,1008,1014,1020,1026,1032,1038,1044,1050,1056,1062,1068,1074,1080,1086,1092,1098,1104,1110,1116,1122,1128,1134,1140,1146,1152,1158,1164,1170,1176,1182,1188,1194,1200,1206,1212,1218,1224,1230,1236,1242,1248,1254,1260,1266,1272,1278,1284,1290,1296,1302,1308,1314,1320,1326,1332,1338,1344,1350,1356,1362,1368,1374,1380,1386,1392,1398,1404,1410,1416,1422,1428,1434,1440,1446,1452,1458,1464,1470,1476,1482,1488,1494,1500,1506,1512,1518,1524,1530]}
+	"Timer.T3122Min": {"select":["1000","1100","1200","1300","1400","1500","1600","1700","1800","1900","2000","2100","2200","2300","2400","2500","2600","2700","2800","2900","3000"]},
+	"Timer.T3212": {"select":["0","6","12","18","24","30","36","42","48","54","60","66","72","78","84","90","96","102","108","114","120","126","132","138","144","150","156","162","168","174","180","186","192","198","204","210","216","222","228","234","240","246","252","258","264","270","276","282","288","294","300","306","312","318","324","330","336","342","348","354","360","366","372","378","384","390","396","402","408","414","420","426","432","438","444","450","456","462","468","474","480","486","492","498","504","510","516","522","528","534","540","546","552","558","564","570","576","582","588","594","600","606","612","618","624","630","636","642","648","654","660","666","672","678","684","690","696","702","708","714","720","726","732","738","744",,"750","756","762","768","774","780","786","792","798","804","810","816","822","828","834","840","846","852","858","864","870","876","882","888","894","900","906","912","918","924","930","936","942","948","954","960","966","972","978","984","990","996","1002","1008","1014","1020","1026","1032","1038","1044","1050","1056","1062","1068","1074","1080","1086","1092","1098","1104","1110","1116","1122","1128","1134","1140","1146","1152","1158","1164","1170","1176","1182","1188","1194","1200","1206","1212","1218","1224","1230","1236","1242","1248","1254","1260","1266","1272","1278","1284","1290","1296","1302","1308","1314","1320","1326","1332","1338","1344","1350","1356","1362","1368","1374","1380","1386","1392","1398","1404","1410","1416","1422","1428","1434","1440","1446","1452","1458","1464","1470","1476","1482","1488","1494","1500","1506","1512","1518","1524","1530"]}
     },
     "gprs": {
-	"Enable": {"callback":onOff},
+	"Enable": {"callback":checkOnOff},
 	"RAC": {"minimum":0, "maximum":255},
 	"RA_COLOUR": {"minimum":0, "maximum":7}
     },
     "gprs_advanced": {
-	"Debug": {"callback":onOff},
+	"Debug": {"callback":checkOnOff},
 	"MS.Power.Alpha": {"minimum":0,"maximum":10},
 	"MS.Power.Gamma": {"minimum":0,"maximum":31},
 	"MS.Power.T_AVG_T": {"minimum":0,"maximum":25},
 	"MS.Power.T_AVG_W": {"minimum":0,"maximum":25},
 	"Multislot.Max.Downlink": {"minimum":0,"maximum":10},
 	"Multislot.Max.Uplink": {"minimum":0,"maximum":10},
-	"Uplink.KeepAlive": {"select":[200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300,2400,2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000]},
+	"Uplink.KeepAlive": {"select":["200","300","400","500","600","700","800","900","1000","1100","1200","1300","1400","1500","1600","1700","1800","1900","2000","2100","2200","2300","2400","2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000"]},
 	"Uplink.Persist": {"callback":checkUplinkPersistent},
 	"TBF.Downlink.Poll1": {"minimum":0,"maximum":15},
-	"TBF.EST": {"callback":onOff},
+	"TBF.EST": {"callback":checkOnOff},
 	"TBF.Expire": {"minimum":20000,"maximum":40000},
 	"TBF.KeepExpiredCount": {"minimim":15, "maximum":25},
 	"TBF.Retry": {"minimum":0,"maximum":4},
@@ -107,8 +107,8 @@ YbtsConfig.prototype.validations =  {
 	"CellOptions.T3168Code": {"minimim":0,"maximum":7},
 	"CellOptions.T3192Code": {"minimim":0,"maximum":7},
 	"ChannelCodingControl.RSSI": {"callback":checkChannelcodingcontrolRssi},
-	"Channels.Congestion.Threshold": {"select":[100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300]},
-	"Channels.Congestion.Timer": {"select":[30,35,40,45,50,55,60,65,70,75,80,85,90]},
+	"Channels.Congestion.Threshold": {"select":["100","105","110","115","120","125","130","135","140","145","150","155","160","165","170","175","180","185","190","195","200","205","210","215","220","225","230","235","240","245","250","255","260","265","270","275","280","285","290","295","300"]},
+	"Channels.Congestion.Timer": {"select":["30","35","40","45","50","55","60","65","70","75","80","85","90"]},
 	"Channels.Min.C0": {"minimum":0,"maximum":7},
 	"Channels.Min.CN": {"minimum":0,"maximum":100},
 	"Channels.Max": {"minimum":0,"maximum":10},
@@ -118,28 +118,28 @@ YbtsConfig.prototype.validations =  {
 	"Counters.N3105": {"minimum":6,"maximum":18},
 	"Counters.Reassign": {"minimum":3,"maximum":9},
 	"Counters.TbfRelease": {"minimum":3,"maximum":8},
-	"Downlink.KeepAlive": {"select":[200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300,2400,2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000]},
+	"Downlink.KeepAlive": {"select":["200","300","400","500","600","700","800","900","1000","1100","1200","1300","1400","1500","1600","1700","1800","1900","2000","2100","2200","2300","2400","2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000"]},
 	"Downlink.Persist": {"callback":checkDownlinkPersistent},
-	"LocalTLLI.Enable": {"callback":onOff},
+	"LocalTLLI.Enable": {"callback":checkOnOff},
 	"MS.KeepExpiredCount": {"minimum":10,"maximum":30},
 	"NC.NetworkControlOrder": {"minimum":0,"maximum":3},
 	"NMO": {"minimum":1,"maximum":3},
-	"PRIORITY-ACCESS-THR": {"select":[0,3,4,5,6]},
+	"PRIORITY-ACCESS-THR": {"select":["0","3","4","5","6"]},
 	"RRBP.Min": {"minimum":0,"maximum":3}, 
-	"Reassign.Enable": {"callback":onOff},
-	"SendIdleFrames": {"callback":onOff},
-	"Timers.Channels.Idle": {"select":[3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200,5300,5400,5500,5600,5700,5800,5900,6000,6100,6200,6300,6400,6500,6600,6700,6800,6900,7000,7100,7200,7300,7400,7500,7600,7700,7800,7900,8000,8100,8200,8300,8400,8500,8600,8700,8800,8900,9000]},
-	"Timers.MS.Idle": {"select":[300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540,550,560,570,580,590,600,610,620,630,640,650,660,670,680,690,700,710,720,730,740,750,760,770,780,790,800,810,820,830,840,850,860,870,880,890,900]},
-	"Timers.MS.NonResponsive": {"select":[3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200,5300,5400,5500,5600,5700,5800,5900,6000,6100,6200,6300,6400,6500,6600,6700,6800,6900,7000,7100,7200,7300,7400,7500,7600,7700,7800,7900,8000,8100,8200,8300,8400,8500,8600,8700,8800,8900,9000]},
-	"Timers.T3169": {"select":[2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200,5300,5400,5500,5600,5700,5800,5900,6000,6100,6200,6300,6400,6500,6600,6700,6800,6900,7000,7100,7200,7300,7400,7500]},
-	"Timers.T3191": {"select":[2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200,5300,5400,5500,5600,5700,5800,5900,6000,6100,6200,6300,6400,6500,6600,6700,6800,6900,7000,7100,7200,7300,7400,7500]},
-	"Timers.T3193": {"select":[0,100,200,300,400,500,600,700,800,900,1000,1100,1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300,2400,2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000]},
-	"Timers.T3195": {"select":[2500,2600,2700,2800,2900,3000,3100,3200,3300,3400,3500,3600,3700,3800,3900,4000,4100,4200,4300,4400,4500,4600,4700,4800,4900,5000,5100,5200,5300,5400,5500,5600,5700,5800,5900,6000,6100,6200,6300,6400,6500,6600,6700,6800,6900,7000,7100,7200,7300,7400,7500]}
+	"Reassign.Enable": {"callback":checkOnOff},
+	"SendIdleFrames": {"callback":checkOnOff},
+	"Timers.Channels.Idle": {"select":["3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000","5100","5200","5300","5400","5500","5600","5700","5800","5900","6000","6100","6200","6300","6400","6500","6600","6700","6800","6900","7000","7100","7200","7300","7400","7500","7600","7700","7800","7900","8000","8100","8200","8300","8400","8500","8600","8700","8800","8900","9000"]},
+	"Timers.MS.Idle": {"select":["300","310","320","330","340","350","360","370","380","390","400","410","420","430","440","450","460","470","480","490","500","510","520","530","540","550","560","570","580","590","600","610","620","630","640","650","660","670","680","690","700","710","720","730","740","750","760","770","780","790","800","810","820","830","840","850","860","870","880","890","900"]},
+	"Timers.MS.NonResponsive": {"select":["3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000","5100","5200","5300","5400","5500","5600","5700","5800","5900","6000","6100","6200","6300","6400","6500","6600","6700","6800","6900","7000","7100","7200","7300","7400","7500","7600","7700","7800","7900","8000","8100","8200","8300","8400","8500","8600","8700","8800","8900","9000"]},
+	"Timers.T3169": {"select":["2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000","5100","5200","5300","5400","5500","5600","5700","5800","5900","6000","6100","6200","6300","6400","6500","6600","6700","6800","6900","7000","7100","7200","7300","7400","7500"]},
+	"Timers.T3191": {"select":["2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000","5100","5200","5300","5400","5500","5600","5700","5800","5900","6000","6100","6200","6300","6400","6500","6600","6700","6800","6900","7000","7100","7200","7300","7400","7500"]},
+	"Timers.T3193": {"select":["0","100","200","300","400","500","600","700","800","900","1000","1100","1200","1300","1400","1500","1600","1700","1800","1900","2000","2100","2200","2300","2400","2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000"]},
+	"Timers.T3195": {"select":["2500","2600","2700","2800","2900","3000","3100","3200","3300","3400","3500","3600","3700","3800","3900","4000","4100","4200","4300","4400","4500","4600","4700","4800","4900","5000","5100","5200","5300","5400","5500","5600","5700","5800","5900","6000","6100","6200","6300","6400","6500","6600","6700","6800","6900","7000","7100","7200","7300","7400","7500"]}
     },
     "sgsn": {
-	"Debug": {"callback":onOff},
+	"Debug": {"callback":checkOnOff},
 	"Timer.ImplicitDetach": {"callback":checkTimerImplicitdetach},
-	"Timer.MS.Idle": {"select":[300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540,550,560,570,580,590,600,610,620,630,640,650,660,670,680,690,700,710,720,730,740,750,760,770,780,790,800,810,820,830,840,850,860,870,880,890,900]},
+	"Timer.MS.Idle": {"select":["300","310","320","330","340","350","360","370","380","390","400","410","420","430","440","450","460","470","480","490","500","510","520","530","540","550","560","570","580","590","600","610","620","630","640","650","660","670","680","690","700","710","720","730","740","750","760","770","780","790","800","810","820","830","840","850","860","870","880","890","900"]},
 	"Timer.RAUpdate": {"callback":checkTimerRaupdate},
 	"Timer.Ready": {"minimum":30,"maximum":90}
     },
@@ -148,31 +148,31 @@ YbtsConfig.prototype.validations =  {
 	"Firewall.Enable": {"minimum":0, "maximum":2},
 	"IP.MaxPacketSize": {"minimum":1492, "maximum":9000},
 	"IP.ReuseTimeout": {"minimum":120, "maximum":240},
-	"IP.TossDuplicatePackets": {"callback":onOff},
+	"IP.TossDuplicatePackets": {"callback":checkOnOff},
 	"MS.IP.Base":{"callback":checkValidIP},
 	"MS.IP.MaxCount":{"minimum":1, "maximum":254},
     },
     "transceiver": {
 	"path": {"select":["./transceiver", "./transceiver-bladerf", "./transceiver-rad1", "./transceiver-usrp1", "./transceiver-uhd"]},
 	"MinimumRxRSSI": {"minimum":-90, "maximum":90},
-	"RadioFrequencyOffset": {"select":["","Factory calibrated",64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192]},
-	"TxAttenOffset": {"select":["","Factory calibrated",0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100]},
+	"RadioFrequencyOffset": {"select":["","Factory calibrated","64","65","66","67","68","69","70","71","72","73","74","75","76","77","78","79","80","81","82","83","84","85","86","87","88","89","90","91","92","93","94","95","96","97","98","99","100","101","102","103","104","105","106","107","108","109","110","111","112","113","114","115","116","117","118","119","120","121","122","123","124","125","126","127","128","129","130","131","132","133","134","135","136","137","138","139","140","141","142","143","144","145","146","147","148","149","150","151","152","153","154","155","156","157","158","159","160","161","162","163","164","165","166","167","168","169","170","171","172","173","174","175","176","177","178","179","180","181","182","183","184","185","186","187","188","189","190","191","192"]},
+	"TxAttenOffset": {"select":["","Factory calibrated","0","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59","60","61","62","63","64","65","66","67","68","69","70","71","72","73","74","75","76","77","78","79","80","81","82","83","84","85","86","87","88","89","90","91","92","93","94","95","96","97","98","99","100"]},
 	"Timeout.Clock": {"minimum":5,"maximum":15}
     },
     "control": {
-	"VEA": {"callback":onOff},
-	"LUR.AttachDetach": {"callback":onOff},
+	"VEA": {"callback":checkOnOff},
+	"LUR.AttachDetach": {"callback":checkOnOff},
 	"SACCHTimeout.BumpDown": {"minimum":1,"maximum":3}
     },
     "tapping": {
-	"GSM": {"callback":onOff},
-	"GPRS": {"callback":onOff},
+	"GSM": {"callback":checkOnOff},
+	"GPRS": {"callback":checkOnOff},
 	"TargetIP": {"callback":checkValidIP},
     },
     "test": {
-	"SimulatedFER.Downlink": {"select":[0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100]},
-	"SimulatedFER.Uplink": {"select":[0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100]},
-	"UplinkFuzzingRate": {"select":[0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100]},
+	"SimulatedFER.Downlink": {"select":["0","5","10","15","20","25","30","35","40","45","50","55","60","65","70","75","80","85","90","95","100"]},
+	"SimulatedFER.Uplink": {"select":["0","5","10","15","20","25","30","35","40","45","50","55","60","65","70","75","80","85","90","95","100"]},
+	"UplinkFuzzingRate": {"select":["0","5","10","15","20","25","30","35","40","45","50","55","60","65","70","75","80","85","90","95","100"]},
     },
     "ybts": {
 	"mode": {"select":["nib","dataroam","roaming"]},
@@ -180,7 +180,7 @@ YbtsConfig.prototype.validations =  {
 	"heartbeat_timeout": {"minimum":3000, "maximum":180000},
 	"handshake_start": {"minimum":10000, "maximum":300000},
 	"max_restart": {"minimum":3, "maximum":10},
-	"imei_request": {"callback":onOff},
+	"imei_request": {"callback":checkOnOff},
 	"tmsi_expire": {"minimum":7200, "maximum":2592000},
 	"t305": {"minimum":20000,"maximum":60000},
 	"t308": {"minimum":4000,"maximum":20000},
@@ -188,16 +188,19 @@ YbtsConfig.prototype.validations =  {
 	"sms.timeout": {"minimum":5000, "maximum":600000},
 	"ussd.session_timeout": {"callback":checkUssdSessTimeout},
 	"security": {"callback":checkT3260},
-	"auth.call": {"callback":onOff},
-	"auth.sms": {"callback":onOff},
-	"auth.ussd": {"callback":onOff}
+	"auth.call": {"callback":checkOnOff},
+	"auth.sms": {"callback":checkOnOff},
+	"auth.ussd": {"callback":checkOnOff}
     },
     "roaming": {
 	"expires": {"callback":checkValidInteger},
-	"nnsf_bits": {"callback":checkValidInteger}
+	"nnsf_bits": {"callback":checkValidInteger},
+	"reg_sip": {"callback":checkRegSip},
+	"nodes_sip": {"callback":checkNodesSip},
+	"my_sip": {"callback":checkRegSip}
     },
     "handover": {
-	"enable": {"callback":onOff}
+	"enable": {"callback":checkOnOff}
     }
 };
 
@@ -207,21 +210,19 @@ YbtsConfig.prototype.validations =  {
 // Check a field value if exists in an array
 function checkValidSelect(error, field_name, field_value, select_array, section_name)
 {
-    if (!inArray(field_value, select_array)) {
-	error.reason = "The field '"+field_name+"' is not valid: '"+field_value+"', is different from the allowed values in section '"+section_name+"'.";
+    if (select_array.indexOf(field_value) < 0) {
+	error.reason = "The field '" + field_name + "' is not valid: '" + field_value + "', is different from the allowed values in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
-
     return true;
 }
 
 // Validate a checkbox value
-function onOff(error, field_name, field_value, section_name)
+function checkOnOff(error, field_name, field_value, section_name)
 {
-    var onOff_values = ["on", "1", "off", "0"];
-    if (!inArray(field_value,onoff_values)) {
-	error.reason =  "Invalid checkbox value '"+field_value+"' for '"+field_name+"' in section '"+section_name+"'.";
+   if (parseBool(field_value,null) === null) {
+	error.reason =  "Invalid checkbox value '" + field_value + "' for '" + field_name + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -231,23 +232,23 @@ function onOff(error, field_name, field_value, section_name)
 //Validate a field to be in a range or a regex
 function checkFieldValidity(error, section_name, field_name, field_value, min, max, regex)
 {
-    if (min!==undefined && max!==undefined)  {
-	field_value = 1*field_value;
-	if (!isValidNumber(field_value)){
-	    error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
+    if (min !== undefined && max !== undefined)  {
+        field_value = parseInt(field_value);
+	if (isNaN(field_value)) {
+	    error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
 	    error.error = 401;
 	    return false;
 	}
 
-	if (field_value<min || field_value>max) {
-	    error.reason = "Field '"+field_name+"' is not valid: '"+field_value+"'. It has to be smaller then "+max+" and greater then "+min+" in section '"+section_name+"'.";
+	if (field_value < min || field_value > max) {
+	    error.reason = "Field '" + field_name + "' is not valid: '" + field_value + "'. It has to be smaller then " + max + " and greater then " + min + " in section '" + section_name + "'.";
 	    error.error = 401;
 	    return false;
 	}
     }
 
-    if (regex!=undefined) {
-	error.reason = "Field " + field_name +" is not valid in section '"+section_name+"'.";
+    if (regex != undefined) {
+	error.reason = "Field " + field_name + " is not valid: '" + field_value + "' in section '" + section_name + "'.";
 	error.error = 401;
 	var str = new RegExp(regex);
 	if (!str.test(field_value))
@@ -268,47 +269,22 @@ function isParamMissing(error,param,value,section_name)
 // Set the error object for a missing param 
 function setMissingParam(error,param,section_name)
 {
-    error.reason = "Missing required '" + param + "' parameter in section '"+section_name+"'.";
+    error.reason = "Missing required '" + param + "' parameter in section '" + section_name + "'.";
     error.error = 402;
     return false;
-}
-
-// Test a valid number using regex
-function isValidNumber(field) 
-{
-    var str = new RegExp("^(-?[1-9][0-9]*|0)$");
-    return str.test(field);
 }
 
 // Test an IP validity
 function checkValidIP(error, field_name, field_value, section_name)
 {
-    var regex = '([0-9]{1,3}\.){3}[0-9]{1,3}';
-
-    var str = new RegExp(regex);
+    var str = /^([0-9]{1,3}\.){3}[0-9]{1,3}$/;
     if (!str.test(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid IP address: '"+field_value+"' is section '"+section_name+"'";
+	error.reason = "Field '" + field_name + "' is not a valid IP address: '" + field_value + "' is section '" + section_name + "'";
 	error.error = 401;
 	return false;	
     }	
 
     return true;
-}
-
-function validParam(param)
-{
-    return (param !== NULL && param !== "");
-}
-
-// Test if an element exist into an array
-function inArray(needle, haystack)
-{
-    var length = haystack.length;
-    for (var i = 0; i < length; i++) {
-	if (haystack[i] == needle)
-	    return true;
-    }
-    return false;
 }
 
 /**
@@ -318,58 +294,72 @@ function checkValidInteger(error, field_name, field_value, section_name)
 {
     if (!field_value.length)
 	return true;
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' isn't a valid integer: '"+field_value+"' in section '"+section_name+"'.";
+    
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not numeric: '" + field_value + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
     return true;
 }
 
+/**
+ * Validate a value if exists, is a number and is positive
+ */ 
+function validatePositiveNumber(error, param_name, param_value, section_name)
+{
+    var param_value = parseInt(param_value);
+    if (!isEmpty(param_value) && isNaN(param_value) || param_value < 0) {
+	error.reason = "Field '" + param_name + "' should be numeric in section '" + section_name + "'.";
+	error.error = 401;
+	return false;
+    }
+    return true;
+}
 
 /*--------- Field specific validation functions ----------*/
 
 // Check validity for Radio.Band and Radio.C0 from GSM section
-function checkRadioBand(error, field_name, field_value, section_name)
+function checkRadioBand(error, field_name, field_value, section_name, params)
 {
-    var permitted_values = { "850": ["128","251"],
-	"900": ["0","124","975","1023"],
-	"1800": ["512","885"],
-	"1900": ["512","810"]};
+    var permitted_values = { "850": [128,251],
+	"900": [0, 124, 975, 1023],
+	"1800": [512, 885],
+	"1900": [512, 810]};
 
     var restricted_value = params.gsm["Radio.Band"];
 
     if (!permitted_values[restricted_value]) {
-	error.reason = "The given value for '"+field_name+"': '"+restricted_value+"' is not a permitted one. Allowed values: 850,900,1800,1900 in section '"+section_name+"'.";
+	error.reason = "The given value for '" + field_name + "': '" + restricted_value + "' is not a permitted one. Allowed values: 850,900,1800,1900 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: '" + field_value + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    var permitted = permitted_values[restricted_value];
+    var int_value = parseInt(field_value);
+    var radio_c0_val = permitted_values[restricted_value];
+    var min = radio_c0_val[0];
+    var max = radio_c0_val[1];
 
-    int_value = 1*field_value;
-
-    var radio_c0_val = permitted;
-    var min = 1*radio_c0_val[0];
-    var max = 1*radio_c0_val[1];
-
-    if (radio_c0_val[2]==undefined) {
-	if (int_value<min || int_value>max) {
+    if (radio_c0_val[3] == undefined) {
+	if (int_value < min || int_value > max) {
 	    error.reason = "Field '"+ field_name +"' is not in the right range for the Radio.Band chosen in section '"+section_name+"'.";
 	    error.error = 401;
 	    return false;
 	}
 	return true;
-    } else if (radio_c0_val[2]!=undefined) {
+    } else {
 	var min2 = radio_c0_val[2];
 	var max2 = radio_c0_val[3];
-	if ((int_value>=min && int_value<=max) || (int_value>=min2 && int_value<=max2))
+	if ((int_value >= min && int_value <= max) || 
+	    (int_value >= min2 && int_value <= max2))
 	    return true;
 	error.reason = "Field "+field_name+" is not in the right range for the Radio.Band chosen in section '"+section_name+"'.";
 	error.error = 401;
@@ -378,34 +368,33 @@ function checkRadioBand(error, field_name, field_value, section_name)
 }
 
 // Test [gsm] parameters validity: 'Radio.PowerManager.MinAttenDB','Radio.PowerManager.MaxAttenDB' 
-function checkRadioPowerManager(error, field_name, field_value, section_name)
+function checkRadioPowerManager(error, field_name, field_value, section_name, params)
 {
-    min = 1*field_value;
-    max = 1*params.gsm['Radio.PowerManager.MaxAttenDB'];
-
-    if (!isValidNumber(min)) {
-	error.reason =  "Field 'Radio.PowerManager.MinAttenDB' is not a valid number '" + min + "' in section '"+section_name+"'.";
+    var min = parseInt(field_value);
+    if (isNaN(min)) {
+	error.reason = "Field 'Radio.PowerManager.MinAttenDB' is not a valid number '" + min + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (!isValidNumber(max)) {
-	error_reason = "Field 'Radio.PowerManager.MinAttenDB' is not a valid number '" + max + "' in section '"+section_name+"'.";
+    var max = parseInt(params.gsm['Radio.PowerManager.MaxAttenDB']);
+    if (isNaN(max)) {
+	error_reason = "Field 'Radio.PowerManager.MinAttenDB' is not a valid number '" + max + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (!checkFieldValidity(error, section_name, field_name, field_value, 0, 80))
+    if (min > max) { 
+	error.reason = "'Radio.PowerManager.MinAttenDB', must be less or equal to 'Radio.PowerManager.MaxAttenDB' in section '" + section_name + "'";
+	error.error = 401;
+	return false;
+    }
+
+    if (!checkFieldValidity(error, section_name, field_name, min, 0, 80))
 	return false;
 
     if (!checkFieldValidity(error, section_name, 'Radio.PowerManager.MaxAttenDB', max, 0, 80))
 	return false;
-
-    if (min > max) { 
-	error.reason = "'Radio.PowerManager.MinAttenDB', must be less or equal to 'Radio.PowerManager.MaxAttenDB' in section '"+section_name+"'";
-	error.error = 401;
-	return false;
-    }
 
     return true;
 }
@@ -414,49 +403,16 @@ function checkRadioPowerManager(error, field_name, field_value, section_name)
 function checkValidDNS(error, field_name, field_value, section_name)
 {
     //this field can be empty
-    if (!validParam(field_value))
+    if (isEmpty(field_value))
 	return true;
 
     //validate DNS that are separed by space
-    dns_addresses = field_value.split(" ");
-    total = dns_addresses.length;
-    for (var i=0; i<total; i++)
-	res[] = checkValidIP(error, field_name, dns_addresses[i], section_name);
+    var dns_addresses = field_value.split(" ");
+    var total = dns_addresses.length;
 
-    for (var i=0; i<res.length; i++) {
-	if (!res[i][0])
+    for (var i = 0; i < total; i++) {
+	if (!checkValidIP(error, field_name, dns_addresses[i], section_name))
 	    return false;
-    }
-
-    return true;
-}
-
-function validateNnsfRoaming(error, param_name, param_value, section_name)
-{
-    if (validParam(param_value) && !isValidNumber(param_value)) {
-	error.reason = "Field '"+param_name+"' should be numeric in section '"+section_name+"'.";
-	error.error = 401;
-	return false;
-    }
-    return true;
-}
-
-function validateExpiresRoaming(error,param_name, param_value, section_name)
-{
-    if (validParam(param_value) && !isValidNumber(param_value)) {
-	error.reason = "Field '"+param_name+"' should be numeric in section '"+section_name+"'.";
-	error.error = 401;
-	return false;
-    }
-    return true;
-}
-
-function validateNnsfDataroam(error, param_name, param_value, section_name)
-{
-    if (validParam(param_value) && (!isValidNumber(param_value) || nnsf_bits<0)) {
-	error.reason = "Field '"+param_name+"' must be a positive int, if set in section '"+section_name+"'.";
-	error.error = 401;
-	return false;
     }
     return true;
 }
@@ -465,35 +421,39 @@ function validateMapNetworkDataroam(error, param_name, param_value, section_name
 {
     if (!param_value.length)
 	return true;
-    map = explode("\n", param_value);
-    for (map in map_entry) {
-	entry = split.map_entry("=");
-	if (entry.length!=2) {
-	    error.reason = "Invalid format for '"+param_name+"' in section '"+section_name+"'.";
+
+    var map = param_value.split("\n");
+    for (var i=0; i < map.length; i++) {
+	var map_entry = map[i];
+	if (!map_entry.length)
+	    continue;
+	var entry = map_entry.split("=");
+	if (entry.length != 2) {
+	    error.reason = "Invalid format for '" + param_name + "' in section '" + section_name + "'.";
 	    error.error = 401;
 	    return false;
 	}
-	if (!isValidNumber(entry[0])) {
-	    error.reason = "Invalid value '"+entry[0]+"' for 'Network map', should be numeric in section '"+section_name+"'.";
+
+	var no = parseInt(entry[0]);
+	if (isNaN(no)) {
+	    error.reason = "Invalid value '" + entry[0] + "' for 'Network map', should be numeric in section '" + section_name + "'.";
 	    error.error = 401;
 	    return false;
 	}
 	if (!checkValidIP(error, param_name, entry[1], section_name)) {
-	    error.reason = "Invalid value '"+entry[1]+"' for 'Network map' from should be a valid IP address in section '"+section_name+"'.";
-	    error.error = 401;
 	    return false;
 	}
     }
     return true;
 }
 
-function validateRoamingParams(error)
+function validateRoamingParams(error,params)
 {
     var required = ["nnsf_bits", "gstn_location"];
 
-    for (var i=0; i<required.length; i++) {
+    for (var i = 0; i < required.length; i++) {
 	if (!params.roaming[required[i]]) {
-	    error.reason = "Field '"+required[i]+"' from 'Roaming' section is required in roaming mode in section 'roaming'.";
+	    error.reason = "Field '" + required[i] + "' from 'Roaming' section is required in roaming mode in section 'roaming'.";
 	    error.error = 401;
 	    return false;
 	}
@@ -501,7 +461,7 @@ function validateRoamingParams(error)
 
     var reg_sip = params.roaming["reg_sip"];
     var nodes_sip = params.roaming["nodes_sip"];
-    if (!validParam(reg_sip) && !validParam(nodes_sip)) {
+       if (isEmpty(reg_sip) && isEmpty(nodes_sip)) {
 	error.reason = "Either 'Reg sip' or 'Nodes sip' must be set in roaming mode in section 'roaming'.";
 	error.error = 401;
 	return false;
@@ -509,16 +469,9 @@ function validateRoamingParams(error)
 
     var nnsf_bits = params.roaming["nnsf_bits"];
     var expires = params.roaming["expires"];
-    if (validParam(expires) && !isValidNumber(expires)) {
-	error.reason = "Field 'Expires' should be numeric in section 'roaming'.";
-	error.error = 401;
+    if (!validatePositiveNumber(error, 'NNSF bits', nnsf_bits, 'roaming') || 
+	!validatePositiveNumber(error, 'Expires', expires, 'roaming'))
 	return false;
-    }
-    if (validParam(nnsf_bits) && (!isValidNumber(nnsf_bits) || nnsf_bits<0)) {
-	error.reason = "Field 'NNSF bits' should be a positive int in section 'roaming'.";
-	error.error = 401;
-	return false;
-    }
 
     return true;
 }
@@ -530,22 +483,22 @@ function validateRoamingParams(error)
 function checkTimerImplicitdetach(error, field_name, field_value, section_name)
 {
     var interval_allowed = new Array();
-    var j=0;
-    for (var i=2000; i<4000; i++) {
+    var j = 0;
+    for (var i = 2000; i < 4000; i += 10) {
 	interval_allowed[j] = i;
-	i = i+9;
 	j++;
     }
 
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
     //first test if field_value is in the allowed interval
-    if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' is not valid. The value must be in interval [2000,4000] and should be a factor of 10 in section '"+section_name+"'.";
+    if (interval_allowed.indexOf(field_value) < 0) {
+	error.reason = "Field '" + field_name + "' is not valid. The value must be in interval [2000,4000] and should be a factor of 10 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -556,23 +509,29 @@ function checkTimerImplicitdetach(error, field_name, field_value, section_name)
 /**
  * [gprs_advanced] param: Timer.RAUpdate
  * Setting to 0 or >12000 deactivates entirely, i.e., sets the timer to effective infinity.
- * Note: to prevent GPRS Routing Area Updates you must set both this and GSM.Timer.T3212 to 0.
+ * Recommended: to prevent GPRS Routing Area Updates you must set both this and GSM.Timer.T3212 to 0.
  * Interval allowed 0:11160(2). Defaults to 3240.
  */
 function checkTimerRaupdate(error, field_name, field_value, section_name)
 {
-    var val = parseInt(field_value); 
-    if (val > 12000)
-	return true;
-
-    if (!(val >=0 && val <=11160)) { 
-	error.reason = "Field '"+field_name+"' is not in the allowed interval: "+field_value+". The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '"+section_name+"'.";
+    field_value = parseInt(field_value); 
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (val%2!=0) {
-	error.reason = "Field '"+field_name+"' is not valid:'"+field_value+"'. The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '"+section_name+"'.";
+    if (field_value > 12000)
+	return true;
+
+    if (!(field_value >= 0 && field_value <= 11160)) { 
+	error.reason = "Field '" + field_name + "' is not in the allowed interval: " + field_value + ". The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '" + section_name + "'.";
+	error.error = 401;
+	return false;
+    }
+
+    if (field_value % 2 != 0) {
+	error.reason = "Field '" + field_name + "' is not valid: '" + field_value + "'. The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -582,7 +541,7 @@ function checkTimerRaupdate(error, field_name, field_value, section_name)
 
 /**
  * [gprs_advanced] param:  Uplink.Persist
- * If non-zero, must be greater than GPRS.Uplink.KeepAlive.
+ * If non-zero, is recommended to be greater than GPRS.Uplink.KeepAlive.
  * This is broadcast in the beacon and it cannot be changed once BTS is started.
  * Allowed interval 0:6000(100).
  */
@@ -590,20 +549,20 @@ function checkUplinkPersistent(error, field_name, field_value, section_name)
 {
     var interval_allowed = new Array();
     var j=0;
-    for (var i=0; i<6000; i++) {
+    for (var i = 0; i < 6000; i += 100) {
 	interval_allowed[j] = i;
-	i = i+99;
 	j++;
     }
 
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' is not valid. The value must be in interval [0,6000] and should be a factor of 100 in section '"+section_name+"'.";
+    if (interval_allowed.indexOf(field_value) < 0) {
+	error.reason = "Field '" + field_name + "' is not valid. The value must be in interval [0,6000] and should be a factor of 100 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -613,18 +572,19 @@ function checkUplinkPersistent(error, field_name, field_value, section_name)
 
 /**
  * [gprs_advanced] param: Downlink.Persist
- * If non-zero, must be greater than GPRS.Downlink.KeepAlive.
+ * If non-zero, it is recommended to be greater than GPRS.Downlink.KeepAlive but not required.
  */
 function checkDownlinkPersistent(error, field_name, field_value, section_name)
 {
-    if (!isValidNumber(field_value)){
-	error.reason = "Field '"+field_name+"' is not a valid number: '"+field_value+"' in section '"+section_name+"'.";
+    field_value = parseInt(field_value); 
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: '" + field_value + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (field_value<0 || field_value>10000) {
-	error.reason = "Field '"+field_name+"' is not valid. It has to be smaller than 10000 in section '"+section_name+"'.";
+    if (field_value < 0 || field_value > 10000) {
+	error.reason = "Field '" + field_name + "' is not valid. It has to be smaller than 10000 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -634,26 +594,27 @@ function checkDownlinkPersistent(error, field_name, field_value, section_name)
 
 /**
  * Test for [gprs_advanced] param: ChannelCodingControl.RSS.
- * This value should normally be GSM.Radio.RSSITarget + 10 dB.
+ * This value should normally be GSM.Radio.RSSITarget + 10 dB but not required.
  * Interval allowed -65:-15.
  */
 function checkChannelcodingcontrolRssi(error, field_name, field_value, section_name)
 {
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid number: '"+field_value+"' in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: '" + field_value + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
     var interval_allowed = new Array();
-    var j=0;
-    for (var i=-65; i<-15; i++) {
+    var j = 0;
+    for (var i = -65; i < -15; i++) {
 	interval_allowed[j] = i;
 	j++;
     }
 
-    if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' is not valid, the value must be in interval [-65,-15] in section '"+section_name+"'.";
+    if (interval_allowed.indexOf(field_value) < 0) {
+	error.reason = "Field '" + field_name + "' is not valid, the value must be in interval [-65,-15] in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -662,25 +623,27 @@ function checkChannelcodingcontrolRssi(error, field_name, field_value, section_n
 }
 
 /**
- * Validate field Radio.RSSITarget to be ChannelCodingControl.RSS-10 dB.
+ * Validate field Radio.RSSITarget.
+ * It is recommanded to be ChannelCodingControl.RSS-10 dB, but not required.
  */
 function checkRadioRssiTarget(error, field_name, field_value, section_name)
 {
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid number: '"+field_value+"' in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: '" + field_value + "' in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
     var interval_allowed = new Array();
-    var j=0;
-    for (var i=-75; i<=-25; i++) {
+    var j = 0;
+    for (var i = -75; i <= -25; i++) {
 	interval_allowed[j] = i;
 	j++;
     }
 
-    if (!inArray(field_value, interval_allowed)) {
-	error.reason = "Field '"+field_name+"' is not valid: "+field_value+". The value must be in interval [-75,-25] in section '"+section_name+"'.";
+    if (interval_allowed.indexOf(field_value) < 0) {
+	error.reason = "Field '" + field_name + "' is not valid: " + field_value + ". The value must be in interval [-75,-25] in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -693,14 +656,15 @@ function checkRadioRssiTarget(error, field_name, field_value, section_name)
  */
 function checkT3260(error, field_name, field_value, section_name)
 {
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not valid, interval allowed: 5000..3600000 in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not valid, interval allowed: 5000..3600000 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if (field_value<5000 || field_value>3600000) {
-	error.reason = "Field '"+field_name+"' from '"+section_name+"' is not valid, interval allowed: 5000..3600000 in section '"+section_name+"'.";
+    if (field_value < 5000 || field_value > 3600000) {
+	error.reason = "Field '" + field_name + "' from '" + section_name + "' is not valid, interval allowed: 5000..3600000 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -708,19 +672,20 @@ function checkT3260(error, field_name, field_value, section_name)
     return true;
 }
 
+/**
+ * Validate RACH.AC from [gsm.advanced]
+ */ 
 function checkRachAc(error, field_name, field_value, section_name)
 {
     if (!field_value.length)
 	return true;
 
-    if (field_value.substr(0,2)!="0x") {
+    if (field_value.substr(0,2) != "0x") {
 	return checkFieldValidity(error, section_name, field_name, field_value, 0, 65535);
     } else {
-
-	var regex = "^0x[0-9a-zA-Z]{1,4}$";
-	var str = new RegExp(regex);
+	var str = /^0x[0-9a-zA-Z]{1,4}$/;
 	if (!str.test(field_value)) {
-	    error.reason =  "Invalid hex value '"+field_value+"' for '"+field_name+"' in section  "+section_name+".";
+	    error.reason =  "Invalid hex value '" + field_value + "' for '" + field_name + "' in section  '" + section_name + "'.";
 	    error.error = 401;
 	    return false;
 	}
@@ -734,18 +699,69 @@ function checkRachAc(error, field_name, field_value, section_name)
 // minimum allowed 30000.
 function checkUssdSessTimeout(error, field_name, field_value, section_name)
 {
-    if (!isValidNumber(field_value)) {
-	error.reason = "Field '"+field_name+"' is not a valid number: "+field_value+" in section '"+section_name+"'.";
+    field_value = parseInt(field_value);
+    if (isNaN(field_value)) {
+	error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
 
-    if ((1*field_value)<30000) {
-	error.reason = "Field '"+field_name+"' is smaller than 30000: "+field_value+" in section '"+section_name+"'.";
+    if (field_value < 30000) {
+	error.reason = "Field '" + field_name + "' is smaller than 30000: " + field_value + " in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
     return true;
 }
 
+/**
+ * Validate reg_sip from [roaming] section: ip:port or just ip
+ */
+function checkRegSip(error, field_name, field_value, section_name)
+{
+    if (!field_value.length)
+	return true;
+
+    var expl = field_value.split(":");
+    var ip = expl[0];
+    if (!checkValidIP(error, field_name, ip, section_name))
+       return false;
+
+    if (expl[1] != undefined)
+	var port = parseInt(expl[1]);
+    else
+	var port = null;
+
+    if (port && isNaN(port)) {
+	 error.reason = "Field '" + field_name + "' doesn't contain a valid port:  '"+ field_value + "' in section '" + section_name + "'.";
+	 error.error = 401;
+	 return false;
+    }
+
+    return true;
+}
+
+function checkNodesSip(error, field_name, field_value, section_name)
+{
+    if (!field_value.length)
+	return true;
+
+    if (!JSON.parse(field_value)) {
+	error.reason = "Field '" + field_name + "' doesn't contain a valid JSON object:  '"+ field_value + "' in section '" + section_name + "'.";
+	error.error = 401;
+	return false;
+    }
+    return true;
+}
+
+function checkNnsfBits(error, field_name, field_value, section_name)
+{
+   if (!field_value.length)
+	return true;
+
+   if (!validatePositiveNumber(error, 'NNSF bits', field_value, section_name))
+      return false;
+
+   return true;
+}
 /* vi: set ts=8 sw=4 sts=4 noet: */

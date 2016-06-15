@@ -19,8 +19,7 @@
 
 //#pragma cache "true"
 //#pragma compile "bts_config.jsc"
-
-#pragma trace "cachegrind.out.bts_config"
+//#pragma trace "cachegrind.out.bts_config"
 
 #require "lib_str_util.js"
 #require "sdr_config.js"
@@ -50,15 +49,18 @@ YbtsConfig.prototype = GenericConfig.prototype;
 
 YbtsConfig.prototype.genericValidateConfig = YbtsConfig.prototype.validateConfig;
 
-YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_value)
+YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_value, params)
 {
-    if (this.factory_calibrated[section_name]!=undefined && inArray(param_name,this.factory_calibrated[section_name]) && (param_value=="" || param_value=="Factory calibrated")) {
-	if (!this.skip_empty_params[section_name]) 
-	    this.skip_empty_params[section_name] = new Object();
-	this.skip_empty_params[section_name][param_name] = true;
+    if (this.factory_calibrated[section_name] != undefined) {
+	var fact_calibrated = this.factory_calibrated[section_name];
+	if (fact_calibrated.indexOf(param_name) >= 0 && (param_value == "" || param_value == "Factory calibrated")) {
+	    if (!this.skip_empty_params[section_name]) 
+		this.skip_empty_params[section_name] = new Object();
+	    this.skip_empty_params[section_name][param_name] = true;
+	}
     }
 
-    if (!this.genericValidateConfig(section_name,param_name,param_value))
+    if (!this.genericValidateConfig(section_name, param_name, param_value, params))
 	return false;
 
     var mode = params.ybts["mode"];
@@ -66,28 +68,40 @@ YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_v
 	return true;
 
     // validate roaming params if dataroam mode is activated
-    if (mode=="dataroam" && section_name=="roaming") {
-	if (param_name == "nnsf_bits")
-	    if (!validateNnsfRoaming(this.error, param_name, param_value, section_name))
-		return false;
-	if (param_name == "expires")
-	    if (!validateExpiresRoaming(this.error, param_name, param_value, section_name))
-		return false;
+    if (mode == "dataroam" && section_name == "roaming") {
+	if (!validatePositiveNumber(this.error, param_name, param_value, section_name))
+	    return false;
     }
 
     // validate gprs_roaming params if dataroam mode is activated
-    if (mode=="dataroam" && section_name=="gprs_roaming") {
-	if (param_name == "gprs_nnsf_bits")
-	    if (!validateNnsfDataroam(this.error, param_name, param_value, section_name))
+    if (mode == "dataroam" && section_name == "gprs_roaming") {
+	if (param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits")
+	    if (!validatePositiveNumber(this.error, param_name, param_value, section_name))
 		return false;
 	if (param_name == "map_network")
-	    if (!validateMapNetwork(this.error, param_name, param_value, section_name))
+	    if (!validateMapNetworkDataroam(this.error, param_name, param_value, section_name))
 		return false;
+	if (!isNaN(parseInt(param_name))) {
+	    param_value = param_name + "=" + param_value + "\n";
+	    if (!validateMapNetworkDataroam(this.error, "Network map", param_value, section_name))
+	        return false;
+	}
     }
 
-    if (mode=="roaming" && section_name=="roaming") {
-	if (!validateRoamingParams(this.error))
+    if (mode == "roaming" && section_name == "roaming") {
+	if (!validateRoamingParams(this.error, params))
 	    return false;
+    }
+
+    if (mode == "roaming" && section_name == "gprs_roaming") {
+	if (param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits")
+	    if (!checkNnsfBits(this.error, param_name, param_value, section_name))
+		return false;
+	if (!isNaN(parseInt(param_name))) {
+	    param_value = param_name + "=" + param_value + "\n";
+	    if (!validateMapNetworkDataroam(this.error, "Network map", param_value, section_name))
+	        return false;
+	}
     }
 
     return true;
@@ -115,7 +129,7 @@ API.on_set_ybts_node = function(params,msg,setNode)
 
     var mode = params["ybts"]["mode"];
     Engine.output("YBTS mode is "+mode+". Setting codecs in ysipchan.conf");
-    if (mode=="nib") {
+    if (mode == "nib") {
 	codecs_section.setValue("default","enable");
     } else {
 	codecs_section.setValue("default","disable");
