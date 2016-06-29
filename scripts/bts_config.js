@@ -49,7 +49,7 @@ YbtsConfig.prototype = GenericConfig.prototype;
 
 YbtsConfig.prototype.genericValidateConfig = YbtsConfig.prototype.validateConfig;
 
-YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_value, params)
+YbtsConfig.prototype.validateConfig = function(section_name,param_name,param_value,params)
 {
     if (this.factory_calibrated[section_name] != undefined) {
 	var fact_calibrated = this.factory_calibrated[section_name];
@@ -60,7 +60,7 @@ YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_v
 	}
     }
 
-    if (!this.genericValidateConfig(section_name, param_name, param_value, params))
+    if (!this.genericValidateConfig(section_name,param_name,param_value,params))
 	return false;
 
     var mode = params.ybts["mode"];
@@ -69,37 +69,37 @@ YbtsConfig.prototype.validateConfig = function(section_name, param_name, param_v
 
     // validate roaming params if dataroam mode is activated
     if (mode == "dataroam" && section_name == "roaming") {
-	if (!validatePositiveNumber(this.error, param_name, param_value, section_name))
+	if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
 	    return false;
     }
 
     // validate gprs_roaming params if dataroam mode is activated
     if (mode == "dataroam" && section_name == "gprs_roaming") {
 	if (param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits")
-	    if (!validatePositiveNumber(this.error, param_name, param_value, section_name))
+	    if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
 		return false;
 	if (param_name == "map_network")
-	    if (!validateMapNetworkDataroam(this.error, param_name, param_value, section_name))
+	    if (!validateMapNetworkDataroam(this.error,param_name,param_value,section_name))
 		return false;
 	if (!isNaN(parseInt(param_name))) {
 	    param_value = param_name + "=" + param_value + "\n";
-	    if (!validateMapNetworkDataroam(this.error, "Network map", param_value, section_name))
+	    if (!validateMapNetworkDataroam(this.error,"Network map",param_value,section_name))
 	        return false;
 	}
     }
 
     if (mode == "roaming" && section_name == "roaming") {
-	if (!validateRoamingParams(this.error, params))
+	if (!validateRoamingParams(this.error,params))
 	    return false;
     }
 
     if (mode == "roaming" && section_name == "gprs_roaming") {
 	if (param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits")
-	    if (!checkNnsfBits(this.error, param_name, param_value, section_name))
+	    if (!checkNnsfBits(this.error,param_name,param_value,section_name))
 		return false;
 	if (!isNaN(parseInt(param_name))) {
 	    param_value = param_name + "=" + param_value + "\n";
-	    if (!validateMapNetworkDataroam(this.error, "Network map", param_value, section_name))
+	    if (!validateMapNetworkDataroam(this.error,"Network map",param_value,section_name))
 	        return false;
 	}
     }
