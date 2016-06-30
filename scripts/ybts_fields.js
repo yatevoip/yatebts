@@ -371,13 +371,6 @@ function validateRoamingParams(error,params)
  */
 function checkTimerImplicitdetach(error,field_name,field_value,section_name)
 {
-    var interval_allowed = new Array();
-    var j = 0;
-    for (var i = 2000; i < 4000; i += 10) {
-	interval_allowed[j] = i;
-	j++;
-    }
-
     field_value = parseInt(field_value);
     if (isNaN(field_value)) {
 	error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
@@ -385,9 +378,8 @@ function checkTimerImplicitdetach(error,field_name,field_value,section_name)
 	return false;
     }
 
-    //first test if field_value is in the allowed interval
-    if (interval_allowed.indexOf(field_value) < 0) {
-	error.reason = "Field '" + field_name + "' is not valid. The value must be in interval [2000,4000] and should be a factor of 10 in section '" + section_name + "'.";
+    if (!(field_value >= 2000 && field_value <= 4000) || field_value % 10 != 0) {
+	error.reason = "Field '" + field_name + "' is not in the allowed interval: " + field_value + ". The value must be in interval [2000,4000] and should be a factor of 10 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -413,14 +405,8 @@ function checkTimerRaupdate(error,field_name,field_value,section_name)
     if (field_value > 12000)
 	return true;
 
-    if (!(field_value >= 0 && field_value <= 11160)) { 
+    if (!(field_value >= 0 && field_value <= 11160) || field_value % 2 != 0) { 
 	error.reason = "Field '" + field_name + "' is not in the allowed interval: " + field_value + ". The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '" + section_name + "'.";
-	error.error = 401;
-	return false;
-    }
-
-    if (field_value % 2 != 0) {
-	error.reason = "Field '" + field_name + "' is not valid: '" + field_value + "'. The value must be in interval [0,11160] and should be a factor of 2 or greater than 12000 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -436,13 +422,6 @@ function checkTimerRaupdate(error,field_name,field_value,section_name)
  */
 function checkUplinkPersistent(error,field_name,field_value,section_name)
 {
-    var interval_allowed = new Array();
-    var j=0;
-    for (var i = 0; i < 6000; i += 100) {
-	interval_allowed[j] = i;
-	j++;
-    }
-
     field_value = parseInt(field_value);
     if (isNaN(field_value)) {
 	error.reason = "Field '" + field_name + "' is not a valid number: " + field_value + " in section '" + section_name + "'.";
@@ -450,8 +429,8 @@ function checkUplinkPersistent(error,field_name,field_value,section_name)
 	return false;
     }
 
-    if (interval_allowed.indexOf(field_value) < 0) {
-	error.reason = "Field '" + field_name + "' is not valid. The value must be in interval [0,6000] and should be a factor of 100 in section '" + section_name + "'.";
+    if (!(field_value >= 0 && field_value <= 6000) || field_value % 100 != 0) {
+	error.reason = "Field '" + field_name + "' is not in the allowed interval: " + field_value + ". The value must be in interval [0,6000] and should be a factor of 100 in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -495,15 +474,8 @@ function checkChannelcodingcontrolRssi(error,field_name,field_value,section_name
 	return false;
     }
 
-    var interval_allowed = new Array();
-    var j = 0;
-    for (var i = -65; i < -15; i++) {
-	interval_allowed[j] = i;
-	j++;
-    }
-
-    if (interval_allowed.indexOf(field_value) < 0) {
-	error.reason = "Field '" + field_name + "' is not valid, the value must be in interval [-65,-15] in section '" + section_name + "'.";
+    if (!(field_value >= -65 && field_value <= -15)) {
+	error.reason = "Field '" + field_name + "' is not in the allowed interval: " + field_value + ". The value must be in interval [-65,-15] in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
@@ -524,15 +496,8 @@ function checkRadioRssiTarget(error,field_name,field_value,section_name)
 	return false;
     }
 
-    var interval_allowed = new Array();
-    var j = 0;
-    for (var i = -75; i <= -25; i++) {
-	interval_allowed[j] = i;
-	j++;
-    }
-
-    if (interval_allowed.indexOf(field_value) < 0) {
-	error.reason = "Field '" + field_name + "' is not valid: " + field_value + ". The value must be in interval [-75,-25] in section '" + section_name + "'.";
+    if (!(field_value >= -75 && field_value <= -25)) {
+	error.reason = "Field '" + field_name + "' is not in the allowed interval: " + field_value + ". The value must be in interval [-75,-25] in section '" + section_name + "'.";
 	error.error = 401;
 	return false;
     }
