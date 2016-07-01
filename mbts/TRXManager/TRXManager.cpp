@@ -43,16 +43,16 @@ using namespace std;
 
 
 TransceiverManager::TransceiverManager(int numARFCNs,
-		const char* wTRXAddress, int wBasePort)
+		const char* wTRXAddress, int wBasePort, const char* wLocalAddr)
 	:mHaveClock(false),
-	mClockSocket(wBasePort+100),
-	mControlSocket(wBasePort+101,wTRXAddress,wBasePort + 1),
+	mClockSocket(wBasePort+100,wLocalAddr),
+	mControlSocket(wBasePort+101,wTRXAddress,wBasePort + 1,wLocalAddr),
 	mExitRecv(false)
 {
 	// set up the ARFCN managers
 	for (int i=0; i<numARFCNs; i++) {
 		int thisBasePort = wBasePort + 1 + 2*i;
-		mARFCNs.push_back(new ::ARFCNManager(i,wTRXAddress,thisBasePort,*this));
+		mARFCNs.push_back(new ::ARFCNManager(i,wTRXAddress,thisBasePort,wLocalAddr,*this));
 	}
 }
 
@@ -217,9 +217,9 @@ unsigned TransceiverManager::C0() const
 
 
 ::ARFCNManager::ARFCNManager(unsigned int wArfcnPos, const char* wTRXAddress, int wBasePort,
-	TransceiverManager &wTransceiver)
+	const char* localIP, TransceiverManager &wTransceiver)
 	:mTransceiver(wTransceiver),
-	mDataSocket(wBasePort+100+1,wTRXAddress,wBasePort+1),
+	mDataSocket(wBasePort+100+1,wTRXAddress,wBasePort+1,localIP),
 	mArfcnPos(wArfcnPos)
 {
 	// The default demux table is full of NULL pointers.

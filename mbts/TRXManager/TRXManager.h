@@ -90,9 +90,11 @@ class TransceiverManager {
 		@param numARFCNs Number of ARFCNs supported by the transceiver.
 		@param wTRXAddress IP address of the transceiver.
 		@param wBasePort The base port for the interface, as defined in README.TRX.
+		@param wLocalAddr Local address
 	*/
 	TransceiverManager(int numARFCNs,
-		const char* wTRXAddress, int wBasePort);
+		const char* wTRXAddress, int wBasePort,
+		const char* wLocalAddr = "127.0.0.1");
 
 	/**@name Accessors. */
 	//@{
@@ -189,7 +191,8 @@ class ARFCNManager {
 
 	public:
 
-	ARFCNManager(unsigned int wArfncPos, const char* wTRXAddress, int wBasePort, TransceiverManager &wTRX);
+	ARFCNManager(unsigned int wArfncPos, const char* wTRXAddress, int wBasePort,
+		const char* wLocalAddr, TransceiverManager &wTRX);
 
 	/** Start the uplink thread. */
 	void start();
