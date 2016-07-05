@@ -54,7 +54,7 @@ Release:	@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{dist}
 License:	GPL
 Packager:	Paul Chitescu <paulc@null.ro>
 Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
-Group:		Applications/Communications
+Group:		Applications/Communication
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
 URL:		http://yatebts.com/
 BuildRequires:	gcc-c++
@@ -107,7 +107,7 @@ fi
 
 %package nib
 Summary:	GSM Network In a Box based on Yate-BTS
-Group:		Applications/Communications
+Group:		Applications/Communication
 Requires:	%{name} = %{version}-%{release}
 Requires:	yate-scripts = @YATE_VER@
 Requires:	apache-mod_php
@@ -187,7 +187,7 @@ chmod -R g+rw %{_sysconfdir}/yate
 
 %package roaming
 Summary:	SIP based GSM roaming support for Yate-BTS
-Group:		Applications/Communications
+Group:		Applications/Communication
 Requires:	%{name} = %{version}-%{release}
 Requires:	yate-scripts = @YATE_VER@
 Requires(post):	gawk
