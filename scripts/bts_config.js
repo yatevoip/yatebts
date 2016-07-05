@@ -43,7 +43,7 @@ YbtsConfig = function()
     this.factory_calibrated = {"transceiver": ["TxAttenOffset","RadioFrequencyOffset"], "gsm_advanced": ["Radio.RxGain"]};
 };
 
-YbtsConfig.prototype = GenericConfig.prototype;
+YbtsConfig.prototype = new GenericConfig;
 
 #require "ybts_fields.js"
 
