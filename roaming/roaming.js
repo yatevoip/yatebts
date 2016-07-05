@@ -29,6 +29,14 @@
 #require "lib_str_util.js"
 #require "handover.js"
 
+// Returns 16 bit (or more) hex value, false if not a number
+function get16bitHexVal(val)
+{
+    val = parseInt(val);
+    if (isNaN(val))
+	return false;
+    return val.toString(16,4);
+}
 
 /**
  * Handle "auth" message

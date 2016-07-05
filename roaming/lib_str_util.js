@@ -67,15 +67,6 @@ function strFix(str,len,pad)
     return str;
 }
 
-// Returns 16 bit (or more) hex value, false if not a number
-function get16bitHexVal(val)
-{
-    val = parseInt(val);
-    if (isNaN(val))
-	return false;
-    return val.toString(16,4);
-}
-
 // Perform one command line completion
 function oneCompletion(msg,str,part)
 {
