@@ -386,8 +386,8 @@ function valid_reg_sip($field_name, $field_value)
 
 	$expl = explode(":",$field_value);
 	$ip = $expl[0];
-	if (!filter_var($ip, FILTER_VALIDATE_IP))
-		return array(false, "Field $field_name '$field_value' doesn't contain a valid IP address.");
+	if (!filter_var($ip, FILTER_VALIDATE_IP) && gethostbyname($ip)==$ip)
+		return array(false, "Field $field_name '$field_value' doesn't contain a valid IP address/domain.");
 
 	$port = (isset($expl[1])) ? $expl[1] : null;
 	if ($port && !filter_var($port,FILTER_VALIDATE_INT))
