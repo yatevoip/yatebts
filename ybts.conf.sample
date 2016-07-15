@@ -180,7 +180,7 @@ Radio.C0=
 ; TX.OffsetQ: integer: Radio interface transmitter DC offset correction for Q
 ; Set at the factory, do not adjust without proper calibration.
 ; Interval allowed: -63..63.
-;TX.OffsetI=0
+;TX.OffsetQ=0
 
 ; TxAttenOffset: integer: Transmitter attenuation in dB.
 ; Hardware-specific gain adjustment for transmitter, matched to the amplifier.
