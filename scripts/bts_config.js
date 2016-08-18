@@ -23,12 +23,13 @@
 
 #require "lib_str_util.js"
 #require "sdr_config.js"
+#require "nib_config.js"
 
 debug = true;
 
 conf_node = "bts";
 // define configuration files that can be set/get 
-confs = ["ybts", "satsite", "ybladerf"];
+confs = ["cdrfile", "accfile", "subscribers", "ybts", "satsite", "ybladerf"];
 
 YbtsConfig = function()
 {
@@ -69,13 +70,15 @@ YbtsConfig.prototype.validateConfig = function(section_name,param_name,param_val
 
     // validate roaming params if dataroam mode is activated
     if (mode == "dataroam" && section_name == "roaming") {
-	if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
-	    return false;
+	if (param_name == "expires" || param_name == "nnsf_bits") {    
+	    if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
+		return false;
+	}
     }
 
     // validate gprs_roaming params if dataroam mode is activated
     if (mode == "dataroam" && section_name == "gprs_roaming") {
-	if (param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits")
+	if ((param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits") && param_value.length)
 	    if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
 		return false;
 	if (param_name == "map_network")
