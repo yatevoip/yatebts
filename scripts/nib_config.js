@@ -159,9 +159,9 @@ SubscribersConfig.prototype.prepareConfig = function(params)
 	delete params.subscribers;
     }
 
-    if (params["regexp"] || params["country_code"] || params["smsc"] || params["gw_sos"]) {
+    if (params["regexp"] || params["country_code"] || params["smsc"] || params["gw_sos"] || params[";regexp"]) {
 	this.overwrite = false;
-	var general_sections = ["country_code", "regexp", "gw_sos", "smsc"];
+	var general_sections = ["country_code", "regexp", "gw_sos", "smsc", ";regexp"];
 
 	params["general"] =  new Object();
 	for (var i in general_sections) {
@@ -241,8 +241,8 @@ API.on_set_nib_subscribers = function(params,msg,setNode)
 {
     // delete the 'regexp' param from general section
     c = new ConfigFile(Engine.configFile("subscribers"));
-        if (!c.load("Could not load subscribers."))
-		        return { name: "subscribers", object: {}, message: "File subscribers.conf not load."};
+    if (!c.load("Could not load subscribers."))
+	return { name: "subscribers", object: {}, message: "File subscribers.conf not load."};
     var error = new Object();
     c.clearKey("general", "regexp");
 
@@ -297,6 +297,19 @@ API.on_get_nib_system = function(params,msg)
 // Configure subscribers.conf params
 API.on_set_nib_system = function(params,msg,setNode)
 {
+    if (params[";regexp"]) {
+	// delete the 'regexp' param from general section
+	c = new ConfigFile(Engine.configFile("subscribers"));
+	if (!c.load("Could not load subscribers."))
+	    return { name: "subscribers", object: {}, message: "File subscribers.conf not load."};
+	var error = new Object();
+	c.clearKey("general", "regexp");
+
+	if (!saveConf(error,c)) {
+	    return error;
+	}
+    }
+
     var subs = new SubscribersConfig;
     return API.on_set_generic_file(subs,params,msg,setNode);
 };
