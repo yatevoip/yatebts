@@ -220,13 +220,13 @@ Radio.C0=
 
 ; radio_read_priority: keyword: Radio read thread priority
 ; Allowed values: lowest, low, normal, high, highest
-; Defaults to 'high' if missing or invalid
-;radio_read_priority=high
+; Defaults to 'highest' if missing or invalid
+;radio_read_priority=highest
 
 ; radio_send_priority: keyword: Radio send thread priority
 ; Allowed values: lowest, low, normal, high, highest
-; Defaults to 'normal' if missing or invalid
-;radio_send_priority=normal
+; Defaults to 'high' if missing or invalid
+;radio_send_priority=high
 
 ; tx_silence_debug_interval: integer: Interval, in milliseconds, to silence tx bursts
 ;  time related debug messages (avoid delayed/missing/expired bursts debug messages on startup)
