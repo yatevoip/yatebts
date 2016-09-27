@@ -550,7 +550,7 @@ Radio.C0=
 ;Radio.RSSITarget=-50
 
 ; Radio.RxGain: integer: Receiver gain setting in dB.
-; Ideal value is dictated by the hardware; 47 dB for RAD1, less for USRPs.
+; Ideal value is dictated by the hardware
 ; Interval allowed: 0..75.
 ; Defaults to 0 (but some radios provide their own calibrated default).
 ;Radio.RxGain=0
