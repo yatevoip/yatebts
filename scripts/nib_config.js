@@ -84,7 +84,7 @@ SubscribersConfig.prototype.initConfig = function(params)
 	if (check_duplicate) {
 	    for (var imsi in check_duplicate) {
 		if (this.current_config[data]) {
-		    this.error.reason = "This IMSI: " + imsi["imsi"] + " is already set in subscribers.conf.";
+		    this.error.reason = "This IMSI: " + check_duplicate["imsi"] + " is already set in subscribers.conf.";
 		    this.error.error = 401;
 		    return false;
 		}
@@ -317,16 +317,33 @@ API.on_set_nib_system = function(params,msg,setNode)
 // Configure accfile.conf params
 API.on_set_nib_outbound = function(params,msg)
 {
+    var section_name;
+    var section;
+    var section_params;
+    var param_name;
+
     if (!confs)
 	return { error: 201, reason: "Devel/configuration error: no config files defined."};
     if (!params)
 	return { error: 402, reason: "Missing params in request" };
 
     var outbound_params = {"sip": ["enabled","protocol", "username","password","server", "formats", "description", "registrar", "authname", "domain", "outbound","ip_transport","ip_transport_remoteip","ip_transport_remoteport", "ip_transport_localip", "ip_transport_localport", "localaddress", "keepalive", "match_port", "match_user"],
-    "iax":['enabled', 'protocol', 'username', 'password', 'server', 'description', 'interval', 'connection_id', 'ip_transport_localip', 'ip_transport_localport', 'trunking','trunk_timestamps', 'trunk_efficient_use', 'trunk_sendinterval', 'trunk_maxlen', 'trunk_nominits_sync_use_ts', 'trunk_nominits_ts_diff_restart', 'port']};
+	"iax":['enabled', 'protocol', 'username', 'password', 'server', 'description', 'interval', 'connection_id', 'ip_transport_localip', 'ip_transport_localport', 'trunking','trunk_timestamps', 'trunk_efficient_use', 'trunk_sendinterval', 'trunk_maxlen', 'trunk_nominits_sync_use_ts', 'trunk_nominits_ts_diff_restart', 'port']};
     var required_params = ["username", "server", "password"];
 
     var outbound_conf = new ConfigFile(Engine.configFile("accfile"));
+
+    sections = c.sections();
+
+    // keep existing section and values
+    var current_config = outbound_conf.sections();
+    for (section_name in current_config) {
+	section = current_config[section_name];
+	section_params = section.keys();
+	for (param_name in section_params)
+	    section.setValue(param_name, section.getValue(param_name));
+    }
+
     if (params) {
 
 	//verify parameters against defined protocol
@@ -334,7 +351,7 @@ API.on_set_nib_outbound = function(params,msg)
 	    var protocol = outbound_params[params['protocol']];
 	    if (!protocol) {
 		var mess = "Protocol: " + params['protocol'] + " not allowed, only sip and iax accepted.";
-	        return { error: 402, reason: mess };
+		return { error: 402, reason: mess };
 	    }
 	    if (protocol.indexOf(param_name) < 0) {
 		var mess = "Invalid parameter: "+param_name+" for protocol :"+params['protocol'];
@@ -372,13 +389,14 @@ API.on_set_nib_outbound = function(params,msg)
 
 	    if (params['trunk_nominits_ts_diff_restart'] && params['trunk_nominits_ts_diff_restart'] < 1000)
 		return { error: 402, reason: "For trunk_nominits_ts_diff_restart minimum allowed is 1000." };
-	    
+
 	    if (params['trunk_nominits_ts_diff_restart'] && params['trunk_nominits_ts_diff_restart'] && params['trunk_nominits_sync_use_ts'] == 'no')
 		return { error: 402, reason: "Field Trunk nominits ts diff restart is ignored because trunk_nominits_sync_use_ts is disabled." };
 	} else {
 	    var mess = "Protocol: " + params['protocol'] + " not allowed, only sip and iax accepted."; 
 	    return { error: 402, reason: mess };
 	}
+	//TBI: get all the existing data before writing the received parameters
 
 	//write data in file
 	for (var param_name in params) {
@@ -386,7 +404,7 @@ API.on_set_nib_outbound = function(params,msg)
 	    outbound_conf.setValue("outbound",param_name,param_value);
 	}
     }
-    
+
     if (!saveConf(error,outbound_conf))
 	return error;
 
@@ -406,7 +424,7 @@ API.on_get_nib_outbound = function(params,msg)
     sections = c.sections();
 
     if (!sections["outbound"])
-	return { error: 201, reason: "Missing outbound section in accfile.conf." };
+	return { name: "outbound", object: {} };
 
     res = {};
     var section = sections["outbound"];
@@ -417,10 +435,7 @@ API.on_get_nib_outbound = function(params,msg)
 	res["outbound"][key] = section.getValue(key);
     }
 
-    if (res.outbound)
-	return { name: "outbound", object: res.outbound };
-
-    return { error: 201, reason: "Missing outbound section in accfile.conf." };
+    return { name: "outbound", object: res.outbound };
 };
 
 // Get online subscribers
