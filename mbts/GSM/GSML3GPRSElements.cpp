@@ -40,7 +40,7 @@ void L3GPRSCellOptions::writeBits(L3Frame& dest, size_t &wp) const
 	dest.writeField(wp,0,1);	// optional PAN_ fields omitted.
 	LOG(INFO)<< "beacon"<<LOGVAR2("NW_EXT_UTBF",gco.mNW_EXT_UTBF);
 	unsigned rel = gco.mRelSupported;
-	if (gco.mNW_EXT_UTBF && (rel < 4))
+	if ((gco.mNW_EXT_UTBF || gco.mNMO || gco.mAdvertiseEDGE) && (rel < 4))
 		rel = 4;
 	if (rel < 4) {
 		dest.writeField(wp,0,1);	// optional extension information omitted
@@ -56,13 +56,10 @@ void L3GPRSCellOptions::writeBits(L3Frame& dest, size_t &wp) const
 			extlen += 4;
 		dest.writeField(wp,extlen,6);	// length of extension.
 		// R99 extensions:
-		dest.writeField(wp,0,1);	// No EGPRS.
+		dest.writeField(wp, gco.mAdvertiseEDGE,1);	// No EGPRS.
 		dest.writeField(wp,0,1);	// No PFC_FEATURE_MODE
 		dest.writeField(wp,0,1);	// No DTM_SUPPORT
-		uint8_t bss_coord = (gco.mNMO > 0 ? 1 : 0);
-		dest.writeField(wp,bss_coord,1);	// BSS_PAGING_COORDINATION
-		if ((gco.mNW_EXT_UTBF || bss_coord) && (rel < 4))
-			rel = 4;
+		dest.writeField(wp,!!gco.mNMO,1);	// BSS_PAGING_COORDINATION
 		// Rel-4 extensions:
 		// I tried setting CCN to 1 to get the MS to indicate GERAN feature pack I support.
 		// CCN is network assisted cell change and is also part of GERAN feature pack I.

@@ -53,15 +53,16 @@ enum ChannelCodingType {	// Compression/Coding schemes CS-1 to CS-4 coded as 0-3
 // See notes at GPRSCellOptions_t::GPRSCellOptions_t()
 struct GPRSCellOptions_t {
     unsigned mRelSupported;
-	unsigned mNMO;
+    unsigned mNMO;
     unsigned mT3168Code;        // range 0..7
     unsigned mT3192Code;        // range 0..7
     unsigned mDRX_TIMER_MAX;
     unsigned mACCESS_BURST_TYPE;
     unsigned mCONTROL_ACK_TYPE;
     unsigned mBS_CV_MAX;
-	bool mNW_EXT_UTBF;	// Extended uplink TBF 44.060 9.3.1b and 9.3.1.3
-	GPRSCellOptions_t();
+    bool mNW_EXT_UTBF;	// Extended uplink TBF 44.060 9.3.1b and 9.3.1.3
+    bool mAdvertiseEDGE; // if true, advertise EDGE support
+    GPRSCellOptions_t();
 };
 
 extern const int GPRSUSFEncoding[8];

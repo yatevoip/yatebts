@@ -198,7 +198,8 @@ GPRSCellOptions_t::GPRSCellOptions_t() :
 	mACCESS_BURST_TYPE(0),
 	mCONTROL_ACK_TYPE(1),	// Packet Control Acknowledgement is an RLC/BLOCK, not a RACH burst.
 	mBS_CV_MAX(1),	// This is determined by the system, not the user.
-	mNW_EXT_UTBF(gConfig.getNum("GPRS.Uplink.Persist") > 0)
+	mNW_EXT_UTBF(gConfig.getNum("GPRS.Uplink.Persist") > 0),
+	mAdvertiseEDGE(gConfig.getBool("GPRS.CellOptions.AdvertiseEDGE"))
 {
 	// Sanity check some values.
 	if (RN_BOUND(mNMO,0,2) != mNMO) {

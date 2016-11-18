@@ -985,6 +985,17 @@ ConfigurationKeyMap getConfigurationKeys()
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;
+        
+	tmp = new ConfigurationKey("GPRS.CellOptions.AdvertiseEDGE","no",
+		"",
+		ConfigurationKey::CUSTOMERTUNE,
+		ConfigurationKey::BOOLEAN,
+		"",
+		true,
+		"Announce EDGE service in SI13."
+	);
+	map[tmp->getName()] = *tmp;
+	delete tmp;
 
 	tmp = new ConfigurationKey("GPRS.Uplink.Persist","4000",
 		"milliseconds",
