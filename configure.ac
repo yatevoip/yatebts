@@ -8,7 +8,7 @@ if echo "$ac_confdir/$ac_pwd" | grep -q '[[[:space:]\\\$\"'\'']]'; then
     AC_ERROR([Unsupported character(s) in source or current directory name])
 fi
 
-PACKAGE_RELEASE="1"
+PACKAGE_RELEASE="2"
 PACKAGE_STATUS="devel"
 
 PACKAGE_REVISION=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`
