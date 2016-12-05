@@ -2169,11 +2169,13 @@ int Transceiver::handleCmdFreqCorr(String& cmd, String* rspParam)
 	    TRX_SET_ERROR_BREAK(CmdEInvalidState);
 	if (!cmd)
 	    TRX_SET_ERROR_BREAK(CmdEInvalidParam);
-	int newVal = 0;
-	unsigned int code = m_radio->setFreqOffset(cmd.toInteger(),&newVal);
+	float newVal = 0;
+	unsigned int code = m_radio->setFreqOffset(cmd.toDouble(),&newVal);
 	if (!radioCodeOk(code))
 	    break;
-	*rspParam = newVal;
+	// Upper layer expects integer value
+	if (rspParam)
+	    *rspParam = (int)newVal;
 	return 0;
     }
     if (rspParam)
