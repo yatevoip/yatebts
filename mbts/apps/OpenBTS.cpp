@@ -100,7 +100,7 @@ GSMConfig gBTS;
 // the Logger may not have been initialized yet.
 
 // Our interface to the software-defined radio.
-TransceiverManager gTRX(gConfig.getNum("GSM.Radio.ARFCNs"), gConfig.getStr("TRX.IP").c_str(), gConfig.getNum("TRX.Port"));
+TransceiverManager gTRX(gConfig.getNum("GSM.Radio.ARFCNs"), gConfig.getNum("TRX.Port"));
 
 // Subscriber registry and http authentication
 //SubscriberRegistry gSubscriberRegistry;
@@ -246,6 +246,7 @@ int main(int argc, char *argv[])
 		COUT("\nStarting the system...");
 
 	// Reset the transceiver
+	gTRX.logInit();
 	if (!gTRX.reset()) {
 		LOG(ALERT) << "Failed to reset transceiver";
 		return 1;

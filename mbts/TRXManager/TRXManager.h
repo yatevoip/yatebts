@@ -59,6 +59,7 @@ class TransceiverManager {
 	Thread mClockThread;	
 	Mutex mControlLock;			///< lock to prevent overlapping transactions
 	UDPSocket mControlSocket;		///< socket for radio control
+	std::string mInitData;			///< Init data (for debug)
 
 	bool mExitRecv;                         ///< Exiting received from lower layer
 
@@ -92,8 +93,8 @@ class TransceiverManager {
 		@param wBasePort The base port for the interface, as defined in README.TRX.
 		@param wLocalAddr Local address
 	*/
-	TransceiverManager(int numARFCNs,
-		const char* wTRXAddress, int wBasePort,
+	TransceiverManager(int numARFCNs, int wBasePort,
+		const char* wTRXAddress = "127.0.0.1",
 		const char* wLocalAddr = "127.0.0.1");
 
 	/**@name Accessors. */
@@ -109,6 +110,11 @@ class TransceiverManager {
 
 	/** Block until the clock is set over the UDP link. */
 	//void waitForClockInit() const;
+
+	/**
+		Log init data
+	*/
+	void logInit();
 
 	/** Start the clock management thread and all ARFCN managers. */
 	void start();

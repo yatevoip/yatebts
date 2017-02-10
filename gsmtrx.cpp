@@ -451,12 +451,10 @@ bool GsmTrxModule::ctrlStart()
     ctrlStop();
     Lock lck(m_stateMutex);
     NamedList* trx = m_cfg.createSection("transceiver");
-    String localAddr = trx->getValue(YSTRING("TRX.IP"),"127.0.0.1");
-    String remoteAddr = trx->getValue(YSTRING("remoteaddr"),localAddr);
-    m_port = trx->getIntValue(YSTRING("TRX.PORT"),5700);
+    m_port = trx->getIntValue(YSTRING("Port"),5700);
     while (true) {
-	if (!(m_ctrl.setAddr(true,localAddr,m_port + 1,*m_dummy) &&
-	    m_ctrl.setAddr(false,remoteAddr,m_port + 101,*m_dummy)))
+	if (!(m_ctrl.setAddr(true,"127.0.0.1",m_port,*m_dummy) &&
+	    m_ctrl.setAddr(false,"127.0.0.1",m_port + 1,*m_dummy)))
 	    break;
 	if (!m_ctrl.initSocket(*m_dummy))
 	    break;

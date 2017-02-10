@@ -41,19 +41,41 @@
 using namespace GSM;
 using namespace std;
 
+static inline void addAddr(std::string& dest, const char* ip, int port, const char* prefix = "")
+{
+    char tmp[256];
+    sprintf(tmp,"%s%s:%d",prefix,ip,port);
+    dest.append(tmp);
+}
 
-TransceiverManager::TransceiverManager(int numARFCNs,
-		const char* wTRXAddress, int wBasePort, const char* wLocalAddr)
+TransceiverManager::TransceiverManager(int numARFCNs, int wBasePort,
+		const char* wTRXAddress, const char* wLocalAddr)
 	:mHaveClock(false),
-	mClockSocket(wBasePort+100,wLocalAddr),
-	mControlSocket(wBasePort+101,wTRXAddress,wBasePort + 1,wLocalAddr),
+	mClockSocket(wBasePort+3,wLocalAddr),
+	mControlSocket(wBasePort+1,wTRXAddress,wBasePort,wLocalAddr),
 	mExitRecv(false)
 {
+	addAddr(mInitData,wLocalAddr,wBasePort + 1,"\r\nControl: ");
+	addAddr(mInitData,wTRXAddress,wBasePort," - ");
+	addAddr(mInitData,wLocalAddr,wBasePort + 3,"\r\nClock: ");
 	// set up the ARFCN managers
-	for (int i=0; i<numARFCNs; i++) {
-		int thisBasePort = wBasePort + 1 + 2*i;
-		mARFCNs.push_back(new ::ARFCNManager(i,wTRXAddress,thisBasePort,wLocalAddr,*this));
+	int p = wBasePort + 4;
+	for (int i=0; i<numARFCNs; i++, p += 2) {
+		mARFCNs.push_back(new ::ARFCNManager(i,wTRXAddress,p,wLocalAddr,*this));
+		char tmp[50];
+		sprintf(tmp,"\r\nARFCN[%d]: ",i);
+		addAddr(mInitData,wLocalAddr,p + 1,tmp);
+		addAddr(mInitData,wTRXAddress,p," - ");
 	}
+}
+
+void TransceiverManager::logInit()
+{
+	LOG(INFO) << "Initialized:" <<
+		"\r\n-----" <<
+		"\r\nARFCNS: " << mARFCNs.size() <<
+		mInitData <<
+		"\r\n-----";
 }
 
 void TransceiverManager::start()
@@ -63,6 +85,7 @@ void TransceiverManager::start()
 		mARFCNs[i]->start();
 	}
 }
+
 
 int TransceiverManager::sendCommandPacket(const char* command, char* response)
 {
@@ -219,7 +242,7 @@ unsigned TransceiverManager::C0() const
 ::ARFCNManager::ARFCNManager(unsigned int wArfcnPos, const char* wTRXAddress, int wBasePort,
 	const char* localIP, TransceiverManager &wTransceiver)
 	:mTransceiver(wTransceiver),
-	mDataSocket(wBasePort+100+1,wTRXAddress,wBasePort+1,localIP),
+	mDataSocket(wBasePort+1,wTRXAddress,wBasePort,localIP),
 	mArfcnPos(wArfcnPos)
 {
 	// The default demux table is full of NULL pointers.

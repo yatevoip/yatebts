@@ -1082,8 +1082,8 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	int port = rAddr ? params.getIntValue(YSTRING("port")) : 0;
 	const char* lAddr = rAddr ? params.getValue(YSTRING("localaddr"),*rAddr) : 0;
 	if (rAddr &&
-	    !(m_clockIface.setAddr(true,lAddr,port,*this) &&
-	    m_clockIface.setAddr(false,*rAddr,port + 100,*this)))
+	    !(m_clockIface.setAddr(true,lAddr,port + 2,*this) &&
+	    m_clockIface.setAddr(false,*rAddr,port + 3,*this)))
 	    break;
 	if (!resetARFCNs(arfcns,port,rAddr,lAddr,nFillers))
 	    break;
@@ -1899,17 +1899,18 @@ bool Transceiver::resetARFCNs(unsigned int arfcns, int port, const String* rAddr
 	}
 	m_arfcn[i]->m_fillerTable.init(nFillers,filler);
     }
-    if (rAddr)
-	for (unsigned int i = 0; i < m_arfcnCount; i++) {
+    if (rAddr) {
+	int p = port + 4;
+	for (unsigned int i = 0; i < m_arfcnCount; i++, p += 2) {
 	    ARFCNSocket* a = static_cast<ARFCNSocket*>(m_arfcn[i]);
-	    int p = port + 2 * i + 1;
-	    if (a->initUDP(p + 100 + 1,*rAddr,p + 1,lAddr))
+	    if (a->initUDP(p + 1,*rAddr,p,lAddr))
 		continue;
 	    clearARFCNs(m_arfcn,m_arfcnCount);
 	    if (old)
 		arfcnListChanged();
 	    return false;
 	}
+    }
     arfcnListChanged();
     return true;
 }

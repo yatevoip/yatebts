@@ -1791,17 +1791,6 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("TRX.IP","127.0.0.1",
-		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::IPADDRESS,
-		"",
-		true,
-		"IP address of the transceiver application."
-	);
-	map[tmp->getName()] = *tmp;
-	delete tmp;
-
 	tmp = new ConfigurationKey("TRX.Port","5700",
 		"",
 		ConfigurationKey::FACTORY,
