@@ -809,6 +809,7 @@ protected:
     RadioRxDataStore m_radioRxStore;     // Radio rx bursts store
     double m_rxFreq;                     // Rx frequency
     double m_txFreq;                     // Tx frequency
+    unsigned int m_freqNotExact;         // Allowed delta when Tx/Rx frequency set fails with NotExact
     int m_txPower;                       // Tx power level (in dB)
     int m_txAttnOffset;                  // Tx power level attenuation
     float m_txPowerScale;                // Tx power scaling factor

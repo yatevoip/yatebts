@@ -1015,6 +1015,7 @@ Transceiver::Transceiver(const char* name)
     m_radioRxStore(100,"TrxRadioRx"),
     m_rxFreq(0),
     m_txFreq(0),
+    m_freqNotExact(10),
     m_txPower(-10),
     m_txAttnOffset(TX_ATTEN_OFFS_DEF),
     m_txPowerScale(1.0f),
@@ -1160,6 +1161,7 @@ void Transceiver::reInit(const NamedList& params)
     }
     change(this,m_radioLatencySlots,params,YSTRING("radio_latency_slots"),latency,0,256);
     change(this,m_txSlots,params,YSTRING("tx_slots"),txSlots,1,1024);
+    m_freqNotExact = params.getIntValue(YSTRING("freq_not_exact_threshold"),10,0,1000);
     m_printStatus = params.getIntValue(YSTRING("print_status"));
     m_printStatusBursts = m_printStatus &&
 	params.getBoolValue(YSTRING("print_status_bursts"),true);
@@ -2095,12 +2097,22 @@ int Transceiver::handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String*
 	    TRX_SET_ERROR_BREAK(CmdEInvalidARFCN);
 	if (!cmd)
 	    TRX_SET_ERROR_BREAK(CmdEInvalidParam);
-	int freq = cmd.toInteger();
+	uint64_t freq = cmd.toInteger();
 	// Frequency is given in KHz, radio expects it in Hz
 	freq *= 1000;
 	// Adjust frequency (we are using multiple ARFCNs)
 	freq += 600000;
 	unsigned int code = rx ? m_radio->setRxFreq(freq) : m_radio->setTxFreq(freq);
+	if (0 != (code & RadioInterface::NotExact) && m_freqNotExact) {
+	    uint64_t f = 0;
+	    if (rx)
+		m_radio->getRxFreq(f);
+	    else
+		m_radio->getTxFreq(f);
+	    int64_t delta = f ? (f - freq) : 0;
+	    if (delta && delta >= -(int)m_freqNotExact && delta <= (int)m_freqNotExact)
+		code &= ~RadioInterface::NotExact;
+	}
 	if (!radioCodeOk(code))
 	    break;
 	double& f = rx ? m_rxFreq : m_txFreq;
