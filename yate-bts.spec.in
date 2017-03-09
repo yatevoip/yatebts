@@ -67,7 +67,8 @@ Conflicts:	yate-bts-transceiver
 %define prefix	/usr
 %define moddir	%{_libdir}/yate/server
 %define btsdir	%{moddir}/bts
-
+%define shrdir	@YATE_SHR@
+%define scrdir	@YATE_SCR@
 
 %description
 Yate is a telephony engine designed to implement PBX and IVR solutions
@@ -82,6 +83,7 @@ At least one Yate radio device package must also be installed.
 %dir %{btsdir}
 %{moddir}/*.yate
 %{btsdir}/mbts
+%{shrdir}/api/*
 %config(noreplace) %{_sysconfdir}/yate/ybts.conf
 
 %post
@@ -119,17 +121,17 @@ Scripts and support executables that implement a GSM Network In a Box.
 
 %files nib
 %defattr(-, root, root)
-%dir %{_datadir}/yate/nib_web
-%{_datadir}/yate/scripts/gsm_auth.sh
-%{_datadir}/yate/scripts/do_*
-%{_datadir}/yate/scripts/nib.js
-%{_datadir}/yate/scripts/welcome.js
-%{_datadir}/yate/scripts/custom_sms.js
-%{_datadir}/yate/sounds/*
-%{_datadir}/yate/nib_web/*
+%dir %{shrdir}/nib_web
+%{scrdir}/gsm_auth.sh
+%{scrdir}/do_*
+%{scrdir}/nib.js
+%{scrdir}/welcome.js
+%{scrdir}/custom_sms.js
+%{shrdir}/sounds/*
+%{shrdir}/nib_web/*
 /var/www/html/nib
-%config(noreplace) %{_datadir}/yate/nib_web/.htaccess
-%config(noreplace) %{_datadir}/yate/nib_web/config.php
+%config(noreplace) %{shrdir}/nib_web/.htaccess
+%config(noreplace) %{shrdir}/nib_web/config.php
 %config(noreplace) %{_sysconfdir}/yate/subscribers.conf
 
 %post nib
@@ -197,9 +199,9 @@ Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE serve
 
 %files roaming
 %defattr(-, root, root)
-%{_datadir}/yate/scripts/roaming.js
-%{_datadir}/yate/scripts/handover.js
-%{_datadir}/yate/scripts/lib_str_util.js
+%{scrdir}/roaming.js
+%{scrdir}/handover.js
+%{scrdir}/lib_str_util.js
 
 %post roaming
 sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{_sysconfdir}/yate/javascript.conf
@@ -287,8 +289,10 @@ make %{stripped}
 
 %install
 make install DESTDIR=%{buildroot}
+mkdir -p %{buildroot}%{shrdir}/api
+echo '<?php global $bts_version; $bts_version = "%{version}-%{release}"; ?>' > %{buildroot}%{shrdir}/api/bts_version.php
 mkdir -p %{buildroot}/var/www/html
-ln -sf %{_datadir}/yate/nib_web %{buildroot}/var/www/html/nib
+ln -sf %{shrdir}/nib_web %{buildroot}/var/www/html/nib
 
 %clean
 rm -rf %{buildroot}
