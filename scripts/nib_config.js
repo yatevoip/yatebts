@@ -291,6 +291,11 @@ API.on_get_nib_system = function(params,msg)
 
     delete res.general["updated"];
     delete res.general["locked"];
+
+    if (!res.general) {
+	    res.general = {"country_code":"", "smsc":"", "regexp":""};
+    } 
+
     return { name: "nib_system", object: res.general};
 };
 
