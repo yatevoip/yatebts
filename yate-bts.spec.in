@@ -69,6 +69,7 @@ Conflicts:	yate-bts-transceiver
 %define btsdir	%{moddir}/bts
 %define shrdir	@YATE_SHR@
 %define scrdir	@YATE_SCR@
+%define cfgdir	@YATE_CFG@
 
 %description
 Yate is a telephony engine designed to implement PBX and IVR solutions
@@ -84,6 +85,11 @@ At least one Yate radio device package must also be installed.
 %{moddir}/*.yate
 %{btsdir}/mbts
 %{shrdir}/api/*
+%{scrdir}/bts_config.js
+%{scrdir}/nib_config.js
+%{scrdir}/nib_validations.js
+%{scrdir}/ybts_fields.js
+%{cfgdir}/bts-jscript.conf
 %config(noreplace) %{_sysconfdir}/yate/ybts.conf
 
 %post
@@ -122,7 +128,7 @@ Scripts and support executables that implement a GSM Network In a Box.
 %files nib
 %defattr(-, root, root)
 %dir %{shrdir}/nib_web
-%{scrdir}/gsm_auth.sh
+%{scrdir}/nib_auth.sh
 %{scrdir}/do_*
 %{scrdir}/nib.js
 %{scrdir}/welcome.js
@@ -170,15 +176,16 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/extmodule.conf 2>
 	awk '/^ *\[/{sect=0}
 	/^ *\[scripts\]/{sect=1}
 	/^ *gsm_auth\.sh/{if(sect==2)sect=3}
+	/^ *nib_auth\.sh/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
-	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\ngsm_auth.sh\n";sect=2}
+	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nnib_auth.sh\n";sect=2}
 	}' <%{_sysconfdir}/yate/extmodule.conf >%{_sysconfdir}/yate/extmodule.conf.tmp
 	mv -f %{_sysconfdir}/yate/extmodule.conf.tmp %{_sysconfdir}/yate/extmodule.conf
     else
 	cat <<-EOF >>%{_sysconfdir}/yate/extmodule.conf
 	[scripts]
 	; Installed by yate-bts-nib, do not remove this comment line
-	gsm_auth.sh
+	nib_auth.sh
 
 	EOF
     fi
@@ -294,6 +301,8 @@ make %{stripped}
 
 %install
 make install DESTDIR=%{buildroot}
+cp -p scripts/* %{buildroot}%{scrdir}/
+echo -e '[scripts]\nbts_config=bts_config.js' > %{buildroot}%{cfgdir}/bts-jscript.conf
 mkdir -p %{buildroot}%{shrdir}/api
 echo '<?php global $bts_version; $bts_version = "%{version}-%{release}"; ?>' > %{buildroot}%{shrdir}/api/bts_version.php
 mkdir -p %{buildroot}/var/www/html
