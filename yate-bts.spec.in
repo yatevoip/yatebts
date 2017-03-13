@@ -257,11 +257,16 @@ fi
 %prep
 %setup -q -n %{name}
 
+# older rpmbuild uses these macro basic regexps
+%define _requires_exceptions pear
+# newer rpmbuild needs these global extended regexps
+%global __requires_exclude pear
+
 %define local_find_requires %{_builddir}/%{name}/local-find-requires
 #
 %{__cat} <<EOF >%{local_find_requires}
 #! /bin/sh
-grep -v '\.yate$' | %{__find_requires} | grep -v '^\(perl\|pear\)'
+%{__find_requires} | grep -v '^\(perl\|pear\)' | grep -v '.php'
 exit 0
 EOF
 #
