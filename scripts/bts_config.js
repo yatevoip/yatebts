@@ -25,11 +25,11 @@
 #require "sdr_config.js"
 #require "nib_config.js"
 
-debug = true;
+debug = false;
 
 conf_node = "bts";
 // define configuration files that can be set/get 
-confs = ["cdrfile", "accfile", "subscribers", "ybts", "satsite", "ybladerf"];
+confs = ["cdrfile", "accfile", "subscribers", "ybts", "sdr", "ybladerf"];
 
 YbtsConfig = function()
 {
