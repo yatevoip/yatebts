@@ -10483,6 +10483,7 @@ void YBTSDriver::initialize()
     s_globalMutex.unlock();
     if (s_first) {
 	s_first = false;
+	m_stopped = !ybts.getBoolValue("autostart",true);
 	setup();
 	installRelay(Progress);
 	installRelay(Update);

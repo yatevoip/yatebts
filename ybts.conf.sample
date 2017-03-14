@@ -885,6 +885,11 @@ Radio.C0=
 ;    - roaming: loads script necessary for the roaming mode of operation
 ;mode=nib
 
+; autostart: boolean: Start the BTS automatically when program starts
+; If autostart is disabled it will wait for an "ybts start" command.
+; Defaults to true.
+;autostart=yes
+
 ; heartbeat_ping: integer: Interval, in milliseconds, to send heartbeat (PING)
 ;  to MBTS application. Ping is sent only if idle, e.g. it is not sent if there
 ;  are other signaling packets to be sent.
