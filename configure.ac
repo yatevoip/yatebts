@@ -128,6 +128,10 @@ if [[ "1$yver" -lt "1$yreq" ]]; then
     AC_ERROR([Requires at least Yate version $YATE_REQ])
 fi
 fi
+AC_ARG_WITH(conf,AC_HELP_STRING([--with-conf=DIR],[use Yate with config DIR]),[ac_cv_use_conf=$withval],[ac_cv_use_conf=])
+if [[ "x$ac_cv_use_conf" != "x" ]]; then
+    YATE_CFG="$ac_cv_use_conf"
+fi
 AC_SUBST(YATE_REQ)
 AC_SUBST(YATE_VER)
 AC_SUBST(YATE_DEF)

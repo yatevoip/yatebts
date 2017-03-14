@@ -1,0 +1,3 @@
+RewriteEngine On
+RewriteBase /nib
+RewriteRule .* index.php  [L]

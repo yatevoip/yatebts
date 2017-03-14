@@ -2,10 +2,23 @@
 # to add a revision tag run rpmbuild --define 'revision value'
 # to create a debug info package run rpmbuild --define 'debuginfo 1'
 # to suppress auto dependencies run rpmbuild --define 'nodeps 1'
+# to build a standalone (not yate-sdr) package run rpmbuild --define 'nosdr 1'
 
 %{!?dist:%define dist %{nil}}
 %{!?revision:%define revision %{nil}}
+%{!?_unitdir:%define _unitdir /usr/lib/systemd/system}
 %{?nodeps:%define no_auto_deps 1}
+%{!?nosdr:%define nosdr 0}
+
+%if %{nosdr}
+%define serv_name yate
+%define cfgdir	@YATE_CFG@
+%define xtra_stat nosdr.
+%else
+%define serv_name yate-sdr
+%define cfgdir	%{_sysconfdir}/yate/sdr
+%define xtra_stat %{nil}
+%endif
 
 %{!?debuginfo:%define debuginfo %{nil}}
 %if "%{debuginfo}"
@@ -50,7 +63,7 @@
 Summary:	GSM BTS based on Yet Another Telephony Engine
 Name:		@PACKAGE_TARNAME@
 Version: 	@PACKAGE_VERSION@
-Release:	@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{dist}
+Release:	%{xtra_stat}@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{dist}
 License:	GPL
 Packager:	Paul Chitescu <paulc@null.ro>
 Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
@@ -62,6 +75,11 @@ BuildRequires:	yate-devel >= @YATE_REQ@
 Requires:	yate = @YATE_VER@
 Requires:	yate-gsm = @YATE_VER@
 Requires:	yate-radio = @YATE_VER@
+%if %{nosdr}
+Conflicts:	yate-enb
+%else
+Requires:	yate-sdr
+%endif
 Conflicts:	yate-bts-transceiver
 
 %define prefix	/usr
@@ -69,7 +87,6 @@ Conflicts:	yate-bts-transceiver
 %define btsdir	%{moddir}/bts
 %define shrdir	@YATE_SHR@
 %define scrdir	@YATE_SCR@
-%define cfgdir	@YATE_CFG@
 
 %description
 Yate is a telephony engine designed to implement PBX and IVR solutions
@@ -84,43 +101,48 @@ At least one Yate radio device package must also be installed.
 %dir %{btsdir}
 %{moddir}/*.yate
 %{btsdir}/mbts
+%if %{nosdr}
+%config(noreplace) %{cfgdir}/ybts.conf
+%else
 %{shrdir}/api/*
 %{scrdir}/bts_config.js
 %{scrdir}/nib_config.js
 %{scrdir}/nib_validations.js
 %{scrdir}/ybts_fields.js
 %{cfgdir}/bts-jscript.conf
-%config(noreplace) %{_sysconfdir}/yate/ybts.conf
+%endif
 
 %post
-if grep -q '^ *Radio.C0 *= *[0-9]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
-    if [ -s /usr/lib/systemd/system/yate.service ]; then
-        systemctl condrestart yate.service
+if grep -q '^ *Radio.C0 *= *[0-9]' %{cfgdir}/ybts.conf 2>/dev/null; then
+    if [ -s %{_unitdir}/%{serv_name}.service ]; then
+        systemctl condrestart %{serv_name}.service
     else
-        if [ -s /etc/init.d/yate ]; then
-            service yate condrestart
+        if [ -s /etc/init.d/%{serv_name} ]; then
+            service %{serv_name} condrestart
         fi
     fi
 fi
 
 %postun
-if [ -s /usr/lib/systemd/system/yate.service ]; then
-    systemctl condrestart yate.service
+if [ -s %{_unitdir}/%{serv_name}.service ]; then
+    systemctl condrestart %{serv_name}.service
 else
-    if [ -s /etc/init.d/yate ]; then
-        service yate condrestart
+    if [ -s /etc/init.d/%{serv_name} ]; then
+        service %{serv_name} condrestart
     fi
 fi
 
 
 %package nib
-Summary:	GSM Network In a Box based on Yate-BTS
+Summary:	GSM Network In a Box based on YateBTS
 Group:		Applications/Communication
 Requires:	%{name} = %{version}-%{release}
 Requires:	yate-scripts = @YATE_VER@
 Requires:	apache-mod_php
+%if %{nosdr}
 Requires(post):	gawk
 Suggests:	pysim
+%endif
 
 %description nib
 Scripts and support executables that implement a GSM Network In a Box.
@@ -136,23 +158,27 @@ Scripts and support executables that implement a GSM Network In a Box.
 %{shrdir}/sounds/*
 %{shrdir}/nib_web/*
 /var/www/html/nib
+%if ! %{nosdr}
+%{cfgdir}/bts-extmod.conf
+%endif
 %config(noreplace) %{shrdir}/nib_web/.htaccess
 %config(noreplace) %{shrdir}/nib_web/config.php
-%config(noreplace) %{_sysconfdir}/yate/subscribers.conf
+%config(noreplace) %{cfgdir}/subscribers.conf
 
+%if %{nosdr}
 %post nib
-sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{_sysconfdir}/yate/javascript.conf
-if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
-    if grep -q '^ *\[general\]' %{_sysconfdir}/yate/javascript.conf 2>/dev/null; then
+sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
+if ! grep -q '; Installed by yate-bts-nib' %{cfgdir}/javascript.conf 2>/dev/null; then
+    if grep -q '^ *\[general\]' %{cfgdir}/javascript.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[general\]/{sect=1}
 	/^ *routing *=/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
 	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nrouting=welcome.js\n";sect=2}
-	}' <%{_sysconfdir}/yate/javascript.conf >%{_sysconfdir}/yate/javascript.conf.tmp
-	mv -f %{_sysconfdir}/yate/javascript.conf.tmp %{_sysconfdir}/yate/javascript.conf
+	}' <%{cfgdir}/javascript.conf >%{cfgdir}/javascript.conf.tmp
+	mv -f %{cfgdir}/javascript.conf.tmp %{cfgdir}/javascript.conf
     else
-	cat <<-EOF >>%{_sysconfdir}/yate/javascript.conf
+	cat <<-EOF >>%{cfgdir}/javascript.conf
 	[general]
 	; Installed by yate-bts-nib, do not remove this comment line
 	routing=welcome.js
@@ -160,29 +186,29 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/javascript.conf 2
 	EOF
     fi
 fi
-if ! grep -q '^ *mode *=' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
-    if grep -q '^ *\[ybts\]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
+    if grep -q '^ *\[ybts\]' %{cfgdir}/ybts.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[ybts\]/{sect=1}
 	/^ *mode *=/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
 	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nmode=nib\n";sect=2}
-	}' <%{_sysconfdir}/yate/ybts.conf >%{_sysconfdir}/yate/ybts.conf.tmp
-	mv -f %{_sysconfdir}/yate/ybts.conf.tmp %{_sysconfdir}/yate/ybts.conf
+	}' <%{cfgdir}/ybts.conf >%{cfgdir}/ybts.conf.tmp
+	mv -f %{cfgdir}/ybts.conf.tmp %{cfgdir}/ybts.conf
     fi
 fi
-if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/extmodule.conf 2>/dev/null; then
-    if grep -q '^ *\[scripts\]' %{_sysconfdir}/yate/extmodule.conf 2>/dev/null; then
+if ! grep -q '; Installed by yate-bts-nib' %{cfgdir}/extmodule.conf 2>/dev/null; then
+    if grep -q '^ *\[scripts\]' %{cfgdir}/extmodule.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[scripts\]/{sect=1}
 	/^ *gsm_auth\.sh/{if(sect==2)sect=3}
 	/^ *nib_auth\.sh/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
 	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nnib_auth.sh\n";sect=2}
-	}' <%{_sysconfdir}/yate/extmodule.conf >%{_sysconfdir}/yate/extmodule.conf.tmp
-	mv -f %{_sysconfdir}/yate/extmodule.conf.tmp %{_sysconfdir}/yate/extmodule.conf
+	}' <%{cfgdir}/extmodule.conf >%{cfgdir}/extmodule.conf.tmp
+	mv -f %{cfgdir}/extmodule.conf.tmp %{cfgdir}/extmodule.conf
     else
-	cat <<-EOF >>%{_sysconfdir}/yate/extmodule.conf
+	cat <<-EOF >>%{cfgdir}/extmodule.conf
 	[scripts]
 	; Installed by yate-bts-nib, do not remove this comment line
 	nib_auth.sh
@@ -190,42 +216,48 @@ if ! grep -q '; Installed by yate-bts-nib' %{_sysconfdir}/yate/extmodule.conf 2>
 	EOF
     fi
 fi
-chgrp -R apache %{_sysconfdir}/yate
-chmod -R g+rw %{_sysconfdir}/yate
+chgrp -R apache %{cfgdir}
+chmod -R g+rw %{cfgdir}
+%endif
 
 
 %package roaming
-Summary:	SIP based GSM roaming support for Yate-BTS
+Summary:	SIP based GSM roaming support for YateBTS
 Group:		Applications/Communication
 Requires:	%{name} = %{version}-%{release}
 Requires:	yate-scripts = @YATE_VER@
+%if %{nosdr}
 Requires(post):	gawk
+%endif
 
 %description roaming
-Scripts that implement SIP registration from YateBTS to a remote OpenVoLTE server.
+Scripts that implement SIP registration from YateBTS to a remote YateUCN server.
 
 %files roaming
 %defattr(-, root, root)
 %{scrdir}/roaming.js
 %{scrdir}/handover.js
+%if %{nosdr}
 %{scrdir}/lib_str_util.js
+%endif
 
+%if %{nosdr}
 %post roaming
-sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{_sysconfdir}/yate/javascript.conf
-if ! grep -q '^ *mode *=' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
-    if grep -q '^ *\[ybts\]' %{_sysconfdir}/yate/ybts.conf 2>/dev/null; then
+sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
+if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
+    if grep -q '^ *\[ybts\]' %{cfgdir}/ybts.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[ybts\]/{sect=1}
 	/^ *mode *=/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
 	 if(sect==1){print "; Installed by yate-bts-roaming, do not remove this comment line\nmode=roaming\n";sect=2}
-	}' <%{_sysconfdir}/yate/ybts.conf >%{_sysconfdir}/yate/ybts.conf.tmp
-	mv -f %{_sysconfdir}/yate/ybts.conf.tmp %{_sysconfdir}/yate/ybts.conf
+	}' <%{cfgdir}/ybts.conf >%{cfgdir}/ybts.conf.tmp
+	mv -f %{cfgdir}/ybts.conf.tmp %{cfgdir}/ybts.conf
     fi
 fi
-if ! grep -q '; Installed by yate-bts-roaming +handover' %{_sysconfdir}/yate/ysipchan.conf 2>/dev/null; then
-    mv -f -n %{_sysconfdir}/yate/ysipchan.conf %{_sysconfdir}/yate/ysipchan.conf.rpmold
-    cat <<-EOF >%{_sysconfdir}/yate/ysipchan.conf
+if ! grep -q '; Installed by yate-bts-roaming +handover' %{cfgdir}/ysipchan.conf 2>/dev/null; then
+    mv -f -n %{cfgdir}/ysipchan.conf %{cfgdir}/ysipchan.conf.rpmold
+    cat <<-EOF >%{cfgdir}/ysipchan.conf
 	; Installed by yate-bts-roaming +handover, do not remove this comment line
 
 	[general]
@@ -259,6 +291,7 @@ if ! grep -q '; Installed by yate-bts-roaming +handover' %{_sysconfdir}/yate/ysi
 
 	EOF
 fi
+%endif
 
 
 %prep
@@ -296,17 +329,24 @@ chmod +x %{local_find_provides}
 %endif
 
 %build
-./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man
+./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man --with-conf=%{cfgdir}
 make %{stripped}
 
 %install
 make install DESTDIR=%{buildroot}
+mkdir -p %{buildroot}/var/www/html
+%if %{nosdr}
+ln -sf %{shrdir}/nib_web %{buildroot}/var/www/html/nib
+%else
+cp -rp nib/redir %{buildroot}/var/www/html/nib
 cp -p scripts/* %{buildroot}%{scrdir}/
 echo -e '[scripts]\nbts_config=bts_config.js' > %{buildroot}%{cfgdir}/bts-jscript.conf
+echo -e '[scripts]\nnib_auth.sh' > %{buildroot}%{cfgdir}/bts-extmod.conf
 mkdir -p %{buildroot}%{shrdir}/api
 echo '<?php global $bts_version; $bts_version = "%{version}-%{release}"; ?>' > %{buildroot}%{shrdir}/api/bts_version.php
-mkdir -p %{buildroot}/var/www/html
-ln -sf %{shrdir}/nib_web %{buildroot}/var/www/html/nib
+rm %{buildroot}%{cfgdir}/ybts.conf
+rm %{buildroot}%{scrdir}/lib_str_util.js
+%endif
 
 %clean
 rm -rf %{buildroot}
