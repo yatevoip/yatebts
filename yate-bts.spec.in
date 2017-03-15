@@ -149,20 +149,21 @@ Scripts and support executables that implement a GSM Network In a Box.
 
 %files nib
 %defattr(-, root, root)
-%dir %{shrdir}/nib_web
 %{scrdir}/nib_auth.sh
 %{scrdir}/do_*
 %{scrdir}/nib.js
 %{scrdir}/welcome.js
 %{scrdir}/custom_sms.js
 %{shrdir}/sounds/*
-%{shrdir}/nib_web/*
 /var/www/html/nib
-%if ! %{nosdr}
-%{cfgdir}/bts-extmod.conf
-%endif
+%if %{nosdr}
+%dir %{shrdir}/nib_web
+%{shrdir}/nib_web/*
 %config(noreplace) %{shrdir}/nib_web/.htaccess
 %config(noreplace) %{shrdir}/nib_web/config.php
+%else
+%{cfgdir}/bts-extmod.conf
+%endif
 %config(noreplace) %{cfgdir}/subscribers.conf
 
 %if %{nosdr}
@@ -346,6 +347,7 @@ mkdir -p %{buildroot}%{shrdir}/api
 echo '<?php global $bts_version; $bts_version = "%{version}-%{release}"; ?>' > %{buildroot}%{shrdir}/api/bts_version.php
 rm %{buildroot}%{cfgdir}/ybts.conf
 rm %{buildroot}%{scrdir}/lib_str_util.js
+rm -rf %{buildroot}%{shrdir}/nib_web
 %endif
 
 %clean
