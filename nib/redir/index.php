@@ -1,5 +1,6 @@
 <?php
-$url = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['SERVER_NAME'] . "/lmi/";
+$url = (isset($_SERVER['HTTPS']) ? "https://" : "http://")
+    . $_SERVER['SERVER_NAME'] . ":" . $_SERVER['SERVER_PORT'] . "/lmi/";
 header ("Location: $url");
 ?><html>
 <head>
