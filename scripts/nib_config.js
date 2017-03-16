@@ -132,7 +132,7 @@ SubscribersConfig.prototype.prepareConfig = function(params)
 	    //the msisdn should not start with 0 dar should have at least 7 digits
 	    "msisdn": {"regex": "^[1-9][0-9]{6,}$"},
 	    "short_number": {"regex": "^[0-9].*$"},
-	    "active": {"callback":ceckOnOff},
+	    "active": {"callback":checkOnOff},
 	    "ki": {"callback":checkValidKi},
 	    "op": {"callback":checkValidOP},
 	    "imsi_type":{"select":["2G", "3G"]},
@@ -262,10 +262,7 @@ API.on_delete_nib_subscriber = function(params,msg)
     if (!params.imsi)
 	return { error: 402, reason: "Missing IMSI in request." };
 
-    c = new ConfigFile(Engine.configFile("subscribers"));
-    if (!c.load("Could not load subscribers."))
-	return { name: "subscribers", object: {}, message: "File subscribers.conf not load."};
-
+    c = prepareConf("subscribers",msg.received,false);
     if (!c.getSection(params.imsi)) {
 	var mess = "Missing subscriber with IMSI: " + params.imsi + ". Nothing to delete.";
 	return { error: 201, reason: mess};
@@ -304,7 +301,7 @@ API.on_set_nib_system = function(params,msg,setNode)
 {
     if (params[";regexp"]) {
 	// delete the 'regexp' param from general section
-	c = new ConfigFile(Engine.configFile("subscribers"));
+	c = prepareConf("subscribers",msg.received,false);
 	if (!c.load("Could not load subscribers."))
 	    return { name: "subscribers", object: {}, message: "File subscribers.conf not load."};
 	var error = new Object();
@@ -336,7 +333,7 @@ API.on_set_nib_outbound = function(params,msg)
 	"iax":['enabled', 'protocol', 'username', 'password', 'server', 'description', 'interval', 'connection_id', 'ip_transport_localip', 'ip_transport_localport', 'trunking','trunk_timestamps', 'trunk_efficient_use', 'trunk_sendinterval', 'trunk_maxlen', 'trunk_nominits_sync_use_ts', 'trunk_nominits_ts_diff_restart', 'port']};
     var required_params = ["username", "server", "password"];
 
-    var outbound_conf = new ConfigFile(Engine.configFile("accfile"));
+    var outbound_conf = prepareConf("accfile",msg.received,false);
 
     sections = c.sections();
 
@@ -345,7 +342,7 @@ API.on_set_nib_outbound = function(params,msg)
     for (section_name in current_config) {
 	section = current_config[section_name];
 	section_params = section.keys();
-	for (param_name in section_params)
+	for (param_name of section_params)
 	    section.setValue(param_name, section.getValue(param_name));
     }
 
