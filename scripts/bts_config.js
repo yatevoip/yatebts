@@ -25,8 +25,6 @@
 #require "sdr_config.js"
 #require "nib_config.js"
 
-debug = false;
-
 conf_node = "bts";
 // define configuration files that can be set/get 
 confs = ["cdrfile", "accfile", "subscribers", "ybts", "sdr", "ybladerf"];
@@ -148,9 +146,38 @@ API.on_set_ybts_node = function(params,msg,setNode)
 API.on_set_bts_node = API.on_set_node;
 API.on_get_bts_node = API.on_get_node;
 
+// Handle rmanager commands
+function onCommand(msg)
+{
+    if (!msg.line) {
+	switch (msg.partline) {
+	    case "debug":
+		oneCompletion(msg,"bts_config",msg.partword);
+		break;
+	    case "debug bts_config":
+		oneCompletion(msg,"on",msg.partword);
+		oneCompletion(msg,"off",msg.partword);
+		break;
+	}
+    }
+    return false;
+}
+
+// Handle debugging command
+function onDebug(msg)
+{
+    Engine.setDebug(msg.line);
+    debug = Engine.debugEnabled();
+    msg.retValue("bts_config debug " + Engine.debugEnabled() + " level " + Engine.debugLevel() + "\r\n");
+    return true;
+}
+
 Engine.debugName("bts_config");
 Message.trackName("bts_config");
+loadCfg(true);
 
+Message.install(onCommand,"engine.command",120);
+Message.install(onDebug,"engine.debug",150,"module","bts_config");
 Message.install(onReload,"engine.init",120);
 Message.install(onApiRequest,"api.request",90,"type","config_bts");
 /* vi: set ts=8 sw=4 sts=4 noet: */
