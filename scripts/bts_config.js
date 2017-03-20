@@ -139,6 +139,9 @@ API.on_set_ybts_node = function(params,msg,setNode)
     if (!ysipchan.save())
 	return { reason: "Could not save codecs setting in ysipchan.conf", error: 501 };
 
+    Engine.output("YBTS restart on node config: " + msg.received);
+    Engine.restart();
+
     return res;
 };
 

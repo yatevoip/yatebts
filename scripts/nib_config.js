@@ -251,7 +251,10 @@ API.on_set_nib_subscribers = function(params,msg,setNode)
     }
 
     var subs = new SubscribersConfig;
-    return  API.on_set_generic_file(subs,params,msg,setNode);
+    res = API.on_set_generic_file(subs,params,msg,setNode);
+    if (res.reason)
+	return res;
+    return reloadNib();
 };
 
 // Remove a subscriber section from subscribers.conf
@@ -274,7 +277,7 @@ API.on_delete_nib_subscriber = function(params,msg)
     if (!saveConf(error,c))
 	return error;
 
-    return {};
+    return reloadNib();
 };
 
 // Get subscribers.conf params from [general] section 
@@ -290,7 +293,7 @@ API.on_get_nib_system = function(params,msg)
     delete res.general["locked"];
 
     if (!res.general) {
-	    res.general = {"country_code":"", "smsc":"", "regexp":""};
+	res.general = {"country_code":"", "smsc":"", "regexp":""};
     } 
 
     return { name: "nib_system", object: res.general};
@@ -312,8 +315,14 @@ API.on_set_nib_system = function(params,msg,setNode)
 	}
     }
 
+
     var subs = new SubscribersConfig;
-    return API.on_set_generic_file(subs,params,msg,setNode);
+    res = API.on_set_generic_file(subs,params,msg,setNode);
+
+    if (res.reason)
+	return res;
+
+    return reloadNib();
 };
 
 // Configure accfile.conf params
@@ -410,6 +419,8 @@ API.on_set_nib_outbound = function(params,msg)
     if (!saveConf(error,outbound_conf))
 	return error;
 
+    Engine.output("Restart on node config: " + msg.received);
+    Engine.restart();
     return {};
 };
 
@@ -534,4 +545,13 @@ API.on_get_rejected_nib_subscribers = function(params,msg)
 
 };
 
+function reloadNib()
+{
+    var m = new Message("engine.command");
+    m.line = "nib.reload";
+    if (!m.dispatch())
+	return { error: 402, reason: "Reload of NIB failed." };
+
+    return {};
+};
 /* vi: set ts=8 sw=4 sts=4 noet: */
