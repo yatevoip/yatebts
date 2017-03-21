@@ -72,10 +72,14 @@ YbtsConfig.prototype.validateConfig = function(section_name,param_name,param_val
 	    if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
 		return false;
 	}
+	if (!checkRoamingRequired(this.error,params))
+ 	    return false;
     }
 
     // validate gprs_roaming params if dataroam mode is activated
     if (mode == "dataroam" && section_name == "gprs_roaming") {
+	if (!checkGprsRoamingRequired(this.error,params))
+	    return false;
 	if ((param_name == "gprs_nnsf_bits" || param_name == "nnsf_bits") && param_value.length)
 	    if (!validatePositiveNumber(this.error,param_name,param_value,section_name))
 		return false;

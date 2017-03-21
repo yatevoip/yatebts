@@ -316,6 +316,23 @@ function checkValidDNS(error,field_name,field_value,section_name)
     return true;
 }
 
+function checkGprsRoamingRequired(error,params)
+{
+    var found = false;
+    for (var param_name in params.gprs_roaming) {
+        if (!isNaN(parseInt(param_name)))
+            found = true;
+	    if (param_name == "map_network")
+	       found = true;	
+    }
+    if (!found) {
+        error.reason = "At least one 'map_network' must be set in dataroam mode in section 'GPRS roaming'.";
+        error.error = 401;
+        return false;
+    }
+    return true;
+}
+
 function validateMapNetworkDataroam(error,param_name,param_value,section_name)
 {
     if (!param_value.length)
@@ -372,6 +389,18 @@ function validateRoamingParams(error,params)
 	!validatePositiveNumber(error, 'Expires', expires, 'roaming'))
 	return false;
 
+    return true;
+}
+
+function checkRoamingRequired(error,params)
+{
+    var reg_sip = params.roaming["reg_sip"];
+    var nodes_sip = params.roaming["nodes_sip"];
+    if (isEmpty(reg_sip) && isEmpty(nodes_sip)) {
+	error.reason = "Either 'Reg sip' or 'Nodes sip' must be set in dataroam mode in section 'Roaming'.";
+	error.error = 401;
+	return false;
+    }
     return true;
 }
 
