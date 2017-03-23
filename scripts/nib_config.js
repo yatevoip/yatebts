@@ -55,7 +55,7 @@ SubscribersConfig.prototype.initConfig = function(params)
     for (var imsi in params) {
 	if (imsi == "general")
 	    continue;
-	if (!imsi.match(/[0-9]{14,15}/)) {
+	if (!imsi.match(/^[0-9]{14,15}$/)) {
 	    this.error.error = 401;
 	    this.error.reason = "The IMSI: " + imsi + " is not valid. Must contain 14 or 15 digits.";
 	    return false;
@@ -77,8 +77,8 @@ SubscribersConfig.prototype.initConfig = function(params)
     }
 
     if (this.current_config.general) 
-        delete this.current_config.general;
-   
+	delete this.current_config.general;
+
     for (var data in params) {
 	// on edit a subscriber check if it is already written in file the IMSI set in params
 	if (check_duplicate) {
@@ -95,26 +95,17 @@ SubscribersConfig.prototype.initConfig = function(params)
     }
 
     //find duplicate in combined data
-    var duplicated_imsi = new Object();
-    for (var imsi in this.current_config) {
-	if (!duplicated_imsi[this.current_config[imsi]["msisdn"]])
-	    duplicated_imsi[this.current_config[imsi]["msisdn"]] = new Array();
-	var msisdn = duplicated_imsi[this.current_config[imsi]["msisdn"]];
-	msisdn.push(imsi);
-    }
-    for (var msisdn in  duplicated_imsi) {
-	var imsis = duplicated_imsi[msisdn];
-	if (imsis.length > 1) {
+    var elements = [{element: "msisdn", display: "MSISDN"},
+	{element: "short_number", display: "Short number"}];
+	
+    for (var i in elements) {
+	var res = findDuplicatedImsi(this.current_config,elements[i].element,elements[i].display);
+	if (res.duplicated) {
 	    this.error.error = 401;
-	    this.error.reason = "The IMSIs: ";
-	    for (var i = 0; i < imsis.length; i++) {
-		this.error.reason += " " +imsis[i] +", ";
-	    }
-	    this.error.reason += " have the same MSISDN: "+ msisdn;		
+	    this.error.reason = res.reason;
 	    return false;
 	}
     }
-
     return true;
 };
 
@@ -131,7 +122,8 @@ SubscribersConfig.prototype.prepareConfig = function(params)
 	var subs_validations = {
 	    //the msisdn should not start with 0 dar should have at least 7 digits
 	    "msisdn": {"regex": "^[1-9][0-9]{6,}$"},
-	    "short_number": {"regex": "^[0-9].*$"},
+	    //the short number has to have at least 3 digits
+	    "short_number": {"regex": "^[0-9]{3,}$"},
 	    "active": {"callback":checkOnOff},
 	    "ki": {"callback":checkValidKi},
 	    "op": {"callback":checkValidOP},
@@ -553,5 +545,30 @@ function reloadNib()
 	return { error: 402, reason: "Reload of NIB failed." };
 
     return {};
+};
+
+/* Find if a given element is duplicated in the current configuration */
+function findDuplicatedImsi(current_config,element,field_name)
+{	
+    var duplicated_imsi = new Object();
+    for (var imsi in current_config) {
+	if (!duplicated_imsi[current_config[imsi][element]])
+	    duplicated_imsi[current_config[imsi][element]] = new Array();
+	var keep_duplicated = duplicated_imsi[current_config[imsi][element]];
+	keep_duplicated.push(imsi);
+    }
+    var err = "";
+    for (var element in duplicated_imsi) {
+	var imsis = duplicated_imsi[element];
+	if (imsis.length > 1) {
+	    err = "The IMSIs: ";
+	    for (var i = 0; i < imsis.length; i++) {
+		err += imsis[i] +", ";
+	    }
+	    err += " have the same "+field_name+": "+ element+".";		
+	    return { duplicated: true, reason: err };
+	}
+    }
+    return { duplicated: false };
 };
 /* vi: set ts=8 sw=4 sts=4 noet: */
