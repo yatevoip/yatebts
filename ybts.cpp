@@ -9640,8 +9640,7 @@ void YBTSDriver::start()
     if (m_restartIndex >= n) {
 	m_stopped = true;
 	Alarm(this,"system",DebugGoOn,
-	    "Restart index reached maximum value %u. Exiting ...",n);
-	Engine::halt(ECANCELED);
+	    "Restart index reached maximum value %u. Stopping ...",n);
 	return;
     }
     m_restartIndex++;
