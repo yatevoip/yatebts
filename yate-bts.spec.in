@@ -63,13 +63,15 @@
 Summary:	GSM BTS based on Yet Another Telephony Engine
 Name:		@PACKAGE_TARNAME@
 Version: 	@PACKAGE_VERSION@
-Release:	%{xtra_stat}@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{dist}
+Release:	%{xtra_stat}@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{?status:_%{status}}%{dist}
 License:	GPL
 Packager:	Paul Chitescu <paulc@null.ro>
 Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
 Group:		Applications/Communication
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
 URL:		http://yatebts.com/
+%{?extra_prov:Provides: %{?extra_prov}}
+%{?extra_reqs:Requires: %{?extra_reqs}}
 BuildRequires:	gcc-c++
 BuildRequires:	yate-devel >= @YATE_REQ@
 Requires:	yate = @YATE_VER@
@@ -330,11 +332,13 @@ chmod +x %{local_find_provides}
 %endif
 
 %build
-./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man --with-conf=%{cfgdir}
-make %{stripped}
+./configure --prefix=%{prefix} --sysconfdir=/etc --mandir=%{prefix}/share/man \
+	--with-conf=%{cfgdir} %{?extra_conf}
+make %{stripped} %{?extra_make}
+%{?extra_step}
 
 %install
-make install DESTDIR=%{buildroot}
+make install DESTDIR=%{buildroot} %{?extra_make}
 mkdir -p %{buildroot}/var/www/html
 %if %{nosdr}
 ln -sf %{shrdir}/nib_web %{buildroot}/var/www/html/nib
@@ -349,11 +353,18 @@ rm %{buildroot}%{cfgdir}/ybts.conf
 rm %{buildroot}%{scrdir}/lib_str_util.js
 rm -rf %{buildroot}%{shrdir}/nib_web
 %endif
+%if "%{?extra_inst}"
+export DESTDIR=%{buildroot}
+%{?extra_inst}
+%endif
 
 %clean
 rm -rf %{buildroot}
 
 %changelog
+* Wed Mar 29 2017 Paul Chitescu <paulc@null.ro>
+- Added support for extra build steps
+
 * Mon Aug 24 2015 Paul Chitescu <paulc@null.ro>
 - Removed hardware support subpackages
 

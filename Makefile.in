@@ -174,10 +174,10 @@ revision: check-topdir
 	test -z "$$rev" || echo "$$rev" > revision.txt
 
 %.o: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
-	$(CCOMPILE) -c $<
+	$(CCOMPILE) $(LOCALFLAGS) -c $<
 
 %.o: @srcdir@/%.c $(MKDEPS) $(INCFILES)
-	$(COMPILE) -c $<
+	$(COMPILE) $(LOCALFLAGS) -c $<
 
 %.yate: @srcdir@/%.cpp $(MKDEPS) $(INCFILES)
 	$(MODCOMP) -o $@ $(LOCALFLAGS) $< $(LOCALLIBS) $(YATELIBS)
