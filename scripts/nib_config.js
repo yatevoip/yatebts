@@ -540,7 +540,7 @@ API.on_get_rejected_nib_subscribers = function(params,msg)
 function reloadNib()
 {
     var m = new Message("engine.command");
-    m.line = "nib.reload";
+    m.line = "nib reload";
     if (!m.dispatch())
 	return { error: 402, reason: "Reload of NIB failed." };
 
