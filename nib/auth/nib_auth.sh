@@ -39,25 +39,52 @@ while read -r REPLY; do
 			resp="sres=${res:0:8}:kc=${res:9}"
 		    fi
 		    ;;
+		Xcomp128-1|Xcomp128-2|Xcomp128-3)
+		    proto="${proto:0:7}_${proto:8}"
+		    res=`./do_nib_$proto 0x$ki 0x$rand`
+		    if [ ${#res} = 25 ]; then
+			resp="sres=${res:0:8}:kc=${res:9}"
+		    fi
+		    ;;
 		Xmilenage)
 		    sqn="${params#*:sqn=}"; sqn="${sqn%%:*}"
+		    auts="${params#*:auts=}"; auts="${auts%%:*}"
+		    amf="${params#*:amf=}"; amf="${amf%%:*}"
+		    if [ -n "$amf" ]; then
+			amf=" 0x$amf"
+		    fi
+		    opc="${params#*:opc=}"; opc="${opc%%:*}"
+		    case "X$opc" in
+			Xtrue|Xyes|Xon|Xenable|Xt|X1)
+			    opc=" --opc"
+			    ;;
+			*)
+			    opc=""
+			    ;;
+		    esac
 		    if [ -n "$sqn" ]; then
-			res=`./do_nib_milenage 0x$ki 0x$op 0x$sqn 0x$rand`
-			if [ ${#res} = 115 ]; then
-			    resp="xres=${res:0:16}:ck=${res:17:32}:ik=${res:50:32}:autn=${res:83}"
+			if [ -n "$auts" ]; then
+			    res=`./do_nib_milenage$opc --auts 0x$ki 0x$op 0x$sqn 0x$rand$amf`
+			    if [ ${#res} = 28 ]; then
+				resp="auts=${res}"
+			    fi
+			else
+			    res=`./do_nib_milenage$opc 0x$ki 0x$op 0x$sqn 0x$rand$amf`
+			    if [ ${#res} = 115 ]; then
+				resp="xres=${res:0:16}:ck=${res:17:32}:ik=${res:50:32}:autn=${res:83}"
+			    fi
 			fi
 		    else
-			auts="${params#*:auts=}"; auts="${auts%%:*}"
 			if [ -n "$auts" ]; then
-			    res=`./do_nib_milenage 0x$ki 0x$op 0x$auts 0x$rand`
+			    res=`./do_nib_milenage$opc 0x$ki 0x$op 0x$auts 0x$rand$amf`
 			    if [ ${#res} = 12 ]; then
 				resp="sqn=${res}"
 			    fi
 			else
 			    autn="${params#*:autn=}"; autn="${autn%%:*}"
-			    res=`./do_nib_milenage 0x$ki 0x$op 0x$autn 0x$rand`
-			    if [ ${#res} = 82 ]; then
-				resp="xres=${res:0:16}:ck=${res:17:32}:ik=${res:50:32}"
+			    res=`./do_nib_milenage$opc 0x$ki 0x$op 0x$autn 0x$rand$amf`
+			    if [ ${#res} = 95 ]; then
+				resp="xres=${res:0:16}:ck=${res:17:32}:ik=${res:50:32}:sqn=${res:83}"
 			    fi
 			fi
 		    fi
