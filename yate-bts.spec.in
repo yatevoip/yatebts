@@ -244,8 +244,8 @@ Scripts that implement SIP registration from YateBTS to a remote YateUCN server.
 %{scrdir}/lib_str_util.js
 %endif
 
-%if %{nosdr}
 %post roaming
+%if %{nosdr}
 sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
 if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
     if grep -q '^ *\[ybts\]' %{cfgdir}/ybts.conf 2>/dev/null; then
@@ -258,6 +258,7 @@ if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
 	mv -f %{cfgdir}/ybts.conf.tmp %{cfgdir}/ybts.conf
     fi
 fi
+%endif
 if ! grep -q '; Installed by yate-bts-roaming +handover' %{cfgdir}/ysipchan.conf 2>/dev/null; then
     mv -f -n %{cfgdir}/ysipchan.conf %{cfgdir}/ysipchan.conf.rpmold
     cat <<-EOF >%{cfgdir}/ysipchan.conf
@@ -294,7 +295,6 @@ if ! grep -q '; Installed by yate-bts-roaming +handover' %{cfgdir}/ysipchan.conf
 
 	EOF
 fi
-%endif
 
 
 %prep
