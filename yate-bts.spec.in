@@ -259,12 +259,14 @@ if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
     fi
 fi
 %endif
-if ! grep -q '; Installed by yate-bts-roaming +handover' %{cfgdir}/ysipchan.conf 2>/dev/null; then
+if ! grep -q '; Installed by yate-bts-roaming +handover\|updated=\|locked=' %{cfgdir}/ysipchan.conf 2>/dev/null; then
     mv -f -n %{cfgdir}/ysipchan.conf %{cfgdir}/ysipchan.conf.rpmold
     cat <<-EOF >%{cfgdir}/ysipchan.conf
 	; Installed by yate-bts-roaming +handover, do not remove this comment line
 
 	[general]
+	updated=`date -u '+%%A, %%d-%%b-%%y %%H:%%M:%%S GMT'` from package installer
+	locked=false
 	lazy100=yes
 	transfer=no
 	privacy=yes
