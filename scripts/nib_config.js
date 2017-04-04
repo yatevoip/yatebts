@@ -28,7 +28,7 @@ SubscribersConfig = function()
     this.error = new Object();
     this.skip_empty_params = new Object();
     this.sections = new Array();
-    this.params_allowed_empty = ["gw_sos", "op", "msisdn", "short_number"];
+    this.params_allowed_empty = ["gw_sos", "op", "opc", "msisdn", "short_number"];
     this.params_required = new Object();
 };
 
@@ -127,9 +127,9 @@ SubscribersConfig.prototype.prepareConfig = function(params)
 	    "active": {"callback":checkOnOff},
 	    "ki": {"callback":checkValidKi},
 	    "op": {"callback":checkValidOP},
+	    "opc": {"callback":checkOnOff},
 	    "imsi_type":{"select":["2G", "3G"]},
 	    "iccid": {"callback": checkValidIccid},
-	    "opc": {"callback": checkValidHex}
 	};
 
 	// see if we have any defined subscribers and modify sections and validations so this fields are written
@@ -210,7 +210,7 @@ API.on_get_nib_subscribers = function(params,msg)
 	var start = parseInt(params.offset);
 	var end = parseInt(params.limit);
 	for (var imsi in res) {
-	    if (i < start || i > (start+end))
+	    if (i < start || i >= (start+end))
 		delete res[imsi];
 	    i++;
 	}
