@@ -1022,6 +1022,7 @@ function authResync(msg,imsi,is_auth)
     var ki   = subscribers[imsi].ki;
     var op   = subscribers[imsi].op;
     var sqn  = subscribers[imsi].sqn;
+    var opc  = subscribers[imsi].opc;
     var rand = msg["auth.rand"];
     var auts = msg["auth.auts"];
 
@@ -1029,6 +1030,7 @@ function authResync(msg,imsi,is_auth)
     m.protocol = "milenage";
     m.ki = ki;
     m.op = op;
+    m.opc  = opc;
     m.rand = rand;
     m.auts = auts;
     m.dispatch(true);
@@ -1055,6 +1057,7 @@ function startAuth(msg,imsi,is_auth)
     var op = subscribers[imsi].op;
     var imsi_type = subscribers[imsi].imsi_type;
     var sqn = subscribers[imsi].sqn;
+    var opc = subscribers[imsi].opc;
 
     if (sqn == "")
 	sqn = "000000000000";
@@ -1071,6 +1074,7 @@ function startAuth(msg,imsi,is_auth)
 	m.protocol = "milenage";
 	m.ki = ki;
 	m.op = op;
+	m.opc = opc;
 	m.rand = rand;
 	m.sqn = sqn;
 	if (!m.dispatch(true)) {
