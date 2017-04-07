@@ -372,25 +372,24 @@ function readConfiguration(return_subscribers)
 
     var reg = configuration["general"]["regexp"];
 
+    if (configuration["general"]["nnsf_bits"]!="")
+	nnsf_bits = configuration["general"]["nnsf_bits"];
+    else
+	nnsf_bits = def_nnsf_bits;
+
+    if (configuration["general"]["nnsf_node"]!="")
+	nnsf_node = configuration["general"]["nnsf_node"];
+    else
+	nnsf_node = def_nnsf_node;
+    initNnsf();
+
+    var ybts_conf = new ConfigFile(Engine.configFile("ybts"),true);
+    imsi_cleanup = ybts_conf.getValue("ybts","tmsi_expire",864000); // 3600 * 24 * 10
+    imsi_cleanup = parseInt(imsi_cleanup);
+
     var upd_subscribers;
     if (!reg) {
 	upd_subscribers = configuration;
-
-	if (configuration["general"]["nnsf_bits"]!="")
-	    nnsf_bits = configuration["general"]["nnsf_bits"];
-	else
-	    nnsf_bits = def_nnsf_bits;
-
-	if (configuration["general"]["nnsf_node"]!="")
-	    nnsf_node = configuration["general"]["nnsf_node"];
-	else
-	    nnsf_node = def_nnsf_node;
-	initNnsf();
-
-	var ybts_conf = new ConfigFile(Engine.configFile("ybts"),true);
-	imsi_cleanup = ybts_conf.getValue("ybts","tmsi_expire",864000); // 3600 * 24 * 10
-	imsi_cleanup = parseInt(imsi_cleanup);
-
 	delete upd_subscribers["general"];
 	delete regexp;
     } else {
