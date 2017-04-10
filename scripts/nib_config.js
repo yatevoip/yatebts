@@ -96,7 +96,8 @@ SubscribersConfig.prototype.initConfig = function(params)
 
     //find duplicate in combined data
     var elements = [{element: "msisdn", display: "MSISDN"},
-	{element: "short_number", display: "Short number"}];
+	{element: "short_number", display: "Short number"},
+	{element: "iccid", display: "ICCID"}];
 	
     for (var i in elements) {
 	var res = findDuplicatedImsi(this.current_config,elements[i].element,elements[i].display);

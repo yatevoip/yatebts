@@ -22,8 +22,8 @@ function checkValidHex(error,field_name,field_value,section_name)
 
 function checkValidIccid(error,field_name,field_value,section_name)
 {
-    if (isNaN(parseInt(field_value)) || field_value.length != 19) {
-	error.reason = "ICCID: '". field_value ."' must contain 19 digits.";
+   if (field_value.length > 20) {
+	error.reason = "ICCID: '"+ field_value +"' can't have more than 20 characters.";
 	error.error = 401;
 	return false;
     }
