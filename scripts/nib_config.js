@@ -446,24 +446,34 @@ API.on_get_nib_outbound = function(params,msg)
 // Get online subscribers
 API.on_get_online_nib_subscribers = function(params,msg)
 {
-    if (!registered_subscribers) {
-	if (params.limit || params.offset)
-	    return { name: "subscribers", object: {} };
+    var m = new Message("engine.command");
+    m.line = "nib list registered";
+    if (!m.dispatch())
+        return { error: 402, reason: "Could not retrieve online subscribers from NIB." };
 
+    var res = m.retValue();
+    res = res.split("\n");
+    if (res.length<=2)
 	return { name: "count", object: 0 };
 
-    }
+    var subscriber;
+    var msisdn;
+    var imsi;
 
     var reg_subs = {};
-    for (var imsi_key in registered_subscribers) {
-	if (registered_subscribers[imsi_key]["location"] != "") {
-	    if (!reg_subs["IMSI"])
-		reg_subs["IMSI"] = {};
-	    reg_subs["IMSI"] = imsi_key;
-	    if (!reg_subs["MSISDN"])
-		reg_subs["MSISDN"] = {};
-	    reg_subs["MSISDN"] = registered_subscribers[imsi_key]["msisdn"];
-	}
+    var current_index;
+    for (var i=2; i<res.length; i++) {
+	subscriber = res[i];
+	subscriber = subscriber.split(" ");
+	msisdn = subscriber[subscriber.length - 1];
+	imsi   = subscriber[0];
+	if (!imsi.length)
+		continue;
+	if (msisdn.endsWith("\r"))
+		msisdn = msisdn.substr(0,msisdn.length-1);
+	current_index = i-2;
+	var reg_subscriber = {"IMSI":imsi,"MSISDN":msisdn};
+	reg_subs[current_index] = reg_subscriber;
     }
 
     var total = Object.keys(reg_subs).length;
@@ -494,21 +504,34 @@ API.on_get_online_nib_subscribers = function(params,msg)
 // Get rejected subscribers
 API.on_get_rejected_nib_subscribers = function(params,msg)
 {
-    if (!seenIMSIs) {
-	if (params.limit || params.offset)
-	    return {name:"subscribers", object:{}};
+    var m = new Message("engine.command");
+    m.line = "nib list rejected";
+    if (!m.dispatch())
+        return { error: 402, reason: "Could not retrieve rejected IMSIs from NIB." };
 
-	return {name:"count", object:0};
-    }
+    var res = m.retValue();
+    res = res.split("\n");
+    if (res.length<=2)
+	return { name: "count", object: 0 };
 
-    var rejected_subs = "";
-    for (var imsi_key in seenIMSIs) {
-	if (!rejected_subs["IMSI"])
-	    rejected_subs["IMSI"] = {};
-	rejected_subs["IMSI"] = imsi_key;
-	if (!rejected_subs["NO"])
-	    rejected_subs["NO"] = {};
-	rejected_subs["NO"] = seenIMSIs[imsi_key];
+    var seen_imsi;
+    var no_attempts;
+    var imsi;
+
+    var rejected_subs = {};
+    var current_index;
+    for (var i=2; i<res.length; i++) {
+	seen_imsi = res[i];
+	seen_imsi = seen_imsi.split(" ");
+	no_attempts = seen_imsi[seen_imsi.length - 1];
+	imsi     = seen_imsi[0];
+	if (!imsi.length)
+		continue;
+	if (no_attempts.endsWith("\r"))
+		no_attempts = no_attempts.substr(0,no_attempts.length-1);
+	current_index = i-2;
+	var seen = {"IMSI":imsi,"NO":no_attempts};
+	rejected_subs[current_index] = seen;
     }
 
     var total = Object.keys(rejected_subs).length;
@@ -520,7 +543,7 @@ API.on_get_rejected_nib_subscribers = function(params,msg)
 	    return { error: 402, reason: "Missing 'limit' from request." };
 
 	if (!total)
-	    return { name: "subscribers", object: {} };
+	    return { name: "imsis", object: {} };
 
 	var i = 0;
 	var start = parseInt(params.offset);
@@ -531,7 +554,7 @@ API.on_get_rejected_nib_subscribers = function(params,msg)
 	    i++;
 
 	}
-	return { name: "subscribers", object: rejected_subs };
+	return { name: "imsis", object: rejected_subs };
     }
     return { name: "count", object: total };
 
