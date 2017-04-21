@@ -47,7 +47,7 @@ function onAuth(msg)
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
 
-    var sr = buildRegister(imsi,tmsi,expires,msg.imei);
+    var sr = buildRegister(imsi,tmsi,reg_expires,msg.imei);
     if (sr==false)
 	return false;
     if (!addAuthParams(sr,msg,imsi,tmsi))
@@ -80,7 +80,7 @@ function onRegister(msg, unresponsive_server)
 
     Engine.debug(Engine.DebugInfo, "Preparing to send REGISTER imsi='"+imsi+"', tmsi='"+tmsi+"', unresponsive server='"+unresponsive_server+"'");
 
-    var sr = buildRegister(imsi,tmsi,expires,msg.imei,null,msg,unresponsive_server);
+    var sr = buildRegister(imsi,tmsi,reg_expires,msg.imei,null,msg,unresponsive_server);
     if (sr==false)
 	return false;
     if (!addAuthParams(sr,msg,imsi,tmsi))
@@ -93,10 +93,10 @@ function onRegister(msg, unresponsive_server)
 	    var contact = sr["sip_contact"];
 	    var res = contact.match(/expires *= *"?([^ ;]+)"?/);
 	    if (res)
-		expires = res[1];
+		var expires = res[1];
 	    else 
 		// otherwise check for it in the Expires header
-		expires = sr["sip_expires"];
+		var expires = sr["sip_expires"];
 
 	    expires = parseInt(expires);
 
@@ -1006,9 +1006,7 @@ function readYBTSConf()
     if (t3212 == 0)
 	Engine.alarm(alarm_conf, "Incompatible configuration: Timer.T3212=0. When sending requests to SIP/IMS server Timer.T3212 is in 6..60 range.");
 
-    expires = roaming_section.getValue("expires");
-    if (expires=="") 
-	    expires = 3600;
+    reg_expires = roaming_section.getIntValue("expires",3600,t3212 * 2,86400);
 
     nodes_sip = JSON.parse(roaming_section.getValue("nodes_sip"));
 
@@ -1098,8 +1096,7 @@ function readUEsFromConf()
 	var tmsi = subscriber_info[0];
 	var imei = subscriber_info[1];
 	var msisdn = subscriber_info[2];
-	var expires = subscriber_info[3];
-	var expires = parseInt(expires);
+	var expires = parseInt(subscriber_info[3]);
 	var callid = subscriber_info[4];
 	subscribers[imsi] = {"tmsi":tmsi,"imei":imei,"msisdn":msisdn,"expires":expires,"callid":callid};
 	count_ues = count_ues+1;
