@@ -119,11 +119,13 @@ install: all
 	$(MAKE) -C ./nib install
 	$(MAKE) -C ./nib/auth install
 	$(MAKE) -C ./roaming install
+	$(MAKE) -C ./scripts install
 
 uninstall:
 	$(MAKE) -C ./nib/auth uninstall
 	$(MAKE) -C ./nib uninstall
 	$(MAKE) -C ./roaming uninstall
+	$(MAKE) -C ./scripts uninstall
 	$(MAKE) -C ./mbts/apps uninstall
 	@-for i in $(PROGS) ; do \
 	    rm -f "$(DESTDIR)$(moddir)/server/$$i" ; \

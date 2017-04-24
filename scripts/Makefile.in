@@ -4,7 +4,7 @@
 # override DESTDIR at install time to prefix the install directory
 DESTDIR :=
 
-SCRIPTS := roaming.js handover.js
+SCRIPTS := lib_str_util.js
 SOUNDS	:=
 CONFIG  := 
 

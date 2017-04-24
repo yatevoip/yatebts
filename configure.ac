@@ -225,6 +225,7 @@ AC_CONFIG_FILES([yate-bts.spec
                  mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in
                  transceiver/Makefile
                  roaming/Makefile
+		 scripts/Makefile
                  nib/Makefile
                  nib/auth/Makefile])
 CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//; s/:[[^ ]]\+//g'`
