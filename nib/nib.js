@@ -52,7 +52,8 @@ function readUEsFromConf()
     last_tmsi = tmsisection.getValue("last");
 
     ues = conf.getSection("ues",true);
-    var subscriber_info, imsi;
+    var subscriber_info;
+    var imsi;
     registered_subscribers = {};
 
     keys = ues.keys();
@@ -258,7 +259,10 @@ function getConfigurationObject(file)
 
     var conf = new ConfigFile(file,true);
     var sections = conf.sections();
-    var section, section_name, prop_name, keys;
+    var section;
+    var section_name;
+    var prop_name;
+    var keys;
     var configuration = {};
 
     for (section_name in sections) {
@@ -390,16 +394,18 @@ function readConfiguration(return_subscribers)
 
     var upd_subscribers;
     if (!reg) {
-	upd_subscribers = configuration;
-	delete upd_subscribers["general"];
 	delete regexp;
     } else {
 	regexp = new RegExp(reg);
-	upd_subscribers = [];
     }
+    upd_subscribers = configuration;
+    delete upd_subscribers["general"];
 
-    var imsi, active, opc, count=0;
-    for (var imsi in upd_subscribers) {
+    var imsi;
+    var active;
+    var opc;
+    var count=0;
+    for (imsi in upd_subscribers) {
 	active = upd_subscribers[imsi].active;
 	active = active.toLowerCase();
 	upd_subscribers[imsi].active = parseBool(active,false);
@@ -428,7 +434,9 @@ function readConfiguration(return_subscribers)
 // Allocate an unused TMSI
 function allocTmsi()
 {
-    var imsi_key, tmsi, in_use;
+    var imsi_key;
+    var tmsi;
+    var in_use;
 
     for (;;) {
 	tmsi = newTmsi();
@@ -446,15 +454,16 @@ function allocTmsi()
     }
     return tmsi;
 }
+
  
 function numberAvailable(val,imsi)
 {
     var number;
-    for (var imsi_key in registered_subscribers) {
+    var imsi_key;
+    for (imsi_key in registered_subscribers) {
 	number = registered_subscribers[imsi_key]["msisdn"];
 	if (number.substr(0,1)=="+")
 	    number = number.substr(1);
-
 	if (number==val) {
 	    if (imsi!=undefined && imsi==imsi_key)
 		// keep numbers already associated
@@ -463,6 +472,21 @@ function numberAvailable(val,imsi)
 	    	return false;
 	}
     }
+
+    // check subscribers as well in case regexp and subscribers are used at the same time and some imsis from subscribers might not have been registered yet
+    for (imsi_key in subscribers) {
+	number = subscribers[imsi_key]["msisdn"];
+	if (number.substr(0,1)=="+")
+	    number = number.substr(1);
+	if (number==val) {
+	    if (imsi!=undefined && imsi==imsi_key)
+		// keep numbers already associated
+		return true;
+	    else
+		return false;
+	}
+    }
+
     return true;
 }
  
@@ -550,17 +574,17 @@ function alreadyRegistered(imsi)
 function getSubscriberMsisdn(imsi)
 {
     if (subscribers[imsi]!=undefined) {
-	if (subscribers[imsi].active)
-	    return subscribers[imsi].msisdn;
-	else
-	    return false;
+	return subscribers[imsi].msisdn;
     }
     return false;
 }
 
 function getSubscriberIMSI(msisdn,tmsi)
 {
-    var imsi_key, nr, short_number, user_tmsi;
+    var imsi_key;
+    var nr;
+    var short_number;
+    var user_tmsi;
 
     if (msisdn) {
 	if (subscribers) {
@@ -688,7 +712,8 @@ function routeSOS(msg)
 
 function routeToRegUser(msg,called)
 {
-    var msisdn, loc;
+    var msisdn;
+    var loc;
     for (var imsi_key in registered_subscribers) {
 	msisdn = registered_subscribers[imsi_key]["msisdn"];
 	loc = registered_subscribers[imsi_key]["location"];
@@ -1141,10 +1166,10 @@ function checkAuth(msg,imsi,is_auth)
 
 function onAuth(msg)
 {
-    if (subscribers==undefined) {
+    if (regexp) {
 	Engine.debug(Engine.DebugWarn, "MT auth is set, but subscribers are not defined. You can't authentify MT calls/SMSs when regexp is defined in subscribers.conf.");
-	return true;
-    }
+        return true;
+    }	
 
     var imsi = msg.imsi;
     var tmsi = msg.tmsi;
@@ -1181,6 +1206,7 @@ function onAuth(msg)
 function onRegister(msg)
 {
     var posib_msisdn;
+    var msisdn;
 
     // don't look at user.register from other modules besides ybts
     if (msg.driver!="ybts")
@@ -1213,11 +1239,12 @@ function onRegister(msg)
 
     Engine.debug(Engine.DebugInfo, "Got user.register for imsi='"+imsi+"', tmsi='"+tmsi+"'");
 
+    var auth = false;
     if (subscribers != undefined) {
 	Engine.debug(Engine.DebugInfo,"Searching imsi in subscribers.");
 
 	msisdn = getSubscriberMsisdn(imsi);
-	if (subscribers[imsi] != "") {
+	if (subscribers[imsi] && subscribers[imsi].active) {
 	    var ki = subscribers[imsi].ki;
 	    if (ki!="*") {
 		// start authentication procedure if it was not started
@@ -1227,44 +1254,41 @@ function onRegister(msg)
 		else if (msg["auth.response"]!="") {
 		    if (checkAuth(msg,imsi)==false)
 			return false;
-		} 
+		    else
+			auth = true;
+		}
 		else if (msg["auth.auts"]) {
 		    return authResync(msg,imsi);
 		}
 		else
 		    return false;
 	    }
-	}
-	if (msisdn==null || msisdn=="") {
-	    // check if imsi is already registered so we don't allocate a new number
-	    msisdn = alreadyRegistered(imsi);
-	    if (msisdn==false) {
-		if (posib_msisdn!="") 
-		    if (numberAvailable(posib_msisdn,imsi))
-			msisdn = posib_msisdn;
+	    else
+		auth = true;
 
+	    if (!msisdn) {
+		// check if imsi is already registered so we don't allocate a new number
+		msisdn = alreadyRegistered(imsi);
 		if (msisdn==false) {
-		    Engine.debug(Engine.DebugInfo,"Located imsi without msisdn. Allocated random number");
-		    msisdn = newNumber(imsi);
+		    if (posib_msisdn!="") 
+			if (numberAvailable(posib_msisdn,imsi))
+			    msisdn = posib_msisdn;
+
+		    if (msisdn==false) {
+			msisdn = newNumber(imsi);
+			Engine.debug(Engine.DebugInfo,"Located imsi without msisdn. Allocated random number " + msisdn + " for imsi " + imsi);
+		    }
 		}
 	    }
-	} else if (msisdn==false) {
-	    // IMSI is not allowed
-	    addRejected(imsi);
-	    msg.error = "location-area-not-allowed";
-	    return false;
 	}
-    } else {
-	if (regexp == undefined) {
-	    Engine.alarm(alarm_conf,"Please configure accepted subscribers or regular expression to accept by.");
-	    // maybe reject everyone until system is configured ??
-	    // addRejected(imsi);
-	    msg.error = "network-failure";
-	    return false;
-	} else {
-	    // check that imsi is valid against regexp
+    }
 
-	    if (imsi.match(regexp)) {
+    if (!auth && regexp) {
+	// check that imsi is valid against regexp
+	if (imsi.match(regexp)) {
+	    auth = true;
+	    // if msisdn is set, then subscriber is set but is inactive, but since it matches regexp, allow him to keep msisdn
+	    if (!msisdn) {
 		// check if imsi is already registered so we don't allocate a new number
 		msisdn = alreadyRegistered(imsi);
 		if (msisdn==false) {
@@ -1277,12 +1301,22 @@ function onRegister(msg)
 			msisdn = newNumber(imsi);
 		    }
 		}
-	    } else {
-		addRejected(imsi);
-		msg.error = "location-area-not-allowed";
-		return false;
 	    }
 	}
+    }     
+
+    if (!subscribers && !regexp) {
+	Engine.alarm(alarm_conf,"Please configure accepted subscribers or regular expression to accept by.");
+	// maybe reject everyone until system is configured ??
+	// addRejected(imsi);
+	msg.error = "network-failure";
+	return false;
+    }
+
+    if (!auth || !msisdn) {
+	addRejected(imsi);
+	msg.error = "location-area-not-allowed";
+	return false;
     }
 
     if (tmsi=="")
@@ -1368,6 +1402,7 @@ function onComplete(msg, line, partial, part)
 	    oneCompletion(msg,"registered",part);
 	    oneCompletion(msg,"sms",part);
 	    oneCompletion(msg,"rejected",part);
+	    oneCompletion(msg,"accepted",part);
 	    return;
 	case "reload":
 	    oneCompletion(msg,"nib",part);
@@ -1399,6 +1434,14 @@ function onCommand(msg)
 	return false;
     }
     switch (msg.line) {
+	case "nib list accepted":
+	    var tmp = "IMSI            MSISDN \r\n";
+	    tmp += "--------------- ---------------\r\n";
+	    for (var imsi_key in registered_subscribers)
+		tmp += imsi_key+"   "+registered_subscribers[imsi_key]["msisdn"]+"\r\n";
+	    msg.retValue(tmp);
+	    return true;
+
 	case "nib list registered":
 	    var tmp = "IMSI            MSISDN \r\n";
 	    tmp += "--------------- ---------------\r\n";
