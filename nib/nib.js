@@ -25,6 +25,7 @@
  */
 
 #require "libchatbot.js"
+#require "lib_str_util.js"
 
 
 // -------------------------------------------------------------------
@@ -336,10 +337,10 @@ function updateSubscribersInfo()
 
 function updateSubscriber(fields, imsi)
 {
-    var fields_to_update = ["msisdn", "active", "ki", "op", "imsi_type", "short_number"];
+    var fields_to_update = ["msisdn", "active", "ki", "op", "opc", "imsi_type", "short_number"];
 
     if (subscribers[imsi]!=undefined) {
-	if (subscribers[imsi]["active"]==true && fields["active"]!=true) {
+	if (subscribers[imsi]["active"] && !fields["active"]) {
 	    // subscriber was deactivated. make sure to clean location from registered_subscribers
 	    if (registered_subscribers[imsi]!="" && registered_subscribers[imsi]["location"]!="") 
 		unregisterSubscriber(imsi);
@@ -397,14 +398,16 @@ function readConfiguration(return_subscribers)
 	upd_subscribers = [];
     }
 
-    var imsi, active, count=0;
+    var imsi, active, opc, count=0;
     for (var imsi in upd_subscribers) {
 	active = upd_subscribers[imsi].active;
 	active = active.toLowerCase();
-	if (active=="1" || active=="on" || active=="enable" || active=="yes")
-	    upd_subscribers[imsi].active = true;
-	else
-	    upd_subscribers[imsi].active = false;
+	upd_subscribers[imsi].active = parseBool(active,false);
+	
+	opc    = upd_subscribers[imsi].opc;
+	opc    = opc.toLowerCase();
+	upd_subscribers[imsi].opc    = parseBool(opc,false);
+
 	count++;
     }
 
