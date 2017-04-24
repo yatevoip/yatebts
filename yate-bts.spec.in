@@ -346,7 +346,7 @@ mkdir -p %{buildroot}/var/www/html
 ln -sf %{shrdir}/nib_web %{buildroot}/var/www/html/nib
 %else
 cp -rp nib/redir %{buildroot}/var/www/html/nib
-cp -p scripts/* %{buildroot}%{scrdir}/
+cp -p scripts/*.js* %{buildroot}%{scrdir}/
 echo -e '[scripts]\nbts_config=bts_config.js' > %{buildroot}%{cfgdir}/bts-jscript.conf
 echo -e '[scripts]\nnib_auth.sh' > %{buildroot}%{cfgdir}/bts-extmod.conf
 mkdir -p %{buildroot}%{shrdir}/api
