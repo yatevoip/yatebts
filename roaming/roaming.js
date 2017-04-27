@@ -605,9 +605,40 @@ function routeSMS(msg)
 	msg["sms.caller"] = caller;
 	addRoutingParams(msg,imsi,"o");
 	msg.retValue("ybts/IMSI"+imsi);
+	// Check if we can return the RPDU in 200 OK instead of new MESSAGE
+	if (("" != msg.sip_supported) && ("" != msg.rpdu)) {
+	    if (0 <= msg.sip_supported.indexOf("sms-response"))
+		msg.retValue("mt_" + msg.retValue());
+	}
     }
 
     return true;
+}
+
+/**
+ * Handle SMS submit or delivery
+ * @param msg Object. Message to be handled
+ */
+function onMsgExecute(msg)
+{
+    switch (msg.callto) {
+	case "smsc_yatebts":
+	    return onMoSMS(msg);
+	case /^mt_ybts[[:punct:]]/:
+	    break;
+	default:
+	    return false;
+    }
+    // We are here only if we should return RPDU in 200 OK
+    var m = new Message("msg.execute",false,msg);
+    m.handlers = undefined;
+    m.callto = msg.callto.substr(3);
+    var ok = m.dispatch(true);
+    if (m.rpdu != msg.xsip_body)
+	msg.xsip_body = m.rpdu;
+    msg.error = m.error;
+    msg.reason = m.reason;
+    return ok;
 }
 
 /**
@@ -1486,7 +1517,7 @@ Message.install(onRegister,"user.register",80);
 Message.install(onUnregister,"user.unregister",80);
 Message.install(onRoute,"call.route",80);
 Message.install(onAuth,"auth",80);
-Message.install(onMoSMS,"msg.execute",80,"callto","smsc_yatebts");
+Message.install(onMsgExecute,"msg.execute",80);
 Message.install(onDisconnected,"chan.disconnected",40);
 Message.install(onHangup,"chan.hangup",80,"module","ybts");
 Message.install(onExecute,"call.execute",80);
