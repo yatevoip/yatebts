@@ -232,16 +232,7 @@ API.on_get_nib_subscribers = function(params,msg)
 // Configure subscribers.conf params
 API.on_set_nib_subscribers = function(params,msg,setNode)
 {
-    // delete the 'regexp' param from general section
-    c = new ConfigFile(Engine.configFile("subscribers"));
-    if (!c.load("Could not load subscribers."))
-	return { name: "subscribers", object: {}, message: "File subscribers.conf not load."};
-    var error = new Object();
-    c.clearKey("general", "regexp");
-
-    if (!saveConf(error,c)) {
-	return error;
-    }
+    // don't delete the 'regexp' param from general section
 
     var subs = new SubscribersConfig;
     res = API.on_set_generic_file(subs,params,msg,setNode);
@@ -295,7 +286,8 @@ API.on_get_nib_system = function(params,msg)
 // Configure subscribers.conf params
 API.on_set_nib_system = function(params,msg,setNode)
 {
-    if (params[";regexp"]) {
+    // clearing regexp
+    if (params[";regexp"]==="") {
 	// delete the 'regexp' param from general section
 	c = prepareConf("subscribers",msg.received,false);
 	if (!c.load("Could not load subscribers."))
@@ -306,6 +298,8 @@ API.on_set_nib_system = function(params,msg,setNode)
 	if (!saveConf(error,c)) {
 	    return error;
 	}
+
+	return reloadNib();
     }
 
 
@@ -444,13 +438,17 @@ API.on_get_nib_outbound = function(params,msg)
     return { name: "outbound", object: res.outbound };
 };
 
-// Get online subscribers
-API.on_get_online_nib_subscribers = function(params,msg)
+// run NIB telnet command and return two column result as array of objects
+function imsis_telnet_command(command, name_in_result, name_in_message, column_names)
 {
     var m = new Message("engine.command");
-    m.line = "nib list registered";
-    if (!m.dispatch())
-        return { error: 402, reason: "Could not retrieve online subscribers from NIB." };
+    m.line = command;
+    m.cmd_width  = 1000;
+    m.cmd_height = 10000;
+    if (!m.dispatch()) {
+	var message = "Could not retrieve " + name_in_message;
+        return { error: 402, reason: message };
+    }
 
     var res = m.retValue();
     res = res.split("\n");
@@ -458,22 +456,24 @@ API.on_get_online_nib_subscribers = function(params,msg)
 	return { name: "count", object: 0 };
 
     var subscriber;
-    var msisdn;
-    var imsi;
+    var col0;
+    var col1;
 
     var reg_subs = {};
     var current_index;
     for (var i=2; i<res.length; i++) {
 	subscriber = res[i];
 	subscriber = subscriber.split(" ");
-	msisdn = subscriber[subscriber.length - 1];
-	imsi   = subscriber[0];
-	if (!imsi.length)
+	col1 = subscriber[subscriber.length - 1];
+	col0 = subscriber[0];
+	if (!col0.length)
 		continue;
-	if (msisdn.endsWith("\r"))
-		msisdn = msisdn.substr(0,msisdn.length-1);
+	if (col1.endsWith("\r"))
+		col1 = col1.substr(0,col1.length-1);
 	current_index = i-2;
-	var reg_subscriber = {"IMSI":imsi,"MSISDN":msisdn};
+	var reg_subscriber = {};
+        reg_subscriber[column_names[0]] = col0;
+        reg_subscriber[column_names[1]] = col1;
 	reg_subs[current_index] = reg_subscriber;
     }
 
@@ -486,7 +486,7 @@ API.on_get_online_nib_subscribers = function(params,msg)
 	    return { error: 402, reason: "Missing 'limit' in request" };
 
 	if (!total)
-	    return { name: "subscribers", object: {} };
+	    return { name: name_in_result, object: {} };
 
 	var i = 0;
 	var start = parseInt(params.offset);
@@ -496,69 +496,31 @@ API.on_get_online_nib_subscribers = function(params,msg)
 		delete reg_subs[subs];
 	    i++;
 	}
-	return { name: "subscribers", object: reg_subs };
+	return { name: name_in_result, object: reg_subs };
     } 
 
     return { name: "count", object: total };
+}
+
+// Get online subscribers
+API.on_get_online_nib_subscribers = function(params,msg)
+{
+    var column_names = ["IMSI", "MSISDN"];
+    return imsis_telnet_command("nib list registered", "subscribers", "online subscribers", column_names);
 };
 
 // Get rejected subscribers
 API.on_get_rejected_nib_subscribers = function(params,msg)
 {
-    var m = new Message("engine.command");
-    m.line = "nib list rejected";
-    if (!m.dispatch())
-        return { error: 402, reason: "Could not retrieve rejected IMSIs from NIB." };
+    var column_names = ["IMSI", "NO"];
+    return imsis_telnet_command("nib list rejected", "imsis", "rejected IMSIs", column_names);    
+};
 
-    var res = m.retValue();
-    res = res.split("\n");
-    if (res.length<=2)
-	return { name: "count", object: 0 };
-
-    var seen_imsi;
-    var no_attempts;
-    var imsi;
-
-    var rejected_subs = {};
-    var current_index;
-    for (var i=2; i<res.length; i++) {
-	seen_imsi = res[i];
-	seen_imsi = seen_imsi.split(" ");
-	no_attempts = seen_imsi[seen_imsi.length - 1];
-	imsi     = seen_imsi[0];
-	if (!imsi.length)
-		continue;
-	if (no_attempts.endsWith("\r"))
-		no_attempts = no_attempts.substr(0,no_attempts.length-1);
-	current_index = i-2;
-	var seen = {"IMSI":imsi,"NO":no_attempts};
-	rejected_subs[current_index] = seen;
-    }
-
-    var total = Object.keys(rejected_subs).length;
-
-    if (params.limit || params.offset) {
-	if (isMissing(params.offset))
-	    return { error: 402, reason: "Missing 'offset' from request." };
-	if (isMissing(params.limit))
-	    return { error: 402, reason: "Missing 'limit' from request." };
-
-	if (!total)
-	    return { name: "imsis", object: {} };
-
-	var i = 0;
-	var start = parseInt(params.offset);
-	var end = parseInt(params.limit);
-	for (var imsi in rejected_subs) {
-	    if (i < start || (i > (start+end)))
-		delete rejected_subs[imsi];
-	    i++;
-
-	}
-	return { name: "imsis", object: rejected_subs };
-    }
-    return { name: "count", object: total };
-
+// Get accepted subscribers
+API.on_get_accepted_nib_subscribers = function(params,msg)
+{
+    var column_names = ["IMSI", "MSISDN"];
+    return imsis_telnet_command("nib list accepted", "subscribers", "accepted subscribers", column_names);
 };
 
 function reloadNib()
