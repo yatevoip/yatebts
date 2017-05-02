@@ -9105,10 +9105,8 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 	    causeRp = 97; // Unknown message type
 	    SMS_CPDATA_DONE("unknown RP message " + String(rpMsgType));
 	}
-	if (rpMsgType == RPSMMAFromMs) {
-	    causeRp = 98; // Unexpected message
-	    SMS_CPDATA_DONE("unhandled RP-SMMA");
-	}
+	if (rpMsgType == RPSMMAFromMs)
+	    called = "SMMA";
 	// RP-DATA from MS
 	if (!called)
 	    Debug(this,DebugNote,

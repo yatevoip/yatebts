@@ -675,11 +675,15 @@ function onMoSMS(msg)
 
     addRoutingParams(msg,imsi,"i");
 
-    var dest = msg["sms.called"];
-    if (msg["sms.called.nature"]=="international" && dest.substr(0,1)!="+")
-	dest = "+"+dest;
-    if (msg.callednumtype=="international" && msg.called.substr(0,1)!="+")
-	msg.called = "+"+msg.called;
+    var dest;
+    var smma = ("SMMA" == msg.called);
+    if (!smma) {
+	dest = msg["sms.called"];
+	if (msg["sms.called.nature"]=="international" && dest.substr(0,1)!="+")
+	    dest = "+"+dest;
+	if (msg.callednumtype=="international" && msg.called.substr(0,1)!="+")
+	    msg.called = "+"+msg.called;
+    }
 
     var msisdn_caller = subscribers[imsi]["msisdn"];
 
@@ -687,7 +691,8 @@ function onMoSMS(msg)
     m.method = "MESSAGE";
     m.user = msisdn_caller; 
     m["sip_Supported"] = "sms-response";
-    m["sip_P-Called-Party-ID"] = "<tel:" + dest + ">";
+    if (!smma)
+	m["sip_P-Called-Party-ID"] = "<tel:" + dest + ">";
     if (text_sms && msg.text != "") {
 	m.xsip_type = "text/plain";
 	m.xsip_body = msg.text;
