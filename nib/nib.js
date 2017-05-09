@@ -688,6 +688,11 @@ function routeOutside(msg)
     if (msg.callednumtype=="international")
 	msg.called = "+"+msg.called;
 
+    if ("" != msg.caller) {
+	if (msg.caller.match(/^[1-9][0-9]{5,}$/))
+	    msg.caller = "+" + msg.caller;
+    }
+
     msg.line = "outbound";
     msg.retValue("line/"+msg.called);
 
