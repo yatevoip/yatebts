@@ -18,6 +18,7 @@
  */
 
 #require "nib_validations.js"
+#require "generic_validations.js"
 
 // Class and reimplemented methods to configure subscribers.conf 
 SubscribersConfig = function()
@@ -325,9 +326,12 @@ API.on_set_nib_outbound = function(params,msg)
     if (!params)
 	return { error: 402, reason: "Missing params in request" };
 
-    var outbound_params = {"sip": ["enabled","protocol", "username","password","server", "formats", "description", "registrar", "authname", "domain", "outbound","ip_transport","ip_transport_remoteip","ip_transport_remoteport", "ip_transport_localip", "ip_transport_localport", "localaddress", "keepalive", "match_port", "match_user"],
+    var outbound_params = {"sip": ["enabled","protocol", "username","password","server", "formats", "description", "registrar", "authname", "domain", "outbound","ip_transport","ip_transport_remoteip","ip_transport_remoteport", "ip_transport_localip", "ip_transport_localport", "localaddress", "keepalive", "match_port", "match_user", "interval", "out:caller"],
 	"iax":['enabled', 'protocol', 'username', 'password', 'server', 'description', 'interval', 'connection_id', 'ip_transport_localip', 'ip_transport_localport', 'trunking','trunk_timestamps', 'trunk_efficient_use', 'trunk_sendinterval', 'trunk_maxlen', 'trunk_nominits_sync_use_ts', 'trunk_nominits_ts_diff_restart', 'port']};
     var required_params = ["username", "server", "password"];
+
+    var int_params = ["ip_transport_remoteport","ip_transport_localport","keepalive","interval",'trunk_maxlen','port'];
+    var ip_params  = ["ip_transport_remoteip","ip_transport_liocalip","localaddress"];
 
     var outbound_conf = prepareConf("accfile",msg.received,false);
 
@@ -336,6 +340,11 @@ API.on_set_nib_outbound = function(params,msg)
     // keep existing section and values
     var current_config = outbound_conf.sections();
     for (section_name in current_config) {
+	if (section_name == "outbound") {
+	    outbound_conf.clearSection("outbound");
+	    continue;
+	}
+
 	section = current_config[section_name];
 	section_params = section.keys();
 	for (param_name of section_params)
@@ -369,10 +378,10 @@ API.on_set_nib_outbound = function(params,msg)
 	    if ( params['localaddress'] && params['localaddress'] == 'no' && params['keepalive'] != 0) 
 		return { error: 402, reason: "Invalid keepalive value if localaddress is not set." };
 
-	    if (params['ip_transport'] == 'UDP' && params['ip_transport_localip'] && params['ip_transport_localport']) 
+	    if (params['ip_transport'] == 'UDP' && !params['ip_transport_localip'] && params['ip_transport_localport']) 
 		return { error: 402, reason: "Field ip_transport_localip must be set. This parameter is used in conjuction ip_transport_localport to identify the transport to use." };
 
-	    if (params['ip_transport'] == 'UDP' && params['ip_transport_localip'] && params['ip_transport_localport'])
+	    if (params['ip_transport'] == 'UDP' && params['ip_transport_localip'] && !params['ip_transport_localport'])
 		return { error: 402, reason: "Field ip_transport_localport must be set. This parameter is used in conjuction ip_transport_localip to identify the transport to use." };
 
 	    if (params['ip_transport'] != 'UDP' && params['ip_transport_localport'])
@@ -394,11 +403,22 @@ API.on_set_nib_outbound = function(params,msg)
 	    var mess = "Protocol: " + params['protocol'] + " not allowed, only sip and iax accepted."; 
 	    return { error: 402, reason: mess };
 	}
+
 	//TBI: get all the existing data before writing the received parameters
 
+	var error = {};
 	//write data in file
 	for (var param_name in params) {
 	    var param_value = params[param_name];
+	    if (-1 != int_params.indexOf(param_name)) {
+		if (!checkValidInteger(error, param_name, param_value, "outbound"))
+		    return error;
+	    }
+	    if (-1 != ip_params.indexOf(param_name)) {
+		if (!checkValidIP(error, param_name, param_value, "outbound"))
+		    return error;	
+	    }
+	    
 	    outbound_conf.setValue("outbound",param_name,param_value);
 	}
     }
