@@ -818,8 +818,10 @@ function mtLocalDelivery(sms)
     m.caller = sms.smsc;
     m.called = sms.dest;
     m["sms.caller"] = sms.msisdn;
+    // msisdn is always in internatinal format
+    m["sms.caller.nature"] = "international";
+    m["sms.caller.plan"]   = "isdn";
     if (sms.msisdn.substr(0,1)=="+") {
-	m["sms.caller.nature"] = "international";
 	m["sms.caller"] = sms.msisdn.substr(1);
     }
     m.text= sms.msg;
@@ -901,7 +903,7 @@ function onSMS(msg)
 	msg.error = "1"; // Unassigned (unallocated) number
 	return false;
     }
-   
+
     var next_try = Date.now()/1000; 
     var sms = {"imsi":imsi, "msisdn":msisdn, "smsc":msg.called, "dest":dest, "dest_imsi":dest_imsi, "next_try":next_try, "tries":sms_attempts, "msg":msg.text };
 
@@ -1004,18 +1006,6 @@ function onRoute(msg)
 	}
     }
     called = orig_called;
-
-    if (subscribers) {
-	// call seems to be for outside
-	// must make sure caller is in our subscribers
-
-	if (caller_imsi=="" || subscribers[caller_imsi]=="") {
-	    msg.error = "service-unavailable"; // or maybe forbidden
-	    return true;
-	}
-
-	return routeOutside(msg);
-    }
 
     // registration is accepted based on IMSI regexp
     // check that caller is registered and then routeOutside
