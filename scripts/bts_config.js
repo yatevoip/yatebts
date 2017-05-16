@@ -27,7 +27,7 @@
 
 conf_node = "bts";
 // define configuration files that can be set/get 
-confs = ["cdrfile", "accfile", "subscribers", "ybts", "sdr", "ybladerf"];
+confs = ["cdrfile", "accfile", "subscribers", "ybts", "sdr", "ybladerf", "calibrate"];
 
 YbtsConfig = function()
 {
