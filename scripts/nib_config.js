@@ -330,8 +330,8 @@ API.on_set_nib_outbound = function(params,msg)
 	"iax":['enabled', 'protocol', 'username', 'password', 'server', 'description', 'interval', 'connection_id', 'ip_transport_localip', 'ip_transport_localport', 'trunking','trunk_timestamps', 'trunk_efficient_use', 'trunk_sendinterval', 'trunk_maxlen', 'trunk_nominits_sync_use_ts', 'trunk_nominits_ts_diff_restart', 'port']};
     var required_params = ["username", "server", "password"];
 
-    var int_params = ["ip_transport_remoteport","ip_transport_localport","keepalive","interval",'trunk_maxlen','port'];
-    var ip_params  = ["ip_transport_remoteip","ip_transport_liocalip","localaddress"];
+    var int_params = ["ip_transport_remoteport","ip_transport_localport","keepalive","interval",'trunk_maxlen','port','trunk_sendinterval','trunk_nominits_ts_diff_restart'];
+    var ip_params  = ["ip_transport_remoteip","ip_transport_localip","localaddress"];
 
     var outbound_conf = prepareConf("accfile",msg.received,false);
 
@@ -388,13 +388,16 @@ API.on_set_nib_outbound = function(params,msg)
 		return { error: 402, reason: "Invalid ip_transport. The Transport must be on UDP." };
 
 	} else if (params['protocol'] == 'iax') {
-	    if (params['trunk_sendinterval'] && params['trunk_sendinterval'] < 5)
+	    var trunk_sendinterval = parseInt(params['trunk_sendinterval']);
+	    if (params['trunk_sendinterval'] && trunk_sendinterval < 5)
 		return { error: 402, reason: "For trunk_sendinterval minimum allowed is 5." };
 
-	    if (params['trunk_maxlen'] && params['trunk_maxlen'] < 20)
+	    var trunk_maxlen = parseInt(params['trunk_maxlen']);
+	    if (params['trunk_maxlen'] && trunk_maxlen < 20)
 		return { error: 402, reason: "For trunk_maxlen minimum allowed is 20." };
 
-	    if (params['trunk_nominits_ts_diff_restart'] && params['trunk_nominits_ts_diff_restart'] < 1000)
+	    var trunk_nominits_ts_diff_restart = parseInt(params['trunk_nominits_ts_diff_restart']);
+	    if (params['trunk_nominits_ts_diff_restart'] && trunk_nominits_ts_diff_restart < 1000)
 		return { error: 402, reason: "For trunk_nominits_ts_diff_restart minimum allowed is 1000." };
 
 	    if (params['trunk_nominits_ts_diff_restart'] && params['trunk_nominits_ts_diff_restart'] && params['trunk_nominits_sync_use_ts'] == 'no')
