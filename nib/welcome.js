@@ -50,10 +50,6 @@ function onChanDtmf(msg)
 
     else if (msg.text == 2) 
 	Channel.callJust("conf/333",{"lonely":true});
-
-    else if (msg.text == 3)
-	Channel.callJust("iax/iax:32843@83.166.206.79/32843",{"caller":"yatebts"});
-	//Channel.callJust("iax/iax:090@192.168.1.1/090",{"caller":"yatebts"});
 }
 
 function welcomeIVR(msg)

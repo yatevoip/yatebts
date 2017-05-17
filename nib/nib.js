@@ -473,17 +473,19 @@ function numberAvailable(val,imsi)
 	}
     }
 
-    // check subscribers as well in case regexp and subscribers are used at the same time and some imsis from subscribers might not have been registered yet
-    for (imsi_key in subscribers) {
-	number = subscribers[imsi_key]["msisdn"];
-	if (number.substr(0,1)=="+")
-	    number = number.substr(1);
-	if (number==val) {
-	    if (imsi!=undefined && imsi==imsi_key)
-		// keep numbers already associated
-		return true;
-	    else
-		return false;
+    if (Array.isArray(subscribers)) {
+	// check subscribers as well in case regexp and subscribers are used at the same time and some imsis from subscribers might not have been registered yet
+	for (imsi_key in subscribers) {
+	    number = subscribers[imsi_key]["msisdn"];
+	    if (number.substr(0,1)=="+")
+		number = number.substr(1);
+	    if (number==val) {
+		if (imsi!=undefined && imsi==imsi_key)
+		    // keep numbers already associated
+		    return true;
+		else
+		    return false;
+	    }
 	}
     }
 
