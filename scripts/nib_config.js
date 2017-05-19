@@ -39,7 +39,8 @@ SubscribersConfig.prototype.validations = {
 	"country_code": {"callback": checkValidCC},
 	"smsc": {"callback": checkValidSMSC},
 	"gw_sos": {},
-	"regexp": {}
+	"regexp": {},
+	"sms_text": {}
     }
 };
 
@@ -153,9 +154,9 @@ SubscribersConfig.prototype.prepareConfig = function(params)
 	delete params.subscribers;
     }
 
-    if (params["regexp"] || params["country_code"] || params["smsc"] || params["gw_sos"] || params[";regexp"]) {
+    if (params["regexp"] || params["country_code"] || params["smsc"] || params["gw_sos"] || params[";regexp"] || params["sms_text"]) {
 	this.overwrite = false;
-	var general_sections = ["country_code", "regexp", "gw_sos", "smsc", ";regexp"];
+	var general_sections = ["country_code", "regexp", "gw_sos", "smsc", ";regexp", "sms_text"];
 
 	params["general"] =  new Object();
 	for (var i in general_sections) {
@@ -168,7 +169,7 @@ SubscribersConfig.prototype.prepareConfig = function(params)
 	this.sections.push("general");
 	var total = Object.keys(params).length;
 	if (total != 1 && !params["general"]["regexp"])
-	    this.params_required["general"] = ["country_code","smsc"];
+	    this.params_required["general"] = ["country_code","smsc","sms_text"];
     }
 
     this.genericPrepareConfig(params);
@@ -278,7 +279,7 @@ API.on_get_nib_system = function(params,msg)
     delete res.general["locked"];
 
     if (!res.general) {
-	res.general = {"country_code":"", "smsc":"", "regexp":""};
+	res.general = {"country_code":"", "smsc":"", "regexp":"", "sms_text":""};
     } 
 
     return { name: "nib_system", object: res.general};

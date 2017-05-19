@@ -374,6 +374,9 @@ function readConfiguration(return_subscribers)
     if (country_code.length==0)
 	Engine.alarm(alarm_conf,"Please configure country code. See subscribers.conf or use the NIB web interface");
     gw_sos = configuration["general"]["gw_sos"];
+    sms_registration = configuration["general"]["sms_text"];
+    if (!sms_registration)
+	    sms_registration = "Your allocated phone no. is ${nr}. Thank you for installing YateBTS. Call David at david(${david_number})";
 
     var reg = configuration["general"]["regexp"];
 
@@ -927,7 +930,10 @@ function sendGreetingMessage(imsi, msisdn)
 {
     if (msisdn.substr(0,1)=="+")
 	msisdn = msisdn.substr(1);
-    var msg_text = "Your allocated phone no. is "+msisdn+". Thank you for installing YateBTS. Call David at david("+david_number+")";
+
+   
+    var nrs = { "nr":msisdn, "david_number":david_number };
+    msg_text = Engine.replaceParams(sms_registration, nrs, false);
 
     message(msg_text,imsi,msisdn,9);
 }
