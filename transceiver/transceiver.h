@@ -460,8 +460,9 @@ public:
      * Initialize the transceiver. This method should be called after construction
      * @param radio The radio interface. The transceiver will own of the object
      * @param params Transceiver parameters
+     * @param code Radio failure code
      */
-    virtual bool init(RadioInterface* radio, const NamedList& params);
+    virtual bool init(RadioInterface* radio, const NamedList& params, unsigned int& code);
 
     /**
      * Re-Initialize the transceiver.
@@ -851,6 +852,13 @@ private:
     void stopARFCNs();
     // Sync upper layer GSM clock (update time)
     bool syncGSMTime(const char* msg = 0);
+    // Send exiting code on sync clock
+    inline bool syncGSMTimeExiting(unsigned int code, const char* oper = 0) {
+	    String tmp("EXITING code=");
+	    tmp << code;
+	    tmp.append(oper," operation=");
+	    return syncGSMTime(tmp);
+	}
     // Handle (NO)HANDOVER commands. Return status code
     int handleCmdHandover(bool on, unsigned int arfcn, String& cmd, String* rspParam);
     // Handle SETSLOT command. Return status code
@@ -862,7 +870,8 @@ private:
     // Handle SETTXATTEN command. Resturn status code.
     int handleCmdSetTxAttenuation(unsigned int arfcn, String& cmd, String* rspParam);
     // Handle RXTUNE/TXTUNE commands. Return status code
-    int handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String* rspParam);
+    int handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String* rspParam,
+	unsigned int& rCode);
     // Handle SETTSC commands. Return status code
     int handleCmdSetTsc(unsigned int arfcn, String& cmd, String* rspParam);
     // Handle SETRXGAIN command. Return status code
@@ -924,8 +933,9 @@ public:
      * Initialize the transceiver. This method should be called after construction
      * @param radio The radio interface. The transceiver will own of the object
      * @param params Transceiver parameters
+     * @param code Radio failure code
      */
-    virtual bool init(RadioInterface* radio, const NamedList& params);
+    virtual bool init(RadioInterface* radio, const NamedList& params, unsigned int& code);
 
     /**
      * Re-Initialize the transceiver.

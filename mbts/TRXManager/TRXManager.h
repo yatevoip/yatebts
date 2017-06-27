@@ -62,6 +62,7 @@ class TransceiverManager {
 	std::string mInitData;			///< Init data (for debug)
 
 	bool mExitRecv;                         ///< Exiting received from lower layer
+	bool m_statistics;                      ///< Statistics are enabled (BTS started)
 
 	public:
 
@@ -127,7 +128,8 @@ class TransceiverManager {
 	*/
 	int sendCommandPacket(const char* command, char* response);
 
-	bool sendCommand(const char* cmd, int* iParam = 0, const char* sParam = 0, int* rspParam = 0);
+	bool sendCommand(const char* cmd, int* iParam = 0, const char* sParam = 0,
+	    int* rspParam = 0, int arfcn = -1);
 
 	/**
 		Reset the transceiver
@@ -152,7 +154,10 @@ class TransceiverManager {
 		@return True on success.
 	*/
 	inline bool statistics(bool on)
-	{ return sendCommand("STATISTICS",0,on ? "ON" : "OFF"); }
+	{
+		m_statistics = on;
+		return sendCommand("STATISTICS",0,on ? "ON" : "OFF");
+	}
 
 	/** Clock service loop. */
 	friend void* ClockLoopAdapter(TransceiverManager*);

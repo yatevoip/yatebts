@@ -105,7 +105,7 @@ protected:
     void trxStop(const char* reason, int level = DebugNote, bool dumpStat = true,
 	bool notify = true);
     void changeState(int newState);
-    RadioInterface* createRadio(const NamedList& params);
+    RadioInterface* createRadio(NamedList& params);
 
 private:
     Mutex m_stateMutex;                  // Protect state changes
@@ -229,6 +229,8 @@ void GsmTrxModule::readCtrlLoop()
 	if (s.startSkip("CMD RESET ",false)) {
 	    trxStop("received RESET command",DebugNote,true,false);
 	    rsp << "RSP RESET " << trxStart(s);
+	    if (s)
+		rsp << " " << s;
 	    startRecv = true;
 	    stopRecv = (m_trx == 0);
 	}
@@ -498,8 +500,10 @@ void GsmTrxModule::ctrlStop()
 int GsmTrxModule::trxStart(String& cmdLine)
 {
     Lock lck(m_stateMutex);
-    if (Engine::exiting())
+    if (Engine::exiting()) {
+	cmdLine = "";
 	return Transceiver::CmdEInvalidState;
+    }
     NamedList params(*m_cfg.createSection("transceiver"));
     m_syncGsmTimeLast = 0;
     m_syncGsmTimeTout = 0;
@@ -509,10 +513,21 @@ int GsmTrxModule::trxStart(String& cmdLine)
     m_syncGsmTimeUs *= 1000;
     lck.drop();
     RadioInterface* r = createRadio(params);
-    if (!r)
+    if (!r) {
+	cmdLine = "";
+	const String& code = params[YSTRING("code")];
+	if (code)
+	    cmdLine << "code=" << code;
+	else {
+	    const String& reason = params[YSTRING("reason")];
+	    if (reason)
+		cmdLine << "reason=" << reason;
+	}
 	return Transceiver::CmdEFailure;
+    }
     lck.acquire(m_stateMutex);
     if (m_state != Waiting) {
+	cmdLine = "";
 	TelEngine::destruct(r);
 	return Transceiver::CmdEInvalidState;
     }
@@ -525,11 +540,15 @@ int GsmTrxModule::trxStart(String& cmdLine)
     TelEngine::destruct(m_trx);
     m_trx = new GsmTrxQMF;
     m_trx->debugChain(this);
-    bool ok = m_trx->init(r,params);
+    unsigned int code = 0;
+    bool ok = m_trx->init(r,params,code);
+    cmdLine = "";
     if (ok && m_trx->start()) {
 	changeState(Running);
 	return 0;
     }
+    if (!ok && code)
+	cmdLine << "code=" << code;
     TelEngine::destruct(m_trx);
     Alarm(this,"system",DebugWarn,"Failed to %s transceiver",
 	ok ? "start" : "initialize");
@@ -556,7 +575,7 @@ void GsmTrxModule::changeState(int newState)
     m_state = newState;
 }
 
-RadioInterface* GsmTrxModule::createRadio(const NamedList& params)
+RadioInterface* GsmTrxModule::createRadio(NamedList& params)
 {
     Message m("radio.create");
     m.addParam("module",name());
@@ -580,6 +599,7 @@ RadioInterface* GsmTrxModule::createRadio(const NamedList& params)
 	np->takeData();
 	return r;
     }
+    params.copyParams(m,"code,reason,error");
     const String& e = m[YSTRING("error")];
     Debug(this,DebugGoOn,"Failed to create radio interface: %s",
 	e.safe(ok ? "Unknown error" : "Message not handled"));

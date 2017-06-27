@@ -638,11 +638,13 @@ static inline int getCommand(String& buf, String& cmd)
 }
 
 static inline bool buildCmdRsp(String* rsp, const char* cmd, int status,
-    const char* param = 0)
+    const char* param = 0, unsigned int rCode = 0)
 {
     if (rsp) {
 	*rsp << "RSP " << cmd << " " << status;
 	rsp->append(param," ");
+	if (rCode)
+	    *rsp << " code=" << rCode;
     }
     return status == 0;
 }
@@ -1059,7 +1061,7 @@ Transceiver::~Transceiver()
 }
 
 // Initialize the transceiver. This method should be called after construction
-bool Transceiver::init(RadioInterface* radio, const NamedList& params)
+bool Transceiver::init(RadioInterface* radio, const NamedList& params, unsigned int& code)
 {
     if (m_state != Invalid) {
 	reInit(params);
@@ -1101,7 +1103,7 @@ bool Transceiver::init(RadioInterface* radio, const NamedList& params)
 	p.addParam("cmd:setSampleRate",
 	    String((uint64_t)(m_oversamplingRate * (13e6 / 48) + 1)));
 	p.addParam("cmd:setFilter","1500000");
-	unsigned int code = m_radio->setParams(p,false);
+	code = m_radio->setParams(p,false);
 	if (!radioCodeOk(code))
 	    break;
 	// I/O errors check
@@ -1204,9 +1206,15 @@ void Transceiver::runReadRadio()
 	unsigned int code = m_radio->read(io.timestamp,bufs,incTn);
 	if (thShouldExit(this))
 	    break;
-	if (!io.updateError(code == 0)) {
-	    Alarm(this,"system",DebugWarn,"Too many read errors, last: 0x%x %s [%p]",
-		code,RadioInterface::errorName(code),this);
+	unsigned int fatal = code & RadioInterface::FatalErrorMask;
+	if (fatal || !io.updateError(code == 0)) {
+	    if (fatal)
+		Alarm(this,"system",DebugWarn,"Fatal read error: 0x%x %s [%p]",
+		    code,RadioInterface::errorName(code),this);
+	    else
+		Alarm(this,"system",DebugWarn,"Too many read errors, last: 0x%x %s [%p]",
+		    code,RadioInterface::errorName(code),this);
+	    syncGSMTimeExiting(code,"radio-read");
 	    fatalError();
 	    break;
 	}
@@ -1507,11 +1515,21 @@ bool Transceiver::sendBurst(GSMTime time)
 	(float*)data.data(),data.length(),&m_txPowerScale);
     m_txIO.timestamp += data.length();
     m_txIO.bursts++;
-    if (m_txIO.updateError(code == 0))
+    if (!code) {
+	m_txIO.updateError(true);
 	return true;
-    if (!thShouldExit(this)) {
-	Alarm(this,"system",DebugWarn,"Too many send errors, last: 0x%x %s [%p]",
-	    code,RadioInterface::errorName(code),this);
+    }
+    if (code & RadioInterface::Cancelled)
+	return false;
+    unsigned int fatal = code & RadioInterface::FatalErrorMask;
+    if (fatal || !m_txIO.updateError(code == 0)) {
+	if (fatal)
+	    Alarm(this,"system",DebugWarn,"Fatal send error: 0x%x %s [%p]",
+		code,RadioInterface::errorName(code),this);
+	else
+	    Alarm(this,"system",DebugWarn,"Too many send errors, last: 0x%x %s [%p]",
+		code,RadioInterface::errorName(code),this);
+	syncGSMTimeExiting(code,"radio-send");
 	fatalError();
     }
     return false;
@@ -1606,6 +1624,7 @@ bool Transceiver::command(const char* str, String* rsp, unsigned int arfcn)
     String reason;
     String rspParam;
     int status = CmdEOk;
+    unsigned int rCode = 0;
     int c = getCommand(s,cmd);
     switch (c) {
 	case CmdHandover:
@@ -1626,7 +1645,7 @@ bool Transceiver::command(const char* str, String* rsp, unsigned int arfcn)
 	    break;
 	case CmdRxTune:
 	case CmdTxTune:
-	    status = handleCmdTune(c == CmdRxTune,arfcn,s,&rspParam);
+	    status = handleCmdTune(c == CmdRxTune,arfcn,s,&rspParam,rCode);
 	    break;
 	case CmdSetTsc:
 	    status = handleCmdSetTsc(arfcn,s,&rspParam);
@@ -1686,7 +1705,7 @@ bool Transceiver::command(const char* str, String* rsp, unsigned int arfcn)
     else
 	Debug(this,DebugAll,"Command '%s' (ARFCN=%u) RSP '%s'",str,arfcn,rspParam.c_str());
     syncGSMTime();
-    return buildCmdRsp(rsp,cmd,status,rspParam);
+    return buildCmdRsp(rsp,cmd,status,rspParam,rCode);
 }
 
 bool Transceiver::control(const String& oper, const NamedList& params)
@@ -2087,7 +2106,8 @@ int Transceiver::handleCmdSetTxAttenuation(unsigned int arfcn, String& cmd, Stri
 }
 
 // Handle RXTUNE/TXTUNE commands
-int Transceiver::handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String* rspParam)
+int Transceiver::handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String* rspParam,
+    unsigned int& rCode)
 {
     int code = CmdEFailure;
     while (true) {
@@ -2102,8 +2122,8 @@ int Transceiver::handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String*
 	freq *= 1000;
 	// Adjust frequency (we are using multiple ARFCNs)
 	freq += 600000;
-	unsigned int code = rx ? m_radio->setRxFreq(freq) : m_radio->setTxFreq(freq);
-	if (0 != (code & RadioInterface::NotExact) && m_freqNotExact) {
+	rCode = rx ? m_radio->setRxFreq(freq) : m_radio->setTxFreq(freq);
+	if (0 != (rCode & RadioInterface::NotExact) && m_freqNotExact) {
 	    uint64_t f = 0;
 	    if (rx)
 		m_radio->getRxFreq(f);
@@ -2111,9 +2131,9 @@ int Transceiver::handleCmdTune(bool rx, unsigned int arfcn, String& cmd, String*
 		m_radio->getTxFreq(f);
 	    int64_t delta = f ? (f - freq) : 0;
 	    if (delta && delta >= -(int)m_freqNotExact && delta <= (int)m_freqNotExact)
-		code &= ~RadioInterface::NotExact;
+		rCode &= ~RadioInterface::NotExact;
 	}
-	if (!radioCodeOk(code))
+	if (!radioCodeOk(rCode))
 	    break;
 	double& f = rx ? m_rxFreq : m_txFreq;
 	f = freq;
@@ -2532,16 +2552,16 @@ static void adjustParam(TransceiverObj* obj, NamedList& p, const String& param,
 }
 
 // Initialize the transceiver. This method should be called after construction
-bool TransceiverQMF::init(RadioInterface* radio, const NamedList& params)
+bool TransceiverQMF::init(RadioInterface* radio, const NamedList& params, unsigned int& code)
 {
     if (m_state != Invalid)
-	return Transceiver::init(radio,params);
+	return Transceiver::init(radio,params,code);
     // First init: adjust ARFCNs and oversampling
     NamedList p(params);
     adjustParam(this,p,YSTRING("oversampling"),8);
     adjustParam(this,p,YSTRING("arfcns"),4);
     p.addParam("conf_arfcns",params.getValue(YSTRING("arfcns"),"1"));
-    return Transceiver::init(radio,p);
+    return Transceiver::init(radio,p,code);
 }
 
 // Re-Initialize the transceiver

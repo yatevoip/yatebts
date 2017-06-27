@@ -1073,6 +1073,7 @@ protected:
     int handlePDU(YBTSMessage& msg);
     void handleRRM(YBTSMessage& msg);
     int handleHandshake(YBTSMessage& msg);
+    int handleStopNotification(YBTSMessage& msg);
     void printMsg(YBTSMessage& msg, bool recv);
     void setTimer(uint64_t& dest, const char* name, unsigned int intervalMs,
 	uint64_t timeUs = Time::now()) {
@@ -2169,6 +2170,7 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(PdpDeactivate),
     MAKE_SIG(Handshake),
     MAKE_SIG(RadioReady),
+    MAKE_SIG(Stop),
     MAKE_SIG(StartPaging),
     MAKE_SIG(StopPaging),
     MAKE_SIG(NeighborsList),
@@ -2176,6 +2178,17 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(HandoverReject),
     MAKE_SIG(Heartbeat),
 #undef MAKE_SIG
+    {0,0}
+};
+
+static const TokenDict s_stopInfoName[] = {
+#define MAKE_BTS_NAME(x) {#x, Bts##x}
+    MAKE_BTS_NAME(Normal),
+    MAKE_BTS_NAME(RadioLost),
+    MAKE_BTS_NAME(InternalError),
+    MAKE_BTS_NAME(RadioExiting),
+    MAKE_BTS_NAME(RadioError),
+#undef MAKE_BTS_NAME
     {0,0}
 };
 
@@ -2837,6 +2850,16 @@ static inline XmlElement* buildTID(const char* callRef, bool tiFlag)
     return tid;
 }
 
+static inline void appendChildText(String& str, const XmlElement* x, const String& name)
+{
+    x = x ? x->findFirstChild(name) : 0;
+    if (!x)
+	return;
+    if (str)
+	str << " ";
+    str << name << "=" << x->getText();
+}
+
 
 //
 // YBTSConnAuth
@@ -3261,6 +3284,10 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
 	case SigHandoverReject:
 	case SigGprsAttachOk:
 	case SigGprsDetach:
+	    break;
+	case SigStop:
+	    if (len)
+		m->m_xml = decodeTagged("Stop",String((const char*)data,len));
 	    break;
 	default:
 	    reason = "No decoder";
@@ -4976,6 +5003,8 @@ int YBTSSignalling::handlePDU(YBTSMessage& msg)
 	    dropConn(msg.connId(),false);
 	    dropGprsConn(msg.connId(),false);
 	    return Ok;
+	case SigStop:
+	    return handleStopNotification(msg);
     }
     Debug(this,DebugNote,"Unhandled message %u (%s) [%p]",msg.primitive(),msg.name(),this);
     return Ok;
@@ -5045,6 +5074,39 @@ int YBTSSignalling::handleHandshake(YBTSMessage& msg)
 	return FatalError;
     }
     return Error;
+}
+
+int YBTSSignalling::handleStopNotification(YBTSMessage& msg)
+{
+    if (__plugin.stopping() || m_state < Running)
+	return Ok;
+    bool restart = true;
+    String s;
+    String notif = lookup(msg.info(),s_stopInfoName);
+    if (!notif)
+	notif = msg.info();
+    if (msg.xml()) {
+	const String* code = msg.xml()->childText(YSTRING("code"));
+	if (!TelEngine::null(code)) {
+	    unsigned int n = (unsigned int)code->toInt64(0);
+	    if (n) {
+		String tmp;
+		s << tmp.printf(" code=0x%x (%s)",n,RadioInterface::errorName(n));
+		if (n & RadioInterface::NoAutoRestartMask)
+		    restart = false;
+	    }
+	    else
+		s << " code=" << *code;
+	}
+	else
+	    appendChildText(s,msg.xml(),YSTRING("reason"));
+	appendChildText(s,msg.xml(),YSTRING("operation"));
+    }
+    if (restart)
+	Debug(this,DebugNote,"Peer stop notification '%s'%s [%p]",notif.c_str(),s.safe(),this);
+    else
+	Alarm(this,"system",DebugWarn,"Peer fatal stop notification '%s'%s [%p]",notif.c_str(),s.safe(),this);
+    return restart ? Error : FatalError;
 }
 
 void YBTSSignalling::printMsg(YBTSMessage& msg, bool recv)
@@ -10851,6 +10913,12 @@ void YBTSDriver::genUpdate(Message& msg)
     Driver::genUpdate(msg);
     msg.setParam("state",stateName());
     msg.setParam("operational",String::boolText(RadioUp == m_state));
+    bool restart = true;
+    if (Idle == m_state) {
+	Lock lck(m_stateMutex);
+	restart = (Idle != m_state) || m_restart;
+    }
+    msg.setParam("autorestart",String::boolText(restart));
 }
 
 bool YBTSDriver::initOpMode()

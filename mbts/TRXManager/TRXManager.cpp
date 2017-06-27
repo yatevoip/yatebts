@@ -48,12 +48,38 @@ static inline void addAddr(std::string& dest, const char* ip, int port, const ch
     dest.append(tmp);
 }
 
+// Send terminate signal to upper layer
+// Wait for thread to be cancelled (give upper layer some time to terminate)
+// exit/abort application
+static void terminate(unsigned int info, int doExit = 1, const void* data = 0, int len = 0,
+	unsigned int waitMs = 3000)
+{
+	if (info < 256 && gSigConn.valid()) {
+		if (data && len)
+			gSigConn.send(Connection::SigStop,info,data,len);
+		else
+			gSigConn.send(Connection::SigStop,info);
+		// Make sure the upper layer reads our notification
+		if (!waitMs)
+			waitMs = 200;
+	}
+	for (waitMs += waitMs & 19; waitMs; waitMs -= 20) {
+		pthread_testcancel();
+		msleep(20);
+	}
+	if (doExit > 0)
+		exit(0);
+	else if (doExit < 0)
+		abort();
+}
+
+
 TransceiverManager::TransceiverManager(int numARFCNs, int wBasePort,
 		const char* wTRXAddress, const char* wLocalAddr)
 	:mHaveClock(false),
 	mClockSocket(wBasePort+3,wLocalAddr),
 	mControlSocket(wBasePort+1,wTRXAddress,wBasePort,wLocalAddr),
-	mExitRecv(false)
+	mExitRecv(false), m_statistics(false)
 {
 	addAddr(mInitData,wLocalAddr,wBasePort + 1,"\r\nControl: ");
 	addAddr(mInitData,wTRXAddress,wBasePort," - ");
@@ -126,19 +152,29 @@ int TransceiverManager::sendCommandPacket(const char* command, char* response)
 }
 
 bool TransceiverManager::sendCommand(const char* cmd, int* iParam, const char* sParam,
-	int* rspParam)
+	int* rspParam, int arfcn)
 {
 	if (!cmd)
 		return false;
 	// Send command and get response.
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
-	if (iParam)
-		sprintf(cmdBuf,"CMD %s %d", cmd, *iParam);
-	else if (sParam)
-		sprintf(cmdBuf,"CMD %s %s", cmd, sParam);
-	else
-		sprintf(cmdBuf,"CMD %s", cmd);
+	if (arfcn < 0) {
+		if (iParam)
+			sprintf(cmdBuf,"CMD %s %d", cmd, *iParam);
+		else if (sParam)
+			sprintf(cmdBuf,"CMD %s %s", cmd, sParam);
+		else
+			sprintf(cmdBuf,"CMD %s", cmd);
+	}
+	else {
+		if (iParam)
+			sprintf(cmdBuf,"CMD %d %s %d", arfcn, cmd, *iParam);
+		else if (sParam)
+			sprintf(cmdBuf,"CMD %d %s %s", arfcn, cmd, sParam);
+		else
+			sprintf(cmdBuf,"CMD %d %s", arfcn, cmd);
+	}
 	int rspLen = sendCommandPacket(cmdBuf,response);
 	int status = -1;
 	if (rspLen > 0) {
@@ -155,10 +191,36 @@ bool TransceiverManager::sendCommand(const char* cmd, int* iParam, const char* s
 		return true;
 	if (exiting())
 		return false;
-	LOG(ALERT) << cmd << " failed with status " << status;
+	char* extra = 0;
+	if (rspLen > 0) {
+		// 'RSP CMD_NAME {FIRST_NUMBER} [SECOND_NUMBER] ...'
+		int offset = strlen(cmd) + 5;
+		if (offset < rspLen) {
+			extra = ::strchr(response + offset,' ');
+			if (extra && rspParam)
+				extra = ::strchr(extra + 1,' ');
+			if (extra && !*extra)
+				extra = 0;
+		}
+	}
+	if (extra) {
+		LOG(ALERT) << cmd << " failed with status " << status << " extra:" << extra;
+	}
+	else {
+		LOG(ALERT) << cmd << " failed with status " << status;
+	}
+	// Send notification for errors!
+	// Handle some fatal errors during initialize/start
+	// status > 0 means we've got error from transceiver!
+	if (extra && !m_statistics && status > 0 && ((0 == strcmp(cmd,"RESET")) ||
+		(0 == strcmp(cmd,"RXTUNE")) || (0 == strcmp(cmd,"TXTUNE")))) {
+		std::string s(extra);
+		s.append(" operation=");
+		s.append(cmd);
+		terminate(Connection::BtsRadioError,0,(const void*)s.c_str(),s.length(),0);
+	}
 	return false;
 }
-
 
 
 void* ClockLoopAdapter(TransceiverManager *transceiver)
@@ -194,12 +256,15 @@ void TransceiverManager::clockHandler()
 			static int foo = 0;
 			pthread_exit(&foo);
 		}
-		else
-			abort();
+		else {
+			mHaveClock = false;
+			terminate(Connection::BtsRadioLost,-1);
+		}
 	}
 
 	if (msgLen==0) {
 		LOG(ALERT) << "read error on TRX clock interface, return " << msgLen;
+		terminate(Connection::BtsInternalError);
 		return;
 	}
 
@@ -216,9 +281,10 @@ void TransceiverManager::clockHandler()
 		LOG(NOTICE) << "TRX clock 'EXITING' indication";
 		mExitRecv = true;
 		mHaveClock = false;
-		// Give some time to upper layer to terminate us
-		::sleep(3);
-		::exit(0);
+		if (buffer[7] == 32)
+			terminate(Connection::BtsRadioExiting,1,&buffer[8],msgLen - 8);
+		else
+			terminate(Connection::BtsRadioExiting);
 	}
 
 	buffer[msgLen]='\0';
@@ -447,21 +513,13 @@ bool ::ARFCNManager::tune(int wARFCN, bool c0)
 	if (!c0)
 		return true;
 	// convert ARFCN number to a frequency
-	unsigned rxFreq = uplinkFreqKHz(gBTS.band(),wARFCN);
-	unsigned txFreq = downlinkFreqKHz(gBTS.band(),wARFCN);
-	// tune rx
-	int status = sendCommand("RXTUNE",rxFreq);
-	if (status!=0) {
-		LOG(ALERT) << "RXTUNE failed with status " << status;
+	int rxFreq = uplinkFreqKHz(gBTS.band(),wARFCN);
+	int txFreq = downlinkFreqKHz(gBTS.band(),wARFCN);
+	int rsp = 0;
+	if (!mTransceiver.sendCommand("RXTUNE",&rxFreq,0,&rsp,mArfcnPos))
 		return false;
-	}
-	// tune tx
-	status = sendCommand("TXTUNE",txFreq);
-	if (status!=0) {
-		LOG(ALERT) << "TXTUNE failed with status " << status;
+	if (!mTransceiver.sendCommand("TXTUNE",&txFreq,0,&rsp,mArfcnPos))
 		return false;
-	}
-	// done
 	return true;
 }
 

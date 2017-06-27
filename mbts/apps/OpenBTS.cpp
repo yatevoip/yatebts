@@ -289,7 +289,8 @@ int main(int argc, char *argv[])
 	unsigned C0 = gConfig.getNum("GSM.Radio.C0");
 	unsigned numARFCNs = gConfig.getNum("GSM.Radio.ARFCNs");
 	// TODO what to do if tuning faild?
-	C0radio->tune(C0,true);
+	if (!C0radio->tune(C0,true))
+		return 1;
 	for (unsigned i=1; i<numARFCNs; i++) {
 		// Tune the radios.
 		unsigned ARFCN = C0 + i*2;
