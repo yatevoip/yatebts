@@ -143,11 +143,18 @@ static void processHandover(SigConnection* conn, unsigned char info)
 }
 
 
-bool SigConnection::send(BtsPrimitive prim, unsigned char info)
+bool SigConnection::send(BtsPrimitive prim, unsigned char info, const void* data, size_t len)
 {
     assert((prim & 0x80) != 0);
     if (!valid())
 	return false;
+    if (data && len) {
+	unsigned char buf[len + 2];
+	buf[0] = (unsigned char)prim;
+	buf[1] = info;
+	::memcpy(buf + 2,data,len);
+	return send(buf,len + 2);
+    }
     unsigned char buf[2];
     buf[0] = (unsigned char)prim;
     buf[1] = info;
