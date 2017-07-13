@@ -364,7 +364,7 @@ int main(int argc, char *argv[])
 	};
 	Thread C0T0SDCCHControlThread[4];
 	// Subchannel 2 used for CBCH if SMSCB enabled.
-	bool SMSCB = (gConfig.getStr("Control.SMSCB.Table").length() != 0);
+	bool SMSCB = gConfig.getBool("Control.SMSCB");
 	CBCHLogicalChannel CBCH(gSDCCH_4_2);
 	Thread CBCHControlThread;
 	for (int i=0; i<4; i++) {

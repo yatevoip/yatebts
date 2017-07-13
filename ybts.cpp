@@ -2176,6 +2176,8 @@ const TokenDict YBTSMessage::s_priName[] =
     MAKE_SIG(NeighborsList),
     MAKE_SIG(HandoverRequest),
     MAKE_SIG(HandoverReject),
+    MAKE_SIG(BroadcastWrite),
+    MAKE_SIG(BroadcastKill),
     MAKE_SIG(Heartbeat),
 #undef MAKE_SIG
     {0,0}
@@ -2645,6 +2647,24 @@ static inline bool addXmlFromParam(ObjList& dest, const NamedList& list,
     if (p)
 	dest.append(new XmlElement(tag,p));
     return !p.null();
+}
+
+// Conditionally add an xml child element from list parameter
+static bool addXmlFromParam(XmlElement& xml, const NamedList& list, const String& param, bool onlyNumber = false)
+{
+    const String& p = list[param];
+    if (p) {
+	if (onlyNumber && (p.toInteger(-1) < 0))
+	    return false;
+	String buf;
+	XmlSaxParser::escape(buf,p);
+	buf.trimBlanks();
+	if (buf) {
+	    xml.addChildSafe(new XmlElement(param,buf));
+	    return true;
+	}
+    }
+    return false;
 }
 
 // Safely retrieve a global string
@@ -3370,6 +3390,8 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
 	    break;
 	case SigStartPaging:
 	case SigStopPaging:
+	case SigBroadcastWrite:
+	case SigBroadcastKill:
 	    if (!msg.xml()){
 		reason = "Missing XML";
 		break;
@@ -10754,6 +10776,41 @@ bool YBTSDriver::received(Message& msg, int id)
 		    m_hoListMutex.unlock();
 		    Debug(this,DebugMild,"Handover Request %d failed (%s)",ref,err);
 		    return false;
+		}
+		if (oper == YSTRING("cbadd")) {
+		    id = msg.getIntValue(YSTRING("id"),-1);
+		    if ((id < 0) || (id >= 0xffff))
+			return false;
+		    YBTSSignalling* sig = signalling();
+		    if (!sig)
+			return false;
+		    XmlElement* xml = new XmlElement("CB");
+		    xml->addChildSafe(new XmlElement("id",String(id)));
+		    addXmlFromParam(*xml,msg,YSTRING("gs"),true);
+		    if (!(addXmlFromParam(*xml,msg,YSTRING("code"),true)
+			    && addXmlFromParam(*xml,msg,YSTRING("dcs"),true)
+			    && addXmlFromParam(*xml,msg,YSTRING("data")))) {
+			TelEngine::destruct(xml);
+			return false;
+		    }
+		    YBTSMessage m(SigBroadcastWrite,0,0,xml);
+		    return sig->send(m);
+		}
+		if (oper == YSTRING("cbdel")) {
+		    const String& mid = msg[YSTRING("id")];
+		    id = mid.toInteger(-1);
+		    if ((mid == "*") || (mid == "all"))
+			id = 0xffff;
+		    if ((id < 0) || (id > 0xffff))
+			return false;
+		    YBTSSignalling* sig = signalling();
+		    if (!sig)
+			return false;
+		    XmlElement* xml = new XmlElement("CB");
+		    xml->addChildSafe(new XmlElement("id",String(id)));
+		    addXmlFromParam(*xml,msg,YSTRING("code"),true);
+		    YBTSMessage m(SigBroadcastKill,0,0,xml);
+		    return sig->send(m);
 		}
 		return false;
 	    }

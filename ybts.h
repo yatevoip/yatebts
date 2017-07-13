@@ -69,6 +69,8 @@ enum BtsPrimitive {
     SigHandoverRequest  = 133,           // Requests resources for inbound handover
     SigHandoverReject   = 134,           // Handover resources allocation failed
     SigStop             = 135,           // Stop notification
+    SigBroadcastWrite   = 136,           // Write-replace Cell Broadcast
+    SigBroadcastKill    = 137,           // Cancel a Cell Broadcast
     SigHeartbeat        = 255            // Heartbeat
 };
 

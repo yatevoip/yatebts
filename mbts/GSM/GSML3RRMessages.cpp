@@ -385,7 +385,7 @@ void L3SIType4RestOctets::writeText(std::ostream& os) const
 
 L3SystemInformationType4::L3SystemInformationType4()
 	:L3RRMessageRO(),
-	mHaveCBCH(gConfig.getStr("Control.SMSCB.Table").length() != 0),
+	mHaveCBCH(gConfig.getBool("Control.SMSCB")),
 	mCBCHChannelDescription(SDCCH_4_2,0,gConfig.getNum("GSM.Identity.BSIC.BCC"),gConfig.getNum("GSM.Radio.C0"))
 { }
 

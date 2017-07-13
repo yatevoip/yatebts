@@ -33,7 +33,7 @@
 
 using namespace Connection;
 
-#define BUF_LEN 260
+#define BUF_LEN 1024
 #define SLEEP_US 20000
 
 GenConnection::~GenConnection()

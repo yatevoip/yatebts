@@ -139,16 +139,13 @@ ConfigurationKeyMap getConfigurationKeys()
 	map[tmp->getName()] = *tmp;
 	delete tmp;
 
-	tmp = new ConfigurationKey("Control.SMSCB.Table","",
+	tmp = new ConfigurationKey("Control.SMSCB","no",
 		"",
-		ConfigurationKey::CUSTOMERWARN,
-		ConfigurationKey::FILEPATH_OPT,// audited
+		ConfigurationKey::CUSTOMER,
+		ConfigurationKey::BOOLEAN,
 		"",
 		true,
-		"File path for SMSCB scheduling database.  "
-			"By default, this feature is disabled.  "
-			"To enable, specify a file path for the database e.g. /var/run/SMSCB.db.  "
-			"To disable again, execute \"unconfig Control.SMSCB.Table\"."
+		"Configure a Cell Broadcast channel instead of SDCCH/4-2."
 	);
 	map[tmp->getName()] = *tmp;
 	delete tmp;

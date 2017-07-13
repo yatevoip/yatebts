@@ -517,7 +517,6 @@ CBCHLogicalChannel::CBCHLogicalChannel(const CompleteMapping& wMapping)
 {
 	mL1 = new CBCHL1FEC(wMapping.LCH());
 	mL2[0] = new CBCHL2;
-	mSACCH = new SACCHLogicalChannel(0,0,wMapping.SACCH(),this);
 	connect();
 }
 

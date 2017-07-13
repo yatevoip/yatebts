@@ -15,6 +15,7 @@
 
 #include "GSMTAPDump.h"
 #include "GSMTransfer.h"
+#include "GSMConfig.h"
 #include <Sockets.h>
 #include <Globals.h>
 #include <Logger.h>
@@ -48,9 +49,16 @@ unsigned int buildHeader(char* buffer, unsigned int len,
 			scn = 0;
 			break;
 
+		case GSM::SDCCH_4_2:
+			if (gBTS.getCBCH()) {
+				stype = GSMTAP_CHANNEL_CBCH51;
+				scn = 2;
+				is_saach = false;
+				break;
+			}
+			// fall through
 		case GSM::SDCCH_4_0:
 		case GSM::SDCCH_4_1:
-		case GSM::SDCCH_4_2:
 		case GSM::SDCCH_4_3:
 			stype = GSMTAP_CHANNEL_SDCCH4;
 			scn = to - GSM::SDCCH_4_0;

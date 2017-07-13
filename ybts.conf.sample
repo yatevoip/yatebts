@@ -268,6 +268,12 @@ Radio.C0=
 ; Defaults to yes.
 ;VEA=yes
 
+; SMSCB: boolean: Add support for the Cell Broadcast service.
+; If enabled the SDDCH/4-2 of a C-V will be configured to act as a CBCH.
+; Since this leaves ony 3 SDCCHs you should add a C-VII in [gsm_advanced]
+; Defaults to no.
+;SMSCB=no
+
 ; LUR.AttachDetach: boolean: Use the attach/detach procedure.
 ; This will make initial LUR more prompt.
 ; It will also cause an un-registration if the handset powers off, and really

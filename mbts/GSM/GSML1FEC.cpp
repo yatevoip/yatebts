@@ -2096,6 +2096,7 @@ void CBCHL1Encoder::sendFrame(const L2Frame& frame)
 	// Sync to (FN/51)%8==0 at the start of a new block.
 	if (frame.peekField(4,4)==0) {
 		mNextWriteTime.rollForward(mMapping.frameMapping(0),51*8);
+		mPrevWriteTime = mNextWriteTime - 64;
 	}
 	// Transmit.
 	XCCHL1Encoder::sendFrame(frame);
