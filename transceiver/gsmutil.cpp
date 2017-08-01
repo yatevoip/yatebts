@@ -109,7 +109,7 @@ GSMTxBurst* GSMTxBurst::parse(const uint8_t* buf, unsigned int len,
     burst->m_powerLevel = ::pow(10, -(float)buf[5] / 10);
     // This should be between 0 and 1
     if (burst->m_powerLevel < 0 || burst->m_powerLevel > 1) {
-	Debug(DebugGoOn,"Clamping received TX burst power level %u (%g) to [0..1]",
+	Debug(DebugCrit,"Clamping received TX burst power level %u (%g) to [0..1]",
 	    buf[5],burst->m_powerLevel);
 	if (burst->m_powerLevel < 0)
 	    burst->m_powerLevel = 0;

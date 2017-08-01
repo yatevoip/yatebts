@@ -3363,7 +3363,7 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
     static uint8_t zeroStr = 0;
     if (msg.hasConnId()) {
 	if (msg.connId() == NO_CONN_ID) {
-	    Debug(sender,DebugGoOn,"Failed to build %s (%u): No connection ID [%p]",
+	    Debug(sender,DebugCrit,"Failed to build %s (%u): No connection ID [%p]",
 		msg.name(),msg.primitive(),sender);
 	    return false;
 	}
@@ -3987,7 +3987,7 @@ void YBTSLog::processLoop()
 	if ((what & BTS_RELAY_MASK) == 0) {
 	    switch (first & 0x3f) {
 		case LOG_EMERG:
-		    level = DebugGoOn;
+		    level = DebugCrit;
 		    break;
 		case LOG_CRIT:
 		    alrm = true;
@@ -4028,13 +4028,13 @@ void YBTSLog::processLoop()
 	if (parseRelayLog(alrm,buffer,rd - 1,component,info)) {
 	    if (alrm && !component && warnInvalidAlarm) {
 		warnInvalidAlarm = false;
-		Debug(this,DebugGoOn,"Log got message with empty alarm component");
+		Debug(this,DebugWarn,"Log got message with empty alarm component");
 	    }
 	}
 	else {
 	    if (warnInvalidMsg) {
 		warnInvalidMsg = false;
-		Debug(this,DebugGoOn,"Log got message with missing NULLs at buffer end");
+		Debug(this,DebugWarn,"Log got message with missing NULLs at buffer end");
 	    }
 	    // Overwrite last chars in received buffer to leave space for relayOutput
 	    // NOTE: We assume the read buffer is large enough
@@ -6218,7 +6218,7 @@ bool YBTSMM::handlePagingResponse(YBTSMessage& m, YBTSConn* conn, XmlElement& rs
 void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Oops! IdentityResponse conn=%u: no connection [%p]",
+	Debug(this,DebugWarn,"Oops! IdentityResponse conn=%u: no connection [%p]",
 	    m.connId(),this);
 	__plugin.signalling()->dropConn(m.connId(),true);
 	return;
@@ -6287,7 +6287,7 @@ void YBTSMM::handleIdentityResponse(YBTSMessage& m, const XmlElement& xml, YBTSC
 void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement* xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Rejecting LocationUpdatingRequest conn=%u: no connection [%p]",
+	Debug(this,DebugWarn,"Rejecting LocationUpdatingRequest conn=%u: no connection [%p]",
 	    m.connId(),this);
 	sendLocationUpdateReject(m,0,CauseProtoError);
 	return;
@@ -6373,7 +6373,7 @@ void YBTSMM::handleLocationUpdate(YBTSMessage& m, const XmlElement* xml, YBTSCon
 void YBTSMM::handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Rejecting TMSIReallocationComplete conn=%u: no connection [%p]",
+	Debug(this,DebugWarn,"Rejecting TMSIReallocationComplete conn=%u: no connection [%p]",
 	    m.connId(),this);
 	sendLocationUpdateReject(m,0,CauseProtoError);
 	return;
@@ -6385,7 +6385,7 @@ void YBTSMM::handleUpdateComplete(YBTSMessage& m, const XmlElement& xml, YBTSCon
 void YBTSMM::handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Ignoring IMSIDetachIndication conn=%u: no connection [%p]",
+	Debug(this,DebugWarn,"Ignoring IMSIDetachIndication conn=%u: no connection [%p]",
 	    m.connId(),this);
 	return;
     }
@@ -6425,7 +6425,7 @@ void YBTSMM::handleIMSIDetach(YBTSMessage& m, const XmlElement& xml, YBTSConn* c
 void YBTSMM::handleCMServiceRequest(YBTSMessage& m, const XmlElement& xml, YBTSConn* conn)
 {
     if (!conn) {
-	Debug(this,DebugGoOn,"Rejecting CMServiceRequest conn=%u: no connection [%p]",
+	Debug(this,DebugWarn,"Rejecting CMServiceRequest conn=%u: no connection [%p]",
 	    m.connId(),this);
 	sendCMServiceRsp(m,0,CauseProtoError);
 	return;
@@ -6594,13 +6594,13 @@ uint8_t YBTSMM::setConnUE(YBTSConn& conn, YBTSUE* ue, const XmlElement& req,
 {
     const String* type = req.getAttribute(s_type);
     if (!ue) {
-	Debug(this,DebugGoOn,"Rejecting %s: no UE object [%p]",
+	Debug(this,DebugCrit,"Rejecting %s: no UE object [%p]",
 	    (type ? type->c_str() : "unknown"),this);
 	return CauseProtoError;
     }
     if (conn.setUE(ue))
 	return 0;
-    Debug(this,DebugGoOn,"Rejecting %s: UE mismatch on connection %u [%p]",
+    Debug(this,DebugCrit,"Rejecting %s: UE mismatch on connection %u [%p]",
 	(type ? type->c_str() : "unknown"),conn.connId(),this);
     if (dropConn)
 	*dropConn = true;
@@ -8714,7 +8714,7 @@ bool YBTSDriver::handleUssd(Message& msg, bool update)
 	if (o) {
 	    YBTSTid* ss = static_cast<YBTSTid*>(o->get());
 	    if (ss->m_type != YBTSTid::Ussd) {
-		Debug(this,DebugGoOn,"%s for non USSD session '%s'",
+		Debug(this,DebugWarn,"%s for non USSD session '%s'",
 		    msg.c_str(),ssId.c_str());
 		msg.setParam(s_error,"failure");
 		return false;
@@ -9721,7 +9721,7 @@ void YBTSDriver::start()
     unsigned int n = s_restartMax;
     if (m_restartIndex >= n) {
 	m_stopped = true;
-	Alarm(this,"system",DebugGoOn,
+	Alarm(this,"system",DebugCrit,
 	    "Restart index reached maximum value %u. Stopping ...",n);
 	return;
     }

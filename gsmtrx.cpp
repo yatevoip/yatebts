@@ -384,7 +384,7 @@ void GsmTrxModule::onTimer(const Time& time)
 	}
     }
     if (m_state == Idle) {
-	trxStop("Invalid state",DebugGoOn);
+	trxStop("Invalid state",DebugCrit);
 	Lock lck(m_stateMutex);
 	if (m_state == Idle) {
 	    bool schedule = true;
@@ -601,7 +601,7 @@ RadioInterface* GsmTrxModule::createRadio(NamedList& params)
     }
     params.copyParams(m,"code,reason,error");
     const String& e = m[YSTRING("error")];
-    Debug(this,DebugGoOn,"Failed to create radio interface: %s",
+    Debug(this,DebugCrit,"Failed to create radio interface: %s",
 	e.safe(ok ? "Unknown error" : "Message not handled"));
     return 0;
 }
