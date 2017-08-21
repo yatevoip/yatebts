@@ -200,11 +200,11 @@ function buildRegister(imsi,tmsi,exp,imei,warning,msg,unresponsive_server)
     sr.sip_From = uri_reg;
     sr.sip_To = uri_reg;
     sr.sip_Contact = uri + "; expires=" + exp;
-    if (imei!="") {
-	imei = imei.substr(0,8) + "-" + imei.substr(8,6) + "-" + imei.substr(-1);
-	sr.sip_Contact = sr.sip_Contact + '; +sip.instance="<urn:gsma:imei:'+ imei
-	    +'>"; +g.3gpp.smsip';
-    }
+    if (imei!="")
+	sr.sip_Contact += '; +sip.instance="<urn:gsma:imei:'
+	    + imei.substr(0,8) + "-" + imei.substr(8,6) + "-" + imei.substr(-1) + '>"';
+    if (exp)
+	sr.sip_Contact += '; +g.3gpp.smsip';
     sr.sip_Expires = exp;
     if (exp)
 	sr["sip_Supported"] = "auth-gsm,auth-umts,reg-tmsi";
