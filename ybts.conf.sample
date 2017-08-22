@@ -887,9 +887,9 @@ Radio.C0=
 
 ; mode: string: YBTS mode of operation. This setting will specify which Javascript script
 ;  to load for the operation. Possible values are:
-;    - nib: loads script necessary for Network In a Box mode of operation
+;    - nipc: loads script necessary for Network In a PC mode of operation
 ;    - roaming: loads script necessary for the roaming mode of operation
-;mode=nib
+;mode=nipc
 
 ; autostart: boolean: Start the BTS automatically when program starts
 ; If autostart is disabled it will wait for an "ybts start" command.

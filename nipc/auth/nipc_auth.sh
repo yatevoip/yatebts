@@ -2,17 +2,17 @@
 
 # Global Yate script that performs 2G/3G authentication
 #
-# Must be placed in same directory as do_nib_comp128 and do_nib_milenage
+# Must be placed in same directory as do_nipc_comp128 and do_nipc_milenage
 #
 # Install in extmodule.conf
 #
 # [scripts]
-# /path/to/nib_auth.sh
+# /path/to/nipc_auth.sh
 
 cd `dirname $0`
 
 # install in Yate and run main loop
-echo "%%>setlocal:trackparam:nib_auth"
+echo "%%>setlocal:trackparam:nipc_auth"
 echo "%%>install:95:gsm.auth"
 echo "%%>setlocal:restart:true"
 while read -r REPLY; do
@@ -34,14 +34,14 @@ while read -r REPLY; do
 			    proto="${proto}_${op}"
 			    ;;
 		    esac
-		    res=`./do_nib_$proto 0x$ki 0x$rand`
+		    res=`./do_nipc_$proto 0x$ki 0x$rand`
 		    if [ ${#res} = 25 ]; then
 			resp="sres=${res:0:8}:kc=${res:9}"
 		    fi
 		    ;;
 		Xcomp128-1|Xcomp128-2|Xcomp128-3)
 		    proto="${proto:0:7}_${proto:8}"
-		    res=`./do_nib_$proto 0x$ki 0x$rand`
+		    res=`./do_nipc_$proto 0x$ki 0x$rand`
 		    if [ ${#res} = 25 ]; then
 			resp="sres=${res:0:8}:kc=${res:9}"
 		    fi
@@ -64,25 +64,25 @@ while read -r REPLY; do
 		    esac
 		    if [ -n "$sqn" ]; then
 			if [ -n "$auts" ]; then
-			    res=`./do_nib_milenage$opc --auts 0x$ki 0x$op 0x$sqn 0x$rand$amf`
+			    res=`./do_nipc_milenage$opc --auts 0x$ki 0x$op 0x$sqn 0x$rand$amf`
 			    if [ ${#res} = 28 ]; then
 				resp="auts=${res}"
 			    fi
 			else
-			    res=`./do_nib_milenage$opc 0x$ki 0x$op 0x$sqn 0x$rand$amf`
+			    res=`./do_nipc_milenage$opc 0x$ki 0x$op 0x$sqn 0x$rand$amf`
 			    if [ ${#res} = 115 ]; then
 				resp="xres=${res:0:16}:ck=${res:17:32}:ik=${res:50:32}:autn=${res:83}"
 			    fi
 			fi
 		    else
 			if [ -n "$auts" ]; then
-			    res=`./do_nib_milenage$opc 0x$ki 0x$op 0x$auts 0x$rand$amf`
+			    res=`./do_nipc_milenage$opc 0x$ki 0x$op 0x$auts 0x$rand$amf`
 			    if [ ${#res} = 12 ]; then
 				resp="sqn=${res}"
 			    fi
 			else
 			    autn="${params#*:autn=}"; autn="${autn%%:*}"
-			    res=`./do_nib_milenage$opc 0x$ki 0x$op 0x$autn 0x$rand$amf`
+			    res=`./do_nipc_milenage$opc 0x$ki 0x$op 0x$autn 0x$rand$amf`
 			    if [ ${#res} = 95 ]; then
 				resp="xres=${res:0:16}:ck=${res:17:32}:ik=${res:50:32}:sqn=${res:83}"
 			    fi

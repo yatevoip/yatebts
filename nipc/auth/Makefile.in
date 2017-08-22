@@ -19,8 +19,8 @@ datadir:= @datadir@
 scrdir := @YATE_SCR@
 shrdir := @YATE_SHR@
 
-SCRIPTS := nib_auth.sh
-PROGS   := do_nib_comp128 do_nib_milenage
+SCRIPTS := nipc_auth.sh
+PROGS   := do_nipc_comp128 do_nipc_milenage
 CCOMPILE = $(CC) $(DEFS) $(DEBUG) $(INCLUDES) $(CFLAGS)
 
 MILENAGE:= @srcdir@/milenage/main.c \
@@ -52,8 +52,8 @@ uninstall:
 clean:
 	@-$(RM) $(PROGS) 2>/dev/null
 
-do_nib_comp128: @srcdir@/do_comp128.c
+do_nipc_comp128: @srcdir@/do_comp128.c
 	$(CCOMPILE) -o $@ $<
 
-do_nib_milenage: $(MILENAGE) $(MIL_INC)
+do_nipc_milenage: $(MILENAGE) $(MIL_INC)
 	$(CCOMPILE) -o $@ $(MILENAGE)

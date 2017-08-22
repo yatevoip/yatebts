@@ -43,10 +43,10 @@ Alternatively you may create a symbolic link to the desired transceiver:
     ln -s transceiver-rad1 transceiver
 
 
-Network In a Box
+Network In a PC
 ----------------
 
-The Network In a Box (NIB) is a configuration that allows using YateBTS standalone
+The Network In a PC (NiPC) is a configuration that allows using YateBTS standalone
 with just local subscribers.
 
 To use it you need to configure in Yate:
@@ -57,7 +57,7 @@ In file javascript.conf:
 routing=welcome.js
 
 [scripts]
-nib=nib.js
+nipc=nipc.js
 
 In file extmodule.conf:
 
@@ -65,4 +65,4 @@ In file extmodule.conf:
 gsm_auth.sh
 
 For more info see:
-http://wiki.yatebts.com/index.php/Javascript_NIB
+http://wiki.yatebts.com/index.php/Javascript_NiPC

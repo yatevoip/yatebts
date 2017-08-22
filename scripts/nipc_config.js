@@ -1,5 +1,5 @@
 /**
- * nib_config.js
+ * nipc_config.js
  * This file is part of the YATE Project http://YATE.null.ro
  *
  * Yet Another Telephony Engine - a fully featured software PBX and IVR
@@ -17,7 +17,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
-#require "nib_validations.js"
+#require "nipc_validations.js"
 #require "generic_validations.js"
 
 // Class and reimplemented methods to configure subscribers.conf 
@@ -189,7 +189,7 @@ SubscribersConfig.prototype.validateConfig = function(section_name,param_name,pa
 };
 
 // Get subscribers.conf params
-API.on_get_nib_subscribers = function(params,msg)
+API.on_get_nipc_subscribers = function(params,msg)
 {
     var subs = new SubscribersConfig;
     var res = API.on_get_generic_file(subs,params,msg);
@@ -232,7 +232,7 @@ API.on_get_nib_subscribers = function(params,msg)
 };
 
 // Configure subscribers.conf params
-API.on_set_nib_subscribers = function(params,msg,setNode)
+API.on_set_nipc_subscribers = function(params,msg,setNode)
 {
     // don't delete the 'regexp' param from general section
 
@@ -240,11 +240,11 @@ API.on_set_nib_subscribers = function(params,msg,setNode)
     res = API.on_set_generic_file(subs,params,msg,setNode);
     if (res.reason)
 	return res;
-    return reloadNib();
+    return reloadNiPC();
 };
 
 // Remove a subscriber section from subscribers.conf
-API.on_delete_nib_subscriber = function(params,msg)
+API.on_delete_nipc_subscriber = function(params,msg)
 {
     if (!confs)
 	return { error: 201, reason: "Devel/configuration error: no config files defined."};
@@ -263,11 +263,11 @@ API.on_delete_nib_subscriber = function(params,msg)
     if (!saveConf(error,c))
 	return error;
 
-    return reloadNib();
+    return reloadNiPC();
 };
 
 // Get subscribers.conf params from [general] section 
-API.on_get_nib_system = function(params,msg)
+API.on_get_nipc_system = function(params,msg)
 {
     var subs = new SubscribersConfig;
     var res = API.on_get_generic_file(subs,msg);
@@ -282,11 +282,11 @@ API.on_get_nib_system = function(params,msg)
 	res.general = {"country_code":"", "smsc":"", "regexp":"", "sms_text":""};
     } 
 
-    return { name: "nib_system", object: res.general};
+    return { name: "nipc_system", object: res.general};
 };
 
 // Configure subscribers.conf params
-API.on_set_nib_system = function(params,msg,setNode)
+API.on_set_nipc_system = function(params,msg,setNode)
 {
     // clearing regexp
     if (params[";regexp"]==="") {
@@ -301,7 +301,7 @@ API.on_set_nib_system = function(params,msg,setNode)
 	    return error;
 	}
 
-	return reloadNib();
+	return reloadNiPC();
     }
 
 
@@ -311,11 +311,11 @@ API.on_set_nib_system = function(params,msg,setNode)
     if (res.reason)
 	return res;
 
-    return reloadNib();
+    return reloadNiPC();
 };
 
 // Configure accfile.conf params
-API.on_set_nib_outbound = function(params,msg)
+API.on_set_nipc_outbound = function(params,msg)
 {
     var section_name;
     var section;
@@ -436,7 +436,7 @@ API.on_set_nib_outbound = function(params,msg)
 };
 
 // Get accfile.conf params
-API.on_get_nib_outbound = function(params,msg)
+API.on_get_nipc_outbound = function(params,msg)
 {
     if (!confs)
 	return { error: 201, reason: "Devel/configuration error: no config files defined." };
@@ -462,7 +462,7 @@ API.on_get_nib_outbound = function(params,msg)
     return { name: "outbound", object: res.outbound };
 };
 
-// run NIB telnet command and return two column result as array of objects
+// run NiPC telnet command and return two column result as array of objects
 function imsis_telnet_command(command, name_in_result, name_in_message, column_names)
 {
     var m = new Message("engine.command");
@@ -527,32 +527,32 @@ function imsis_telnet_command(command, name_in_result, name_in_message, column_n
 }
 
 // Get online subscribers
-API.on_get_online_nib_subscribers = function(params,msg)
+API.on_get_online_nipc_subscribers = function(params,msg)
 {
     var column_names = ["IMSI", "MSISDN"];
-    return imsis_telnet_command("nib list registered", "subscribers", "online subscribers", column_names);
+    return imsis_telnet_command("nipc list registered", "subscribers", "online subscribers", column_names);
 };
 
 // Get rejected subscribers
-API.on_get_rejected_nib_subscribers = function(params,msg)
+API.on_get_rejected_nipc_subscribers = function(params,msg)
 {
     var column_names = ["IMSI", "NO"];
-    return imsis_telnet_command("nib list rejected", "imsis", "rejected IMSIs", column_names);    
+    return imsis_telnet_command("nipc list rejected", "imsis", "rejected IMSIs", column_names);    
 };
 
 // Get accepted subscribers
-API.on_get_accepted_nib_subscribers = function(params,msg)
+API.on_get_accepted_nipc_subscribers = function(params,msg)
 {
     var column_names = ["IMSI", "MSISDN"];
-    return imsis_telnet_command("nib list accepted", "subscribers", "accepted subscribers", column_names);
+    return imsis_telnet_command("nipc list accepted", "subscribers", "accepted subscribers", column_names);
 };
 
-function reloadNib()
+function reloadNiPC()
 {
     var m = new Message("engine.command");
-    m.line = "nib reload";
+    m.line = "nipc reload";
     if (!m.dispatch())
-	return { error: 402, reason: "Reload of NIB failed." };
+	return { error: 402, reason: "Reload of NiPC failed." };
 
     return {};
 };

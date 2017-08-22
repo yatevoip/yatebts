@@ -23,7 +23,7 @@
 
 #require "lib_str_util.js"
 #require "sdr_config.js"
-#require "nib_config.js"
+#require "nipc_config.js"
 
 conf_node = "bts";
 // define configuration files that can be set/get 
@@ -134,7 +134,7 @@ API.on_set_ybts_node = function(params,msg,setNode)
 
     var mode = params["ybts"]["mode"];
     Engine.output("YBTS mode is "+mode+". Setting codecs in ysipchan.conf");
-    if (mode == "nib") {
+    if (mode == "nipc") {
 	codecs_section.setValue("default","enable");
     } else {
 	codecs_section.setValue("default","disable");

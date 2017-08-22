@@ -17,7 +17,7 @@
  */
 
 /*
- * Network-In-a-Box demo
+ * Network-In-a-PC demo
  * To use it put in javascript.conf:
  *
  * [general]

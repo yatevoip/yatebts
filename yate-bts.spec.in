@@ -108,8 +108,8 @@ At least one Yate radio device package must also be installed.
 %else
 %{shrdir}/api/*
 %{scrdir}/bts_config.js
-%{scrdir}/nib_config.js
-%{scrdir}/nib_validations.js
+%{scrdir}/nipc_config.js
+%{scrdir}/nipc_validations.js
 %{scrdir}/ybts_fields.js
 %{cfgdir}/bts-jscript.conf
 %endif
@@ -135,8 +135,8 @@ else
 fi
 
 
-%package nib
-Summary:	GSM Network In a Box based on YateBTS
+%package nipc
+Summary:	GSM Network In a PC based on YateBTS
 Group:		Applications/Communication
 Requires:	%{name} = %{version}-%{release}
 Requires:	yate-scripts = @YATE_VER@
@@ -146,44 +146,44 @@ Requires(post):	gawk
 Suggests:	pysim
 %endif
 
-%description nib
-Scripts and support executables that implement a GSM Network In a Box.
+%description nipc
+Scripts and support executables that implement a GSM Network In a PC.
 
-%files nib
+%files nipc
 %defattr(-, root, root)
-%{scrdir}/nib_auth.sh
+%{scrdir}/nipc_auth.sh
 %{scrdir}/do_*
-%{scrdir}/nib.js
+%{scrdir}/nipc.js
 %{scrdir}/welcome.js
 %{scrdir}/custom_sms.js
 %{shrdir}/sounds/*
-/var/www/html/nib
+/var/www/html/nipc
 %if %{nosdr}
-%dir %{shrdir}/nib_web
-%{shrdir}/nib_web/*
-%config(noreplace) %{shrdir}/nib_web/.htaccess
-%config(noreplace) %{shrdir}/nib_web/config.php
+%dir %{shrdir}/nipc_web
+%{shrdir}/nipc_web/*
+%config(noreplace) %{shrdir}/nipc_web/.htaccess
+%config(noreplace) %{shrdir}/nipc_web/config.php
 %else
 %{cfgdir}/bts-extmod.conf
 %endif
 %config(noreplace) %{cfgdir}/subscribers.conf
 
 %if %{nosdr}
-%post nib
-sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
-if ! grep -q '; Installed by yate-bts-nib' %{cfgdir}/javascript.conf 2>/dev/null; then
+%post nipc
+sed -i 's/^ *\(roaming\|nipc\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
+if ! grep -q '; Installed by yate-bts-nipc' %{cfgdir}/javascript.conf 2>/dev/null; then
     if grep -q '^ *\[general\]' %{cfgdir}/javascript.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[general\]/{sect=1}
 	/^ *routing *=/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
-	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nrouting=welcome.js\n";sect=2}
+	 if(sect==1){print "; Installed by yate-bts-nipc, do not remove this comment line\nrouting=welcome.js\n";sect=2}
 	}' <%{cfgdir}/javascript.conf >%{cfgdir}/javascript.conf.tmp
 	mv -f %{cfgdir}/javascript.conf.tmp %{cfgdir}/javascript.conf
     else
 	cat <<-EOF >>%{cfgdir}/javascript.conf
 	[general]
-	; Installed by yate-bts-nib, do not remove this comment line
+	; Installed by yate-bts-nipc, do not remove this comment line
 	routing=welcome.js
 
 	EOF
@@ -195,26 +195,26 @@ if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
 	/^ *\[ybts\]/{sect=1}
 	/^ *mode *=/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
-	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nmode=nib\n";sect=2}
+	 if(sect==1){print "; Installed by yate-bts-nipc, do not remove this comment line\nmode=nipc\n";sect=2}
 	}' <%{cfgdir}/ybts.conf >%{cfgdir}/ybts.conf.tmp
 	mv -f %{cfgdir}/ybts.conf.tmp %{cfgdir}/ybts.conf
     fi
 fi
-if ! grep -q '; Installed by yate-bts-nib' %{cfgdir}/extmodule.conf 2>/dev/null; then
+if ! grep -q '; Installed by yate-bts-nipc' %{cfgdir}/extmodule.conf 2>/dev/null; then
     if grep -q '^ *\[scripts\]' %{cfgdir}/extmodule.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
 	/^ *\[scripts\]/{sect=1}
 	/^ *gsm_auth\.sh/{if(sect==2)sect=3}
-	/^ *nib_auth\.sh/{if(sect==2)sect=3}
+	/^ *nipc_auth\.sh/{if(sect==2)sect=3}
 	{if(sect==3){print ";; " $0;sect=2} else print;
-	 if(sect==1){print "; Installed by yate-bts-nib, do not remove this comment line\nnib_auth.sh\n";sect=2}
+	 if(sect==1){print "; Installed by yate-bts-nipc, do not remove this comment line\nnipc_auth.sh\n";sect=2}
 	}' <%{cfgdir}/extmodule.conf >%{cfgdir}/extmodule.conf.tmp
 	mv -f %{cfgdir}/extmodule.conf.tmp %{cfgdir}/extmodule.conf
     else
 	cat <<-EOF >>%{cfgdir}/extmodule.conf
 	[scripts]
-	; Installed by yate-bts-nib, do not remove this comment line
-	nib_auth.sh
+	; Installed by yate-bts-nipc, do not remove this comment line
+	nipc_auth.sh
 
 	EOF
     fi
@@ -246,7 +246,7 @@ Scripts that implement SIP registration from YateBTS to a remote YateUCN server.
 
 %post roaming
 %if %{nosdr}
-sed -i 's/^ *\(roaming\|nib\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
+sed -i 's/^ *\(roaming\|nipc\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
 if ! grep -q '^ *mode *=' %{cfgdir}/ybts.conf 2>/dev/null; then
     if grep -q '^ *\[ybts\]' %{cfgdir}/ybts.conf 2>/dev/null; then
 	awk '/^ *\[/{sect=0}
@@ -343,17 +343,17 @@ make %{stripped} %{?extra_make}
 make install DESTDIR=%{buildroot} %{?extra_make}
 mkdir -p %{buildroot}/var/www/html
 %if %{nosdr}
-ln -sf %{shrdir}/nib_web %{buildroot}/var/www/html/nib
+ln -sf %{shrdir}/nipc_web %{buildroot}/var/www/html/nipc
 %else
-cp -rp nib/redir %{buildroot}/var/www/html/nib
+cp -rp nipc/redir %{buildroot}/var/www/html/nipc
 cp -p scripts/*.js* %{buildroot}%{scrdir}/
 echo -e '[scripts]\nbts_config=bts_config.js' > %{buildroot}%{cfgdir}/bts-jscript.conf
-echo -e '[scripts]\nnib_auth.sh' > %{buildroot}%{cfgdir}/bts-extmod.conf
+echo -e '[scripts]\nnipc_auth.sh' > %{buildroot}%{cfgdir}/bts-extmod.conf
 mkdir -p %{buildroot}%{shrdir}/api
 echo '<?php global $bts_version; $bts_version = "%{version}-%{release}"; ?>' > %{buildroot}%{shrdir}/api/bts_version.php
 rm %{buildroot}%{cfgdir}/ybts.conf
 rm %{buildroot}%{scrdir}/lib_str_util.js
-rm -rf %{buildroot}%{shrdir}/nib_web
+rm -rf %{buildroot}%{shrdir}/nipc_web
 %endif
 %if "%{?extra_inst}"
 export DESTDIR=%{buildroot}
@@ -374,7 +374,7 @@ rm -rf %{buildroot}
 - Added bladerf subpackage
 
 * Mon Mar 17 2014 Paul Chitescu <paulc@null.ro>
-- Added NIB Web interface files
+- Added NiPC Web interface files
 
 * Mon Dec 09 2013 Paul Chitescu <paulc@null.ro>
 - Created specfile

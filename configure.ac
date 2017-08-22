@@ -226,8 +226,8 @@ AC_CONFIG_FILES([yate-bts.spec
                  transceiver/Makefile
                  roaming/Makefile
 		 scripts/Makefile
-                 nib/Makefile
-                 nib/auth/Makefile])
+                 nipc/Makefile
+                 nipc/auth/Makefile])
 CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//; s/:[[^ ]]\+//g'`
 AC_SUBST(CONFIGURE_FILES)
 AC_OUTPUT

@@ -4,7 +4,7 @@
 # override DESTDIR at install time to prefix the install directory
 DESTDIR :=
 
-SCRIPTS := nib.js welcome.js custom_sms.js
+SCRIPTS := nipc.js welcome.js custom_sms.js
 SOUNDS  := welcome.au echo.au
 
 prefix = @prefix@
@@ -17,7 +17,7 @@ moddir := @YATE_MOD@
 scrdir := @YATE_SCR@
 shrdir := @YATE_SHR@
 snddir := "$(shrdir)/sounds"
-webdir := "$(shrdir)/nib_web"
+webdir := "$(shrdir)/nipc_web"
 
 # include optional local make rules
 -include YateLocal.mak

@@ -2084,7 +2084,7 @@ static String s_peerCmd;                 // Peer program command path
 static String s_peerArg;                 // Peer program argument
 static String s_peerDir;                 // Peer program working directory
 static unsigned int s_peerAbort = 0;
-static String s_opMode = "";             // YBTS mode of operation (nib/roaming)
+static String s_opMode = "";             // YBTS mode of operation (nipc/roaming)
 static bool s_askIMEI = true;            // Ask the IMEI identity
 static unsigned int s_pagingTout = YBTS_PAGING_TIMEOUT_DEF;// Paging timeout to be used on MT services
 static unsigned int s_mtSmsTimeout = YBTS_MT_SMS_TIMEOUT_DEF; // MT SMS timeout interval
@@ -10530,7 +10530,7 @@ void YBTSDriver::initialize()
 	s_lai.reset();
     }
     if (!s_opMode) { // this is not reloadable
-	s_opMode = ybts.getValue("mode","nib");
+	s_opMode = ybts.getValue("mode","nipc");
 	s_opMode.trimBlanks();
     }
     s_askIMEI = ybts.getBoolValue("imei_request",true);

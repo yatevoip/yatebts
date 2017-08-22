@@ -1302,10 +1302,10 @@ function checkConfiguration()
 function verifyYBTSMode()
 {
     var m = new Message("engine.help");
-    m.line = "nib";
+    m.line = "nipc";
 
     if (m.dispatch())
-	Engine.alarm(alarm_conf, "NIB mode and Roaming mode are enabled at the same time. Please edit javascript.conf and disable one of them. It is recommened to ony set mode=nib/roaming in [ybts] section in ybts.conf.");
+	Engine.alarm(alarm_conf, "NiPC mode and Roaming mode are enabled at the same time. Please edit javascript.conf and disable one of them. It is recommened to ony set mode=nipc/roaming in [ybts] section in ybts.conf.");
     else
 	Engine.debug(Engine.DebugInfo,"Checked that only Roaming mode is enabled.");
 }

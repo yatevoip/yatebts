@@ -52,7 +52,7 @@ shrdir := @YATE_SHR@
 all: $(PROGS)
 	$(MAKE) -C ./transceiver all
 	$(MAKE) -C ./mbts/apps all
-	$(MAKE) -C ./nib/auth all
+	$(MAKE) -C ./nipc/auth all
 
 debug:
 	$(MAKE) all DEBUG=-g3 MODSTRIP=
@@ -73,7 +73,7 @@ clean:
 	    test ! -f "$$i/Makefile" || $(MAKE) -C "$$i" clean BUILD_TESTS=yes; \
 	done
 	$(MAKE) -C ./transceiver clean
-	$(MAKE) -C ./nib/auth clean
+	$(MAKE) -C ./nipc/auth clean
 
 check-topdir:
 	@test -f configure || (echo "Must make this target in the top source directory"; exit 1)
@@ -116,14 +116,14 @@ install: all
 	    install -m 0644 @srcdir@/$$i "$(DESTDIR)$(docdir)/" ; \
 	done
 	$(MAKE) -C ./mbts/apps install
-	$(MAKE) -C ./nib install
-	$(MAKE) -C ./nib/auth install
+	$(MAKE) -C ./nipc install
+	$(MAKE) -C ./nipc/auth install
 	$(MAKE) -C ./roaming install
 	$(MAKE) -C ./scripts install
 
 uninstall:
-	$(MAKE) -C ./nib/auth uninstall
-	$(MAKE) -C ./nib uninstall
+	$(MAKE) -C ./nipc/auth uninstall
+	$(MAKE) -C ./nipc uninstall
 	$(MAKE) -C ./roaming uninstall
 	$(MAKE) -C ./scripts uninstall
 	$(MAKE) -C ./mbts/apps uninstall
