@@ -1135,11 +1135,11 @@ The IP address of receiving Wireshark, if you use it for real time traces.",
 	$fields["YBTS"] = array(
 		"ybts" => array(
 			"mode" => array(
-				array("selected"=> "nib", "nib","roaming"),
+				array("selected"=> "nipc", "nipc","roaming"),
 				"display" => "select",
 				"comment" => "BTS mode of operation. This setting will specify which Javascript script 
 to load for the operation. Possible values are:
-    - nib: loads script necessary for Network In a Box mode of operation
+    - nipc: loads script necessary for Network In a PC mode of operation
     - roaming: loads script necessary for the voice roaming mode of operation"
 			),
 			"heartbeat_ping"=> array(

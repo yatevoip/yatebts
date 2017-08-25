@@ -23,7 +23,7 @@ function call_logs()
 
 	$conf = new ConfFile($yate_conf_dir."cdrfile.conf");
 	if ($conf->getError()) {
-		nib_note($conf->getError());
+		nipc_note($conf->getError());
 		return;
 	}
 
@@ -32,20 +32,20 @@ function call_logs()
 		if (!isset($conf->structure["general"]["file"]) ) 
 			form_enable_call_logs();
 		elseif (isset($conf->structure["general"]["file"]) && $conf->structure["general"]["file"] != $yate_cdr) 
-			nib_note("Detected differences between the CDR file settings. The file set in configuration file: '".$yate_conf_dir. "cdrfile.conf' in parameter 'file=". $conf->structure["general"]["file"]."' is different from the one set in 'defaults.php' in parameter: '\$yate_cdr= ".$yate_cdr."'. Please modify the value in defaults.php in parameter: '\$yate_cdr = ".$conf->structure["general"]["file"]."' or modify in '".$yate_conf_dir. "cdrfile.conf' in [general] section the value of parameter 'file=".$yate_cdr."'" );
+			nipc_note("Detected differences between the CDR file settings. The file set in configuration file: '".$yate_conf_dir. "cdrfile.conf' in parameter 'file=". $conf->structure["general"]["file"]."' is different from the one set in 'defaults.php' in parameter: '\$yate_cdr= ".$yate_cdr."'. Please modify the value in defaults.php in parameter: '\$yate_cdr = ".$conf->structure["general"]["file"]."' or modify in '".$yate_conf_dir. "cdrfile.conf' in [general] section the value of parameter 'file=".$yate_cdr."'" );
 		else 
-			nib_note("There aren't any call logs.");
+			nipc_note("There aren't any call logs.");
 
 	} else {
 	
 		$ext = explode(".",$yate_cdr);
 		if ($ext[1] != "csv") {
-			nib_note("Call logs must be in CSV format. Please modify the filename in 'defaults.php'.");
+			nipc_note("Call logs must be in CSV format. Please modify the filename in 'defaults.php'.");
 			return;
 		}
 
 		if (!is_readable($yate_cdr)) {
-			nib_note("Don't have permission to read the call logs file: '".$yate_cdr."'. Please run this command as root: 'chmod -R a+r ".$yate_cdr."'");
+			nipc_note("Don't have permission to read the call logs file: '".$yate_cdr."'. Please run this command as root: 'chmod -R a+r ".$yate_cdr."'");
 			return;
 		}
 
@@ -112,12 +112,12 @@ function call_logs_enabled()
 	if (getparam("enable_writing_of_call_logs") == "on") {
 		$conf = new ConfFile($yate_conf_dir."cdrfile.conf");
 		if ($conf->getError()) {
-			nib_note($conf->getError());
+			nipc_note($conf->getError());
 			return call_logs();
 		}
 		$conf->openForWrite();
 		if (!$conf->status()) {
-			nib_note($conf->getError());
+			nipc_note($conf->getError());
 			return call_logs();
 		}
 
@@ -128,7 +128,7 @@ function call_logs_enabled()
 		if ($res[0] && isset($res[1])) //yate is not running
 			notice("Finished setting file for writting CDRs. " .$res[1], "call_logs");
 		elseif (!$res[0]) //errors on socket connection
-			notice("Finished setting file for writting CDRs. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".", "call_logs");
+			notice("Finished setting file for writting CDRs. For changes to take effect please restart yate or reload just nipc.js from telnet with command: \"javascript reload nipc\".", "call_logs");
 		else //yate was restarted
 			notice("Finished setting file for writting CDRs.", "call_logs");
 	}  else 

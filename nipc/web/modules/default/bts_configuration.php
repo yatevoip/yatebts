@@ -138,7 +138,7 @@ function set_codecs_ysipchan($mode)
 	else
 		$file = new ConfFile($filename,false,true);
 
-	if ($mode=="nib") {
+	if ($mode=="nipc") {
 		$file->structure["codecs"] = array();
 		$file->structure["codecs"]["default"] = "enable";
 		$mess = "default=enable";

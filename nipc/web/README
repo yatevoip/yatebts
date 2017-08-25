@@ -1,4 +1,4 @@
-What is Network in a Box Web GUI
+What is Network in a PC Web GUI
 --------------------------------
 
 A Graphical Web Interface used to create configurations files for YateBTS.
@@ -29,10 +29,10 @@ Depending on your operating system the main web directory will be /var/www (debi
 or /var/www/html otherwise. If you don't have this path, then you need to install Apache server.
 
 Assuming you install YateBTS package or installed by hand(make install), the UI source code is 
-located in /usr/local/share/yate/nib_web.
+located in /usr/local/share/yate/nipc_web.
 
  > cd /var/www/html   (or cd /var/www on debian based OS)
- > ln -s /usr/local/share/yate/nib_web yatebts_nib
+ > ln -s /usr/local/share/yate/nipc_web yatebts_nipc
 
 
 Configuration

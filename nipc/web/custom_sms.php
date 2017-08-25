@@ -54,7 +54,7 @@ function send_sms($error = null, $note = null)
 		errormess($error,"no");
 	
 	if ($note)
-		nib_note($note);
+		nipc_note($note);
 	
 	$fields = array(
 		"called"=> array("comment"=>"The IMSI where the SMS will be send.","column_name"=>"IMSI"),
@@ -98,7 +98,7 @@ function send_message_to_yate()
 	$response = $socket->command("sniffer off", "quit");
 	
 	//test if called is online 
-	$command = "nib registered ". $called;
+	$command = "nipc registered ". $called;
 	$response = $socket->command($command, "quit");
 	
 	if (!preg_match("/".$called ." is registered./i", $response)) {

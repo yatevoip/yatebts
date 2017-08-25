@@ -32,7 +32,7 @@ function list_subscribers()
 		return;
 	}
 
-	nib_note("Subscribers are accepted based on two criteria: regular expression that matches the IMSI or they be inserted individually.");
+	nipc_note("Subscribers are accepted based on two criteria: regular expression that matches the IMSI or they be inserted individually.");
 
 	$have_subscribers = true;
 	$res = get_subscribers();
@@ -86,13 +86,13 @@ function list_subscribers()
 
 function online_subscribers()
 {
-	$command = "nib list registered";
+	$command = "nipc list registered";
 	$marker_end = "null";
 	$res = get_socket_response($command, $marker_end);
 
 	if (isset($res[0]) && $res[0]===false) {
 		if (isset($res[2])) {
-			nib_note($res[1]);
+			nipc_note($res[1]);
 			return;
 		}
 		errormess($res[1],"no");
@@ -106,13 +106,13 @@ function online_subscribers()
 
 function rejected_imsis()
 {
-	$command = "nib list rejected";
+	$command = "nipc list rejected";
 	$marker_end = "null";
 	$res = get_socket_response($command, $marker_end);
 
 	if (isset($res[0]) && $res[0]===false) {
 		if (isset($res[2])) {
-                       nib_note($res[1]);
+                       nipc_note($res[1]);
                        return;
                 }
 		errormess($res[1],"no");
@@ -146,7 +146,7 @@ function edit_regexp($error=null,$error_fields=array())
 	if (in_array("yes", $warning_data))
 		warning_note("You can't set mobile terminated authentication for calls, SMS, USSD when regular expression is used. Authentication requests will be ignored in this scenario.");
 
-	nib_note("If a regular expression is used, 2G/3G authentication cannot be used. For 2G/3G authentication, please set subscribers individually.");
+	nipc_note("If a regular expression is used, 2G/3G authentication cannot be used. For 2G/3G authentication, please set subscribers individually.");
 	$fields = array(
 		"regexp" => array("value"=> $regexp, "required"=>true, "comment"=>"Ex: ^001")
 	);
@@ -192,7 +192,8 @@ function edit_regexp_write_file()
 	if ($res[0] && isset($res[1])) //yate is not running
 		notice("Finished setting regular expression. " .$res[1], "subscribers");
 	elseif (!$res[0]) //errors on socket connection
-		notice("Finished setting regular expression. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "subscribers");
+		notice("Finished setting regular expression. For changes to take effect please restart yate or reload just nipc.js from telnet with command: \"javascript reload nipc\".Please note that after this you will lose existing registrations.", "subscribers");
+
 	else //yate was restarted
 		notice("Finished setting regular expression", "subscribers");
 }
@@ -510,7 +511,7 @@ function edit_subscriber_write_file()
 	if ($res[0] && isset($res[1])) //yate is not running
 		notice("Finished setting subscriber with IMSI $imsi. " .$res[1], "subscribers");
 	elseif (!$res[0]) //errors on socket connection
-		notice("Finished setting subscriber with IMSI $imsi. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "subscribers");
+		notice("Finished setting subscriber with IMSI $imsi. For changes to take effect please restart yate or reload just nipc.js from telnet with command: \"javascript reload nipc\".Please note that after this you will lose existing registrations.", "subscribers");
 	else //yate was restarted
 		notice("Finished setting subscriber with IMSI $imsi.", "subscribers");
 }
@@ -782,10 +783,10 @@ function write_sim_form($error=null,$error_fields=array(), $generate_random_imsi
 
 
 	if (!$add_existing_subscriber) {
-		nib_note("There are two methods of writing the SIM cards, depending on the state of the \"Generate random IMSI\" field. If the field is selected, the SIM credentials are randomly generated. Otherwise, the data must be inserted manually. Please check that your SIM Card Reader is inserted into the USB port of your device. Before saving data, please insert a SIM card into the SIM Card Reader.");
+		nipc_note("There are two methods of writing the SIM cards, depending on the state of the \"Generate random IMSI\" field. If the field is selected, the SIM credentials are randomly generated. Otherwise, the data must be inserted manually. Please check that your SIM Card Reader is inserted into the USB port of your device. Before saving data, please insert a SIM card into the SIM Card Reader.");
 	} else {
 		if (test_existing_imsi_in_csv($params["imsi"]))
-			nib_note("This IMSI: ".$params["imsi"]." is already written on another SIM card.");
+			nipc_note("This IMSI: ".$params["imsi"]." is already written on another SIM card.");
 	}
 
 	$type_card = get_card_types();
@@ -1116,7 +1117,7 @@ function read_csv()
 	$formats = array("operator_name", "iccid", "mobile_country_code", "mobile_network_code", "imsi", "smsp", "ki", "opc");
 	$csv = new CsvFile($filename,$formats, array(), false);
 	if ($csv->getError()) {
-		nib_note($csv->getError());
+		nipc_note($csv->getError());
 		return $sim_data;
 	}
 
@@ -1267,7 +1268,7 @@ function import_subscribers_from_csv()
 		if ($res[0] && isset($res[1])) //yate is not running
 			notice("Finished importing subscribers. " .$res[1], "list_subscribers");
 		elseif (!$res[0]) //errors on socket connection
-			notice("Finished importing subscribers. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "list_subscribers");
+			notice("Finished importing subscribers. For changes to take effect please restart yate or reload just nipc.js from telnet with command: \"javascript reload nipc\".Please note that after this you will lose existing registrations.", "list_subscribers");
 		else //yate was restarted
 			notice("Finished importing subscribers.", "list_subscribers");
 
@@ -1304,7 +1305,7 @@ function import_subscribers_from_csv()
 			if ($res[0] && isset($res[1])) //yate is not running
 				notice("Finished importing subscribers. " .$res[1], "list_subscribers");
 			elseif (!$res[0]) //errors on socket connection
-				notice("Finished importing subscribers. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "list_subscribers");
+				notice("Finished importing subscribers. For changes to take effect please restart yate or reload just nipc.js from telnet with command: \"javascript reload nipc\".Please note that after this you will lose existing registrations.", "list_subscribers");
 			else //yate was restarted
 				notice("Finished importing subscribers.", "list_subscribers");
 		}
@@ -1373,7 +1374,7 @@ function overwrite_imsi_in_file()
 	if ($res[0] && isset($res[1])) //yate is not running
 		notice("Finished overwritting subscribers. " .$res[1], "list_subscribers");
 	elseif (!$res[0]) //errors on socket connection
-		notice("Finished overwritting subscribers. For changes to take effect please restart yate or reload just nib.js from telnet with command: \"javascript reload nib\".Please note that after this you will lose existing registrations.", "list_subscribers");
+		notice("Finished overwritting subscribers. For changes to take effect please restart yate or reload just nipc.js from telnet with command: \"javascript reload nipc\".Please note that after this you will lose existing registrations.", "list_subscribers");
 	else //yate was restarted
 		notice("Finished overwritting subscribers.", "list_subscribers");
 }
@@ -1384,7 +1385,7 @@ function export_subscribers_in_csv()
 
 	$subscribers = get_subscribers();
 	if (!$subscribers[0]) {
-		nib_note("No subscribers to export.");
+		nipc_note("No subscribers to export.");
 		return;
 	}
 	$smsc = get_smsc();
