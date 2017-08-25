@@ -145,6 +145,8 @@ Requires:	apache-mod_php
 Requires(post):	gawk
 Suggests:	pysim
 %endif
+Obsoletes:	yate-bts-nib
+Conflicts:	yate-bts-nib
 
 %description nipc
 Scripts and support executables that implement a GSM Network In a PC.
