@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(Yate-BTS, 5.0.1)
+AC_INIT(Yate-BTS, 6.0.0)
 AC_CONFIG_SRCDIR([README])
 AC_PREREQ(2.52)
 AC_CONFIG_HEADERS([config.h])
@@ -8,8 +8,8 @@ if echo "$ac_confdir/$ac_pwd" | grep -q '[[[:space:]\\\$\"'\'']]'; then
     AC_ERROR([Unsupported character(s) in source or current directory name])
 fi
 
-PACKAGE_RELEASE="2"
-PACKAGE_STATUS="devel"
+PACKAGE_RELEASE="1"
+PACKAGE_STATUS=""
 
 PACKAGE_REVISION=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`
 test -z "$PACKAGE_REVISION" && PACKAGE_REVISION=`cat "$srcdir/revision.txt" 2>/dev/null`
@@ -75,7 +75,7 @@ AC_CHECK_FUNCS([openlog syslog], , [AC_MSG_ERROR([This function is required.])])
 AC_CHECK_HEADERS([byteswap.h sys/prctl.h])
 
 # Check for Yate (required)
-YATE_REQ="5.5.1"
+YATE_REQ="6.0.0"
 YATE_VER=""
 YATE_DEF=""
 YATE_INC=""
@@ -225,7 +225,7 @@ AC_CONFIG_FILES([yate-bts.spec
                  mbts/apps/Makefile:mbts/Makefile.head.in:mbts/apps/Makefile.in:mbts/Makefile.tail.in
                  transceiver/Makefile
                  roaming/Makefile
-		 scripts/Makefile
+                 scripts/Makefile
                  nipc/Makefile
                  nipc/auth/Makefile])
 CONFIGURE_FILES=`echo "$ac_config_files config.h config.status config.log" | sed 's/yate-[[^ ]]*\.spec *//; s/:[[^ ]]\+//g'`
