@@ -34,6 +34,7 @@ YbtsConfig = function()
     GenericConfig.apply(this);
     this.name = "bts";
     this.file = "ybts";
+    this.custom = "bts-custom";
     this.error = new Object();
     this.skip_empty_params = new Object();
     this.sections = ["gsm", "gprs", "ggsn", "transceiver", "control", "tapping", "gsm_advanced", "gprs_advanced", "sgsn", "logging", "test", "ybts", "security", "handover", "roaming", "gprs_roaming"];
@@ -130,6 +131,7 @@ API.on_set_ybts_node = function(params,msg,setNode)
 
     // set codecs in ysipchan.conf
     var ysipchan = new ConfigFile(Engine.configFile("ysipchan"));
+    ysipchan.getSection("$include sip-custom.conf",true);
     var codecs_section = ysipchan.getSection("codecs",true);
 
     var mode = params["ybts"]["mode"];

@@ -26,6 +26,7 @@ SubscribersConfig = function()
     GenericConfig.apply(this);
     this.name = "subscribers";
     this.file = "subscribers";
+    this.custom = "subs-custom";
     this.error = new Object();
     this.skip_empty_params = new Object();
     this.sections = new Array();
@@ -334,7 +335,7 @@ API.on_set_nipc_outbound = function(params,msg)
     var int_params = ["ip_transport_remoteport","ip_transport_localport","keepalive","interval",'trunk_maxlen','port','trunk_sendinterval','trunk_nominits_ts_diff_restart'];
     var ip_params  = ["ip_transport_remoteip","ip_transport_localip","localaddress"];
 
-    var outbound_conf = prepareConf("accfile",msg.received,false);
+    var outbound_conf = prepareConf("accfile",msg.received,false,"acct-custom");
 
     sections = c.sections();
 
@@ -420,9 +421,9 @@ API.on_set_nipc_outbound = function(params,msg)
 	    }
 	    if (-1 != ip_params.indexOf(param_name)) {
 		if (!checkValidIP(error, param_name, param_value, "outbound"))
-		    return error;	
+		    return error;
 	    }
-	    
+
 	    outbound_conf.setValue("outbound",param_name,param_value);
 	}
     }
