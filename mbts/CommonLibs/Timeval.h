@@ -79,7 +79,7 @@ class Timeval {
 	uint32_t sec() const { return mTimeval.tv_sec; }
 	uint32_t usec() const { return mTimeval.tv_usec; }
 
-	/** Return differnce from other (other-self), in ms. */
+	/** Return difference from other (other-self), in ms. */
 	long delta(const Timeval& other) const;
 
 	/** Elapsed time in ms. */

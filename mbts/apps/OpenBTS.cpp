@@ -288,7 +288,7 @@ int main(int argc, char *argv[])
 	// Get the ARFCN list.
 	unsigned C0 = gConfig.getNum("GSM.Radio.C0");
 	unsigned numARFCNs = gConfig.getNum("GSM.Radio.ARFCNs");
-	// TODO what to do if tuning faild?
+	// TODO what to do if tuning failed?
 	if (!C0radio->tune(C0,true))
 		return 1;
 	for (unsigned i=1; i<numARFCNs; i++) {
@@ -487,6 +487,7 @@ int main(int argc, char *argv[])
 		}
 		if (doStop)
 			gTRX.stop();
+                LOG(NOTICE) << "MBTS exiting";
 		gLogConn.write("MBTS exiting");
 		return 0;
 	}
@@ -500,6 +501,8 @@ int main(int argc, char *argv[])
 	}
 
 	gTRX.stop();
+        LOG(CRIT) << "MBTS exiting on error";
+        gLogConn.write("MBTS exiting on error");
 	return 1;
 }
 
@@ -530,8 +533,8 @@ vector<string> configurationCrossCheck(const string& key) {
 	} else if (key.compare("GPRS.ChannelCodingControl.RSSI") == 0 || key.compare("GSM.Radio.RSSITarget") == 0) {
 		int gprs = gConfig.getNum("GPRS.ChannelCodingControl.RSSI");
 		int gsm = gConfig.getNum("GSM.Radio.RSSITarget");
-		if ((gprs - gsm) != 10) {
-			warning << "GPRS.ChannelCodingControl.RSSI (" << gprs << ") should normally be 10db higher than GSM.Radio.RSSITarget (" << gsm << ")";
+		if (gprs <= gsm) {
+			warning << "GPRS.ChannelCodingControl.RSSI (" << gprs << ") should normally be higher than GSM.Radio.RSSITarget (" << gsm << ")";
 			warnings.push_back(warning.str());
 			warning.str(std::string());
 		}

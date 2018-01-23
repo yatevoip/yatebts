@@ -233,8 +233,11 @@ int DatagramSocket::read(char* buffer, unsigned timeout)
 		perror("DatagramSocket::read() select() failed");
 		throw SocketError();
 	}
-	if (sel==0) return -1;
-	if (FD_ISSET(mSocketFD,&fds)) return read(buffer);
+	if (sel==0)
+            return -1;
+	if (FD_ISSET(mSocketFD,&fds))
+            return read(buffer);
+        CERR("DatagramSocket::read unexpected read result when reading descriptor " << mSocketFD);
 	return -1;
 }
 

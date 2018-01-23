@@ -603,7 +603,7 @@ static struct GprsSubCmds {
 	{ "start",gprsStart,	"start [step]   # Start gprs, optionally in single-step-mode;\n\t\t- can also start by 'gprs rach'" },
 	{ "stop",gprsStop,	"stop [-c]  # stop gprs thread and if -c release channels" },
 	{ "step",gprsStep,	"step    # single step the MAC service loop (requires 'start step')." },
-	{ "set",gprsSet,	"set name [val]   # print and optionally set a variable - see source for names" },
+	{ "set",gprsSet,	"set [sync|clock] [val]   # print and optionally set a variable" },
 	{ "rach",gprsTestRach,	"rach   # Simulate a RACH, which starts gprs service" },
 	{ "testmsg",gprsTestMsg,	"testmsg   # Test message functions" },
 	{ "testbsn",gprsTestBSN,	"testbsn   # Test bsn<->frame number functions" },

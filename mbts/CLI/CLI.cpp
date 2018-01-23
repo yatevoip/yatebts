@@ -33,6 +33,8 @@
 // #include <Config.h>
 #include <Logger.h>
 
+#include <GSMCommon.h>
+
 #include <GSMConfig.h>
 #include <GSMLogicalChannel.h>
 #include <ControlCommon.h>
@@ -816,52 +818,94 @@ int page(int argc, char **argv, ostream& os)
 
 
 
+enum {
+    NoteWeakDl = 1,
+    NoteWeakUl = 2,
+    NoteDlInterference = 4,
+    NoteUlInterference = 8,
+    NoteUlPcFail = 16,
+    NoteUlSaturated = 32,
+    NoteDlSaturated = 64,
+};
 
 
-void printChanInfo(unsigned transID, const GSM::LogicalChannel* chan, ostream& os)
+
+uint32_t printChanInfo(unsigned transID, const GSM::LogicalChannel* chan, ostream& os)
 {
-	os << setw(2) << chan->CN() << " " << chan->TN();
-	os << " " << setw(9) << chan->typeAndOffset();
-	os << " " << setw(12) << transID;
-	os << " " << setw(6) << chan->active();
-	os << " " << setw(5) << chan->recyclable();
-	char buffer[200];
-	snprintf(buffer,199,"%5.2f %4d %5d %4d",
-		100.0*chan->FER(), (int)round(chan->RSSI()),
-		chan->actualMSPower(), chan->actualMSTiming());
-	os << " " << buffer;
+    uint32_t notes = 0;
+    
+    // The -100 and -90 dBm levels are detrmined because generally -100 dBm is the weakest usable signal.
+    // At 10 dB margin, -90 dBm should be a very reliable signal.
 
-	if (!chan->SACCH()) {
-		os << endl;
-		return;
-	}
+    // If the RX gain is set correctly, the noise floor on the RSSI scale corresponds to -108 dBm in actual power.
+    float rxRssi = chan->RSSI() - GSM::gNoiseBase + (-108);
+    float loss = chan->actualMSPower() - rxRssi;
+    
+    osprintf(os, "%2u ", chan->CN());
+    osprintf(os, "%2u ", chan->TN());
+    os << setw(9) << chan->typeAndOffset();
+    osprintf(os, "%6s ", chan->active() ? "true" : "false");
+    osprintf(os, "%5s ", chan->recyclable() ? "true" : "false");
+    osprintf(os, "%5d %5.2f %4d %5d %4d",
+            (int)round(loss),
+            100.0*chan->FER(), (int)round(rxRssi),
+            chan->actualMSPower(), chan->actualMSTiming());
+    
+    if (rxRssi < -100)
+        notes |= NoteWeakUl;
+    
+    if (rxRssi > -90  &&  chan->FER() > 0.1)
+        notes |= NoteUlInterference;
+    
+    if (chan->RSSI() > -1)
+        notes |= NoteUlSaturated;
 
-	const GSM::L3MeasurementResults& meas = chan->SACCH()->measurementResults();
+    if (!chan->SACCH()) {
+        os << endl;
+        return notes;
+    }
 
-	if (meas.MEAS_VALID()) {
-		os << endl;
-		return;
-	}
+    const GSM::L3MeasurementResults& meas = chan->SACCH()->measurementResults();
 
-	snprintf(buffer,199,"%5d %5.2f",
-		meas.RXLEV_FULL_SERVING_CELL_dBm(),
-		100.0*meas.RXQUAL_FULL_SERVING_CELL_BER());
-	os << " " << buffer;
+    if (meas.MEAS_VALID()) {
+        os << endl;
+        return notes;
+    }
 
-	if (meas.NO_NCELL()==0) {
-		os << endl;
-		return;
-	}
-	unsigned CN = meas.BCCH_FREQ_NCELL(0);
-	std::vector<unsigned> ARFCNList = gNeighborTable.ARFCNList();
-	if (CN>=ARFCNList.size()) {
-		LOG(NOTICE) << "BCCH index " << CN << " does not match ARFCN list of size " << ARFCNList.size();
-		os << endl;
-		return;
-	}
-	snprintf(buffer,199,"%8u %8d",ARFCNList[CN],meas.RXLEV_NCELL_dBm(0));
-	os << " " << buffer;
-	os << endl;
+    int dlRssi = meas.RXLEV_FULL_SERVING_CELL_dBm();
+    float dlBer = meas.RXQUAL_FULL_SERVING_CELL_BER();
+    
+    // -48 dBm is the highest DL power the MS can report - GSM 05.08
+    if (dlRssi >= -48)
+        notes |= NoteDlSaturated;
+    
+    osprintf(os, " %5d %5.2f", dlRssi, 100.0*dlBer);
+    
+    if (dlRssi < -100)
+        notes |= NoteWeakDl;
+    
+    if (dlRssi > -90  &&  dlBer > 0.05)
+        notes |= NoteDlInterference;
+
+    int ulRssiTarg = gConfig.getNum("GSM.Radio.RSSITarget");
+    int maxMsPower = gConfig.getNum("GSM.MS.Power.Max");
+    if ((ulRssiTarg - chan->RSSI()) > 10  &&  (maxMsPower - chan->actualMSPower()) > 6)
+        notes |= NoteUlPcFail;
+
+    if (meas.NO_NCELL()==0) {
+        os << endl;
+        return notes;
+    }
+    unsigned CN = meas.BCCH_FREQ_NCELL(0);
+    std::vector<unsigned> ARFCNList = gNeighborTable.ARFCNList();
+    if (CN>=ARFCNList.size()) {
+        LOG(NOTICE) << "BCCH index " << CN << " does not match ARFCN list of size " << ARFCNList.size();
+        os << endl;
+        return notes;
+    }
+    osprintf(os, "%8u %8d", ARFCNList[CN], meas.RXLEV_NCELL_dBm(0));
+    os << endl;
+    return notes;
 }
 
 
@@ -871,23 +915,19 @@ int chans(int argc, char **argv, ostream& os)
 	bool showAll = false;
 	if (argc==2) showAll = true;
 	if (argc>2) return BAD_NUM_ARGS;
+        
+        uint32_t notes = 0;
 
-	os << "CN TN chan      transaction active recyc UPFER RSSI TXPWR TXTA DNLEV DNBER Neighbor Neighbor" << endl;
-	os << "CN TN type      id                       pct    dB   dBm  sym   dBm   pct    ARFCN    dBm" << endl;
-
-	//gPhysStatus.dump(os);
-	//os << endl << "Old data reporting: " << endl;
+	os << "CN TN chan      active recyc Lp-UL UPFER RSSI TXPWR TXTA DNLEV DNBER Neighbor Neighbor" << endl;
+	os << "CN TN type                    dB    pct  dBm   dBm  sym   dBm   pct    ARFCN    dBm" << endl;
 
 	// SDCCHs
 	GSM::SDCCHList::const_iterator sChanItr = gBTS.SDCCHPool().begin();
 	while (sChanItr != gBTS.SDCCHPool().end()) {
 		const GSM::SDCCHLogicalChannel* sChan = *sChanItr;
 		if (sChan->active() || showAll) {
-			//Control::TransactionEntry *trans = gTransactionTable.find(sChan);
 			int tid = 0;
-			//if (trans) tid = trans->ID();
-			printChanInfo(tid,sChan,os);
-			//if (showAll) printChanInfo(tid,sChan->SACCH(),os);
+			notes |= printChanInfo(tid, sChan, os);
 		}
 		++sChanItr;
 	}
@@ -897,14 +937,38 @@ int chans(int argc, char **argv, ostream& os)
 	while (tChanItr != gBTS.TCHPool().end()) {
 		const GSM::TCHFACCHLogicalChannel* tChan = *tChanItr;
 		if (tChan->active() || showAll) {
-			//Control::TransactionEntry *trans = gTransactionTable.find(tChan);
 			int tid = 0;
-			//if (trans) tid = trans->ID();
-			printChanInfo(tid,tChan,os);
-			//if (showAll) printChanInfo(tid,tChan->SACCH(),os);
+			notes |= printChanInfo(tid, tChan, os);
 		}
 		++tChanItr;
 	}
+        
+        int noise = -gTRX.ARFCN(0)->getNoiseLevel();
+        bool highNoise = noise > (GSM::gNoiseBase + 3);
+       
+        os << endl;
+
+        // UL
+        if (notes & NoteWeakUl)
+            os << "NOTE: weak UL" << endl;
+        if (notes & NoteUlInterference)
+            os << "NOTE: UL interference or excessive multipath" << endl;
+        if (notes & NoteUlSaturated)
+            os << "NOTE: UL saturation" << endl;
+        if (notes & NoteUlPcFail)
+            os << "NOTE: UL power control failure" << endl;
+        int ulRssiTarg = gConfig.getNum("GSM.Radio.RSSITarget");
+        if (ulRssiTarg < noise + GSM::gGsmMargin)
+            os << "NOTE: UL GSM RSSI target GSM.Radio.RSSITarget " << ulRssiTarg << " dB not high enough above noise level " << noise << " dB" << endl;
+        if (highNoise)
+            os << "NOTE: UL interference or excessive RX gain" << endl;
+        // DL
+        if (notes & NoteWeakDl)
+            os << "NOTE: weak DL" << endl;
+        if (notes & NoteDlInterference)
+            os << "NOTE: DL interference or excessive multipath" << endl;
+        if (notes & NoteDlSaturated)
+            os << "NOTE: Possible DL saturation" << endl;
 
 	os << endl;
 
@@ -1023,11 +1087,24 @@ int noise(int argc, char** argv, ostream& os)
 {
         if (argc!=1) return BAD_NUM_ARGS;
 
-        int noise = gTRX.ARFCN(0)->getNoiseLevel();
-        os << "noise RSSI is -" << noise << " dB wrt full scale" << endl;
-	os << "MS RSSI target is " << gConfig.getNum("GSM.Radio.RSSITarget") << " dB wrt full scale" << endl;
-	if (gConfig.getBool("GPRS.Enable"))
-		os << "MS GPRS target is " << gConfig.getNum("GPRS.MS.Power.RSSITarget") << " dB wrt full scale" << endl;
+        int noise = -gTRX.ARFCN(0)->getNoiseLevel();
+        os << "noise RSSI is " << noise << " dB wrt full scale" << endl;
+        if (noise > GSM::gNoiseBase)
+            os << "NOTE: Excessive UL noise will degrade performance. Normal UL noise level is -64 or lower." << endl;
+        int gsmTarget = gConfig.getNum("GSM.Radio.RSSITarget");
+        int gsmMargin = gsmTarget - noise;
+	os << "MS GSM RSSI target is " << gsmTarget << " dB wrt full scale" << endl;
+        if (gsmMargin < GSM::gGsmMargin)
+            os << "NOTE: GSM UL RSSI margin " << gsmMargin << " too low for this noise level. Should raise GSM.Radio.RSSITarget to " 
+                    << noise + GSM::gGsmMargin << " dB or higher." << endl;
+	if (gConfig.getBool("GPRS.Enable")) {
+            int gprsTarget = gConfig.getNum("GPRS.MS.Power.RSSITarget");
+            int gprsMargin = gprsTarget - noise;
+            os << "MS GPRS RSSI target is " << gprsTarget << " dB wrt full scale" << endl;
+            if (gprsMargin < GSM::gGprsMargin)
+                os << "NOTE: GPRS UL RSSI margin " << gprsMargin << " too low for this noise level. Should raise GPRS.MS.Power.RSSITarget to " 
+                        << noise + GSM::gGprsMargin << " dB or higher." << endl;
+        }
 
         return SUCCESS;
 }
@@ -1111,6 +1188,79 @@ int stats(int argc, char** argv, ostream& os)
 }
 
 
+int ulScan(int argc, char** argv, ostream& os)
+{
+    if (argc != 2)
+        return BAD_NUM_ARGS;
+
+    GSM::GSMBand band = gBTS.band();
+    
+    if (strcmp(argv[1],"start") == 0) {
+        os << "Uplink interference scan started in " << band << " band." << endl;
+        os << "NOTE: Normal GSM/GPRS operation is suspended during scanning." << endl;
+        os << "To stop the scan, use 'mbts scan stop'." << endl;
+        gTRX.startScan();
+        return SUCCESS;
+    }
+    
+    if (strcmp(argv[1],"stop") == 0) {
+        gTRX.stopScan();
+        os << "Scanning stopped. Returning to normal GSM/GPRS operation." << endl;
+        return SUCCESS;
+    }
+    
+    if (strcmp(argv[1],"report") == 0) {
+        unsigned unchecked = gTRX.numScanUnchecked();
+        if (unchecked > 0) {
+            os << "Scan not yet ready. Try again in " << 0.001 * unchecked * gTRX.scanStepMs() << " seconds." << endl;
+            return SUCCESS;
+        }
+        unsigned bestArfcn = gTRX.scanBestArfcn();
+        const int* rssi = gTRX.scanTable();
+        int bestNoise = rssi[bestArfcn] - GSM::gNoiseBase;
+        float meanRssi = gTRX.scanMeanRssi();
+        os << "Uplink scan report for " << band << " band..." << endl;
+        os << "Average noise figure " << meanRssi - GSM::gNoiseBase << " dB." << endl;
+        os << "Best ARFCNs and their noise figures in dB:" << endl;
+        unsigned printCount = 0;
+        int delta = 0;
+        while (delta < 30) {
+            for (unsigned i = 0;  i < GSM::sGsmMaxArfcns;  i++) {
+                if (i == bestArfcn)
+                    continue;
+                if (rssi[i] == 1e6  ||  rssi[i] == -1e6)
+                    continue;
+                int thisNoise = rssi[i] - GSM::gNoiseBase;
+                if (thisNoise != bestNoise + delta)
+                    continue;
+                os << "ARFCN " << i << " " << thisNoise << " dB, " << GSM::uplinkFreqKHz(band,i) / 1000.0 << " MHz" << endl;
+                printCount++;
+            }
+            if (printCount > 10)
+                break;
+            delta++;
+        }
+        return SUCCESS;
+    }
+    
+    if (strcmp(argv[1],"list") == 0) {
+        os << "Uplink scan dump of all channels scanned in " << band << " band:" << endl;
+        const int* rssi = gTRX.scanTable();
+        for (unsigned i = 0;  i < GSM::sGsmMaxArfcns;  i++) {
+            if (rssi[i] == 1e6  ||  rssi[i] == -1e6)
+                continue;
+            int thisNoise = rssi[i] - GSM::gNoiseBase;
+            os << "ARFCN " << setw(4) << i << " " << thisNoise << " dB ";
+            for (int n = 0; n < thisNoise;  n++)
+                os << "*";
+            os << endl;
+        }
+        return SUCCESS;
+    }
+    
+    return BAD_VALUE;
+}
+
 //@} // CLI commands
 
 
@@ -1147,6 +1297,7 @@ void Parser::addCommands()
 	addCommand("sgsn", SGSN::sgsnCLI,"SGSN mode sub-command.  Type: sgsn help for more");
 	addCommand("crashme", crashme, "force crash of OpenBTS for testing purposes");
 	addCommand("stats", stats,"[patt] OR clear -- print all, or selected, performance counters, OR clear all counters");
+        addCommand("scan", ulScan, "[start|report|list|stop] -- perform an interference scan on the UL side of the band");
 }
 
 

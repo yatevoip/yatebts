@@ -4849,7 +4849,7 @@ void YBTSSignalling::changeState(int newStat, bool peerAbort)
 {
     if (m_state == newStat)
 	return;
-    DDebug(this,DebugInfo,"State changed %d -> %d [%p]",m_state,newStat,this);
+    DDebug(this,DebugNote,"YBTSSignalling State changed %d -> %d [%p]",m_state,newStat,this);
     m_state = newStat;
     switch (m_state) {
 	case Idle:
@@ -9736,14 +9736,16 @@ void YBTSDriver::start()
 	// Command interface
 	if (!m_command->start())
 	    break;
-	// Signalling interface
+	// Signaling interface
 	if (!m_signalling->start())
 	    break;
 	// Media interface
 	if (!m_media->start())
 	    break;
 	// Start peer application
-	if (!startPeer())
+        // returns true for the parent process
+        // returns false on error
+	if (!startPeer()) 
 	    break;
 	changeState(WaitHandshake);
 	m_signalling->waitHandshake();
@@ -9786,7 +9788,7 @@ void YBTSDriver::stop()
     lck.acquire(m_stateMutex);
     bool stopped = (state() != Idle);
     if (stopped)
-	Debug(this,DebugAll,"Stopping ...");
+	Debug(this,DebugNote,"Stopping ...");
     m_stop = false;
     m_stopTime = 0;
     m_error = false;
@@ -9836,6 +9838,7 @@ bool YBTSDriver::startPeer()
 	Alarm(this,"system",DebugWarn,"Failed to fork(): %s",addLastError(s,errno).c_str());
 	return false;
     }
+    // Non-zero PID means this is the parent process.
     if (pid) {
 	Debug(this,DebugInfo,"Started peer pid=%d",pid);
 	m_peerPid = pid;
@@ -9882,7 +9885,8 @@ bool YBTSDriver::startPeer()
     if (dir && ::chdir(dir))
     ::fprintf(stderr,"Failed to change directory to '%s': %d %s\n",
 	dir.c_str(),errno,strerror(errno));
-    // Start
+    // Start the mbts process.
+    // This call should not return.
     ::execl(cmd.c_str(),cmd.c_str(),arg.c_str(),(const char*)0);
     ::fprintf(stderr,"Failed to execute '%s': %d %s\n",
 	cmd.c_str(),errno,strerror(errno));
@@ -10255,7 +10259,7 @@ void YBTSDriver::changeState(int newStat)
     String extra;
     if (newStat == Starting)
 	extra << " restart counter " << m_restartIndex << "/" << s_restartMax;
-    Debug(this,DebugNote,"State changed %s -> %s%s",
+    Debug(this,DebugNote,"YBTSDriver State changed %s -> %s%s",
 	stateName(),lookup(newStat,s_stateName),extra.safe());
     m_state = newStat;
     // Update globals

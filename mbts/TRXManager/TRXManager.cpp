@@ -79,6 +79,7 @@ TransceiverManager::TransceiverManager(int numARFCNs, int wBasePort,
 	:mHaveClock(false),
 	mClockSocket(wBasePort+3,wLocalAddr),
 	mControlSocket(wBasePort+1,wTRXAddress,wBasePort,wLocalAddr),
+        mStopRequest(false),
 	mExitRecv(false), m_statistics(false)
 {
 	addAddr(mInitData,wLocalAddr,wBasePort + 1,"\r\nControl: ");
@@ -113,41 +114,52 @@ void TransceiverManager::start()
 }
 
 
-int TransceiverManager::sendCommandPacket(const char* command, char* response)
+int TransceiverManager::sendCommandPacket(const char* cmdString, const char* cmdName, char* response)
 {
 	if (exiting())
-		return -2;
+            return 0;
 
 	int msgLen = 0;
 	response[0] = '\0';
 
 	int maxRetries = gConfig.getNum("TRX.MaxRetries");
 	mControlLock.lock();
-	LOG(INFO) << "command " << command;
+	LOG(NOTICE) << "this:" << this << " command " << cmdString;
 
-	int n = mControlSocket.write(command);
+        msgLen = mControlSocket.read(response, 1);
+        if (msgLen > 0) {
+            response[msgLen] = '\0';
+            LOG(WARNING) << "this:" << this << " stray packet on command socket: " << response;
+            response[0] = '\0';
+        }
+
+	int n = mControlSocket.write(cmdString);
 	if (n <= 0)
 		maxRetries = 0;
 	for (int retry=0; retry<maxRetries && !exiting(); retry++) {
-		msgLen = mControlSocket.read(response,1000);
-		if (msgLen>0) {
-			response[msgLen] = '\0';
-			break;
-		}
-		LOG(NOTICE) << "TRX link timeout on attempt " << retry+1;
-	}
+            msgLen = mControlSocket.read(response, 500);
+            if (msgLen > 0) {
+                response[msgLen] = '\0';
+                break;
+            }
+            if (mStopRequest) {
+                LOG(NOTICE) << "this:" << this << "TRX link exiting on stop request";
+                break;
+            }
+            LOG(WARNING) << "this:" << this << " TRX link timeout on attempt " << retry+1 << " for command " << cmdString;
+        }
 
-	LOG(INFO) << "response " << response;
+	LOG(NOTICE) << "this:" << this << " response " << response << " to command " << cmdString;
 	mControlLock.unlock();
 
 	if (exiting())
-		return 0;
+            return 0;
 
 	if ((msgLen>4) && (strncmp(response,"RSP ",4)==0)) {
-		return msgLen;
+            return msgLen;
 	}
 
-	LOG(WARNING) << "lost control link to transceiver";
+	LOG(WARNING) << "lost control link to transceiver attempting command " << cmdString;
 	return 0;
 }
 
@@ -175,7 +187,7 @@ bool TransceiverManager::sendCommand(const char* cmd, int* iParam, const char* s
 		else
 			sprintf(cmdBuf,"CMD %d %s", arfcn, cmd);
 	}
-	int rspLen = sendCommandPacket(cmdBuf,response);
+	int rspLen = sendCommandPacket(cmdBuf,cmd,response);
 	int status = -1;
 	if (rspLen > 0) {
 		char cmdNameTest[15];
@@ -184,8 +196,10 @@ bool TransceiverManager::sendCommand(const char* cmd, int* iParam, const char* s
 			sscanf(response,"RSP %15s %d", cmdNameTest, &status);
 		else
 			sscanf(response,"RSP %15s %d %d", cmdNameTest, &status, rspParam);
-		if (strcmp(cmdNameTest,cmd) != 0)
-			status = -1;
+		if (strcmp(cmdNameTest,cmd) != 0) {
+                        LOG(WARNING) << "messages/responses out of sync; sent " << cmd << ", got response for " << cmdNameTest;
+			status = -2;
+                }
 	}
 	if (status == 0)
 		return true;
@@ -300,16 +314,101 @@ unsigned TransceiverManager::C0() const
 }
 
 
+void TransceiverManager::scanTableClear()
+{
+    // Mark unused channels. (All marked be default.)
+    for (unsigned i = 0;  i < sGsmMaxArfcns;  i++)
+        mScanTable[i] = 1e6;
+    // Mark unchecked channels.
+    GSMBand band = gBTS.band();
+    unsigned max = maxArfcn(band);
+    unsigned min = minArfcn(band);
+    if (band == EGSM900) {
+        for (unsigned i = 0;  i < 124;  i++)
+            mScanTable[i] = -1e6;
+    }
+    for (unsigned i = min;  i < max;  i++)
+        mScanTable[i] = -1e6;
+}
 
 
 
+unsigned TransceiverManager::numScanUnchecked() const
+{
+    unsigned sum = 0;
+    for (unsigned i= 0;  i < sGsmMaxArfcns;  i++)
+        if (mScanTable[i] == -1e6)
+            sum++;
+    return sum;
+}
+
+
+unsigned TransceiverManager::scanBestArfcn() const
+{
+    int lowRssi = 1e6;
+    unsigned lowIndex = 0;
+    for (unsigned i = 0;  i < sGsmMaxArfcns;  i++) {
+        int rssi = mScanTable[i];
+        if (rssi == 1e6)
+            continue;
+        if (rssi == -1e6)
+            continue;
+        if (rssi > lowRssi)
+            continue;
+        lowRssi = rssi;
+        lowIndex = i;
+    }
+    return lowIndex;
+}
+
+float TransceiverManager::scanMeanRssi() const
+{
+    float sum = 0;
+    unsigned count = 0;
+    for (unsigned i = 0;  i < sGsmMaxArfcns;  i++) {
+        int rssi = mScanTable[i];
+        if (rssi == 1e6)
+            continue;
+        if (rssi == -1e6)
+            continue;
+        sum += rssi;
+        count++;
+    }
+    if (count ==0)
+        return 1e6;
+    return sum / count;
+}
+
+
+void TransceiverManager::startScan()
+{
+    scanTableClear();
+    mARFCNs.at(0)->startScan();
+}
+
+
+void TransceiverManager::stopScan()
+{
+    mARFCNs.at(0)->stopScan();
+}
+
+
+void TransceiverManager::scanTableUpdate(unsigned arfcn, int rssi)
+{
+    if (arfcn >= sGsmMaxArfcns)
+        return;
+    if (rssi < mScanTable[arfcn])
+        return;
+    mScanTable[arfcn] = rssi;
+}
 
 
 ::ARFCNManager::ARFCNManager(unsigned int wArfcnPos, const char* wTRXAddress, int wBasePort,
 	const char* localIP, TransceiverManager &wTransceiver)
 	:mTransceiver(wTransceiver),
 	mDataSocket(wBasePort+1,wTRXAddress,wBasePort,localIP),
-	mArfcnPos(wArfcnPos)
+	mArfcnPos(wArfcnPos),
+        mScanning(false)
 {
 	// The default demux table is full of NULL pointers.
 	for (int i=0; i<8; i++) {
@@ -395,29 +494,59 @@ void ::ARFCNManager::driveRx()
 	char buffer[MAX_UDP_LENGTH];
 	int msgLen = mDataSocket.read(buffer);
 	if (msgLen<=0) SOCKET_ERROR;
-	// decode
-	unsigned char *rp = (unsigned char*)buffer;
-	// timeslot number
-	unsigned TN = *rp++;
-	// frame number
-	int32_t FN = *rp++;
-	FN = (FN<<8) + (*rp++);
-	FN = (FN<<8) + (*rp++);
-	FN = (FN<<8) + (*rp++);
-	// physcial header data
-	signed char* srp = (signed char*)rp++;
-	// reported RSSI is negated dB wrt full scale
+        // decode
+        unsigned char *rp = (unsigned char*)buffer;
+        // timeslot number
+        unsigned TN = *rp++;
+        // frame number
+        int32_t FN = *rp++;
+        FN = (FN<<8) + (*rp++);
+        FN = (FN<<8) + (*rp++);
+        FN = (FN<<8) + (*rp++);
+        // physical header data
+        signed char* srp = (signed char*)rp++;
+        // reported RSSI is negated dB wrt full scale
 	int RSSI = *srp;
-	srp = (signed char*)rp++;
-	// timing error comes in 1/256 symbol steps
-	// because that fits nicely in 2 bytes
-	int timingError = *srp;
-	timingError = (timingError<<8) | (*rp++);
-	// soft symbols
-	float data[gSlotLen];
-	for (unsigned i=0; i<gSlotLen; i++) data[i] = (*rp++) / 256.0F;
-	// demux
-	receiveBurst(RxBurst(data,GSM::Time(FN,TN),timingError/256.0F,-RSSI));
+        srp = (signed char*)rp++;
+        // timing error comes in 1/256 symbol steps
+        // because that fits nicely in 2 bytes
+        int timingError = *srp;
+        timingError = (timingError<<8) | (*rp++);
+        // soft symbols
+        float data[gSlotLen];
+        for (unsigned i=0; i<gSlotLen; i++) data[i] = (*rp++) / 256.0F;
+        // demux
+        if (!mScanning) {
+            receiveBurst(RxBurst(data,GSM::Time(FN,TN),timingError/256.0F,-RSSI));
+            return;
+        }
+        
+        // scan mode handling
+        long elapsed = mTuneTime.elapsed();
+        // too soon? receiver needs to settle?
+        if (elapsed < 10)
+            return;
+        // update RSSI scan table
+        mTransceiver.scanTableUpdate(mScanArfcn, -RSSI);
+        // re-tune?
+        if (elapsed < (long)mTransceiver.scanStepMs())
+            return;
+        GSMBand band = gBTS.band();
+        unsigned max = GSM::maxArfcn(band);
+        unsigned min = GSM::minArfcn(band);
+        mScanArfcn++;
+        bool egsm = band == EGSM900;
+        if (egsm  &&  mScanArfcn == 125)
+            mScanArfcn = min;
+        if (mScanArfcn > max) {
+            if (egsm)
+                mScanArfcn = 0;
+            else
+                mScanArfcn = min;
+        }
+        tune(mScanArfcn, true);
+        mTuneTime.now();
+        LOG(INFO) << "setting scan ARFCN to " << mScanArfcn;
 }
 
 
@@ -436,7 +565,7 @@ int ::ARFCNManager::sendCommand(const char*command, const char*param, int *respo
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
 	sprintf(cmdBuf,"CMD %u %s %s", mArfcnPos, command, param);
-	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,command,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -456,7 +585,7 @@ int ::ARFCNManager::sendCommand(const char*command, int param, int *responsePara
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
 	sprintf(cmdBuf,"CMD %u %s %d", mArfcnPos, command, param);
-	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,command,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -477,7 +606,7 @@ int ::ARFCNManager::sendCommand(const char*command, const char* param)
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
 	sprintf(cmdBuf,"CMD %u %s %s", mArfcnPos, command, param);
-	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,command,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -496,7 +625,7 @@ int ::ARFCNManager::sendCommand(const char*command)
 	char cmdBuf[MAX_UDP_LENGTH];
 	char response[MAX_UDP_LENGTH];
 	sprintf(cmdBuf,"CMD %u %s", mArfcnPos, command);
-	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,response);
+	int rspLen = mTransceiver.sendCommandPacket(cmdBuf,command,response);
 	if (rspLen<=0) return -1;
 	// Parse and check status.
 	char cmdNameTest[15];
@@ -767,6 +896,23 @@ void ::ARFCNManager::receiveBurst(const RxBurst& inBurst)
 		return;
 	}
 	proc->writeLowSideRx(inBurst);
+}
+
+
+void ARFCNManager::startScan()
+{
+    setTxAtten(100);
+    mScanArfcn = GSM::minArfcn(gBTS.band());
+    tune(mScanArfcn, true);
+    mScanning = true;
+}
+
+
+void ARFCNManager::stopScan()
+{
+    mScanning = false;
+    tune(mARFCN, true);
+    setTxAtten(gConfig.getNum("TRX.TxAttenOffset"));
 }
 
 

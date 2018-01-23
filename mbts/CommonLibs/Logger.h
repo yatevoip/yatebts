@@ -41,9 +41,12 @@
 #include <list>
 #include <map>
 #include <string>
+#include <sys/types.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #define _LOG(level) \
-	Log(LOG_##level).get() << __FILE__  ":"  << __LINE__ << ":" << __FUNCTION__ << ": "
+	Log(LOG_##level).get() << "proc " << getpid() << " " __FILE__  ":"  << __LINE__ << ":" << __FUNCTION__ << ": " << "thread " << pthread_self() << ": "
 
 #define IS_LOG_LEVEL(wLevel) (gGetLoggingLevel(__FILE__)>=LOG_##wLevel)
 

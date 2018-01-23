@@ -27,6 +27,7 @@
 #include "GSMCommon.h"
 #include "GSMTransfer.h"
 #include <list>
+#include <Timeval.h>
 
 
 /* Forward refs into the GSM namespace. */
@@ -48,7 +49,7 @@ class TransceiverManager {
 
 	private:
 
-	/// the ARFCN manangers under this TRX
+	/// the ARFCN managers under this TRX
 	std::vector<ARFCNManager*> mARFCNs;		
 
 	/// set true when the first CLOCK packet is received
@@ -60,9 +61,15 @@ class TransceiverManager {
 	Mutex mControlLock;			///< lock to prevent overlapping transactions
 	UDPSocket mControlSocket;		///< socket for radio control
 	std::string mInitData;			///< Init data (for debug)
+        
+        bool mStopRequest;                      ///< true if the thread is requested to stop
 
 	bool mExitRecv;                         ///< Exiting received from lower layer
 	bool m_statistics;                      ///< Statistics are enabled (BTS started)
+        
+        int mScanTable[GSM::sGsmMaxArfcns];     ///< uplink interference scan results
+        static const unsigned mScanStepMs = 100;
+
 
 	public:
 
@@ -122,11 +129,12 @@ class TransceiverManager {
 
 	/**
 		Send a command packet and get the response packet.
-		@param command The NULL-terminated command string to send.
+		@param cmdString The NULL-terminated command string to send.
+                @param cmdName The command name, without parameters.
 		@param response A buffer for the response packet, assumed to be char[MAX_PACKET_LENGTH].
 		@return Length of the response or -1 on failure.
 	*/
-	int sendCommandPacket(const char* command, char* response);
+	int sendCommandPacket(const char* cmdString, const char* cmdName, char* response);
 
 	bool sendCommand(const char* cmd, int* iParam = 0, const char* sParam = 0,
 	    int* rspParam = 0, int arfcn = -1);
@@ -146,7 +154,7 @@ class TransceiverManager {
 		@return true on success.
 	*/
 	inline bool stop()
-	{ return sendCommand("STOP"); }
+	{ mStopRequest = true; return sendCommand("STOP"); }
 
 	/**
 		Start/Stop statistics
@@ -161,11 +169,32 @@ class TransceiverManager {
 
 	/** Clock service loop. */
 	friend void* ClockLoopAdapter(TransceiverManager*);
+        
+        void startScan();
+        
+        void stopScan();
+        
+        unsigned numScanUnchecked() const;
+        
+        unsigned scanStepMs() const
+        { return mScanStepMs; }
+        
+        unsigned scanBestArfcn() const;
+        
+        const int* scanTable() const
+        { return mScanTable; }
+        
+        float scanMeanRssi() const;
+        
+        void scanTableUpdate(unsigned arfcn, int rssi);
+        
 
 	private:
 
 	/** Handler for messages on the clock interface. */
 	void clockHandler();
+        
+        void scanTableClear();
 };
 
 
@@ -199,7 +228,11 @@ class ARFCNManager {
 
 	unsigned mARFCN;						///< the current ARFCN
 	unsigned int mArfcnPos;						///< ARFCN index
-
+        
+        unsigned mScanArfcn;                                            ///< current scan mode ARFCN
+        bool mScanning;                                                 ///< true if scan mode active
+        ::Timeval mTuneTime;                                            ///< time of most recent tune
+        
 	public:
 
 	ARFCNManager(unsigned int wArfncPos, const char* wTRXAddress, int wBasePort,
@@ -344,6 +377,11 @@ class ARFCNManager {
 	void installDecoder(GSM::L1Decoder* wL1);
 
 
+        /// Start UL scan mode.
+        void startScan();
+        
+        /// Stop UL scan mode.
+        void stopScan();
 
 	private:
 

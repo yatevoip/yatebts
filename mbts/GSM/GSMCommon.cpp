@@ -121,23 +121,52 @@ char GSM::encodeBCDChar(char ascii)
 }
 
 
-
-
-unsigned GSM::uplinkFreqKHz(GSMBand band, unsigned ARFCN)
+unsigned GSM::maxArfcn(GSMBand band)
 {
 	switch (band) {
 		case GSM850:
-			assert((ARFCN>=128)&&(ARFCN<=251));
+                    return 251;
+		case EGSM900:
+                    return 1023;
+		case DCS1800:
+                    return 885;
+		case PCS1900:
+                    return 810;
+		default:
+                    return 0;
+	}
+}
+
+unsigned GSM::minArfcn(GSMBand band)
+{
+	switch (band) {
+		case GSM850:
+                    return 128;
+		case EGSM900:
+                    return 975;
+		case DCS1800:
+                    return 512;
+		case PCS1900:
+                    return 512;
+		default:
+                    return sGsmMaxArfcns - 1;
+	}
+}
+
+unsigned GSM::uplinkFreqKHz(GSMBand band, unsigned ARFCN)
+{
+        unsigned max = maxArfcn(band);
+        unsigned min = minArfcn(band);
+        
+	switch (band) {
+		case GSM850:
 			return 824200+200*(ARFCN-128);
 		case EGSM900:
 			if (ARFCN<=124) return 890000+200*ARFCN;
-			assert((ARFCN>=975)&&(ARFCN<=1023));
 			return 890000+200*(ARFCN-1024);
 		case DCS1800:
-			assert((ARFCN>=512)&&(ARFCN<=885));
 			return 1710200+200*(ARFCN-512);
 		case PCS1900:
-			assert((ARFCN>=512)&&(ARFCN<=810));
 			return 1850200+200*(ARFCN-512);
 		default:
 			assert(0);
@@ -335,7 +364,7 @@ ostream& GSM::operator<<(ostream& os, TypeAndOffset tao)
 		case TDMA_PDIDLE: os << "PDIDLE"; break;
 		default: os << "?" << (int)tao << "?";
 	}
-	return os;
+    return os;
 }
 
 ostream& GSM::operator<<(ostream& os, ChannelType val)

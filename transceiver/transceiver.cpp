@@ -61,7 +61,7 @@
 // Minimum data length for radio Rx burst to be processed by an ARFCN
 #define ARFCN_RXBURST_LEN 156
 
-#define RX_RSSI_DEF -63
+#define RX_RSSI_DEF -64
 #define RX_RSSI_MIN -90
 #define RX_RSSI_MAX 90
 
@@ -1699,13 +1699,15 @@ bool Transceiver::command(const char* str, String* rsp, unsigned int arfcn)
 	    status = CmdEUnkCmd;
     }
     if (status)
-	Debug(this,DebugNote,"Command '%s' (ARFCN=%u) failed in state %s: %d %s [%p]",
+	Debug(this,DebugMild,"Command '%s' (ARFCN=%u) failed in state %s: %d %s [%p]",
 	    str,arfcn,trxStateName(state()),status,
 	    reason.safe(lookup(status,s_cmdErrorName,"failure")),this);
     else
-	Debug(this,DebugAll,"Command '%s' (ARFCN=%u) RSP '%s'",str,arfcn,rspParam.c_str());
+	Debug(this,DebugInfo,"Command '%s' (ARFCN=%u)",str,arfcn);
     syncGSMTime();
-    return buildCmdRsp(rsp,cmd,status,rspParam,rCode);
+    bool res = buildCmdRsp(rsp,cmd,status,rspParam,rCode);
+    Debug(this,DebugInfo,"Response '%s' (ARFCN=%u)",rsp->c_str(),arfcn);
+    return res;
 }
 
 bool Transceiver::control(const String& oper, const NamedList& params)
@@ -1870,7 +1872,7 @@ void Transceiver::changeState(int newState)
 {
     if (m_state == newState)
 	return;
-    Debug(this,DebugNote,"State changed %s -> %s [%p]",
+    Debug(this,DebugNote,"Transceiver State changed %s -> %s [%p]",
 	trxStateName(m_state),trxStateName(newState),this);
     m_state = newState;
 }

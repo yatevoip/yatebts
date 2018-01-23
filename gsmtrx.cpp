@@ -225,7 +225,7 @@ void GsmTrxModule::readCtrlLoop()
 	String s((const char*)m_ctrl.m_readBuffer.data(),r);
 	if (!s)
 	    continue;
-	XDebug(this,DebugAll,"CTRL received: %s",s.c_str());
+	XDebug(this,DebugInfo,"CTRL received: %s",s.c_str());
 	if (s.startSkip("CMD RESET ",false)) {
 	    trxStop("received RESET command",DebugNote,true,false);
 	    rsp << "RSP RESET " << trxStart(s);
@@ -262,7 +262,7 @@ void GsmTrxModule::readCtrlLoop()
 			Transceiver::CmdEInvalidState;
 	    }
 	}
-	XDebug(this,DebugAll,"CTRL sending response: %s",rsp.c_str());
+	XDebug(this,DebugInfo,"CTRL sending response: %s",rsp.c_str());
 	if (!rsp)
 	    continue;
 	r = m_ctrl.writeSocket((const void*)rsp.c_str(),rsp.length(),*m_dummy);

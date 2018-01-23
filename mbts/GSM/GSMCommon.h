@@ -151,6 +151,11 @@ const unsigned TR1Mms = 30000;		///< RP-ACK timeout
 //@}
 //@}
 
+const unsigned sGsmMaxArfcns = 1024;  ///< maximum number of ARFCNs supported in the spec
+
+const int gNoiseBase = -68;            ///< normal UL noise level wrt full scale
+const int gGsmMargin = 8;              ///< expected minimum margin for GSM RX
+const int gGprsMargin = gGsmMargin + 6;
 
 
 
@@ -190,6 +195,10 @@ enum GSMBand {
 	DCS1800=1800,		///< worldwide DCS band
 	PCS1900=1900		///< US PCS band
 };
+
+
+unsigned minArfcn(GSMBand band);
+unsigned maxArfcn(GSMBand band);
 
 
 
