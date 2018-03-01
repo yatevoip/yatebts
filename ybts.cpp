@@ -1660,6 +1660,7 @@ protected:
     RefPointer<YBTSUE> m_ue;
     ObjList m_calls;
     String m_reason;
+    String m_extraRelease;
     bool m_waitForTraffic;
     uint8_t m_cref;
     char m_dtmf;
@@ -6972,6 +6973,7 @@ bool YBTSChan::initOutgoing(Message& msg)
 	x->setAttributeValid(YSTRING("nature"),msg.getValue(YSTRING("callernumtype")));
 	m_pending->append(x);
     }
+    m_extraRelease = msg[YSTRING("extra_rel")];
     Message* s = message("chan.startup");
     s->addParam("caller",caller,false);
     s->addParam("called",msg.getValue(YSTRING("called")),false);
@@ -7275,6 +7277,8 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 	lck.drop();
 	hangup("failure");
     }
+    if (m_extraRelease)
+	conn->extraRelease(m_extraRelease);
     if (m_cref >= 7 || !m_pending) {
 	if (m_cref >= 7)
 	    Debug(this,DebugWarn,"Could not allocate new call ref [%p]",this);
