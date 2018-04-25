@@ -2544,12 +2544,10 @@ static int decodeRP(const String& str, uint8_t& rpMsgType,
 	    return 0;
 	}
 	if (ucs2) {
-	    while (len > 1) {
-		UChar c(((uint16_t)b[0]) << 8 | b[1]);
-		*smsText << c;
-		b += 2;
-		len -= 2;
-	    }
+	    uint16_t* buf = (uint16_t*)b;
+	    unsigned int l = len >> 1;
+	    if (!UChar::decode(*smsText,buf,l,UChar::BE))
+		return 1;
 	}
 	else
 	    GSML3Codec::decodeGSM7Bit(b,len,*smsText,l);
@@ -10051,14 +10049,9 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	else {
 	    sms.clear();
 	    const char* str = text.c_str();
-	    UChar chr;
-	    while (chr.decode(str,0xffff) && chr.code()) {
-		uint8_t buf[2];
-		buf[0] = (uint8_t)(chr.code() >> 8);
-		buf[1] = (uint8_t)chr.code();
-		sms.append(buf,2);
-		smsLen += 2;
-	    }
+	    if (!UChar::encode(sms,str,UChar::BE))
+		return false;
+	    smsLen += sms.length();
 	    ucs2 = true;
 	}
 	if (!sms.length()) {
