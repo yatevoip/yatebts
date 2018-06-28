@@ -115,6 +115,9 @@ At least one Yate radio device package must also be installed.
 %endif
 
 %post
+%if ! %{nosdr}
+test "X$1" = "X1" && %{_datadir}/yate/scripts/rpm_restore.sh %{name}
+%endif
 if grep -q '^ *Radio.C0 *= *[0-9]' %{cfgdir}/ybts.conf 2>/dev/null; then
     if [ -s %{_unitdir}/%{serv_name}.service ]; then
         systemctl condrestart %{serv_name}.service
@@ -170,8 +173,8 @@ Scripts and support executables that implement a GSM Network In a PC.
 %endif
 %config(noreplace) %{cfgdir}/subscribers.conf
 
-%if %{nosdr}
 %post nipc
+%if %{nosdr}
 sed -i 's/^ *\(roaming\|nipc\) *=.*$/;; \0/' %{cfgdir}/javascript.conf
 if ! grep -q '; Installed by yate-bts-nipc' %{cfgdir}/javascript.conf 2>/dev/null; then
     if grep -q '^ *\[general\]' %{cfgdir}/javascript.conf 2>/dev/null; then
@@ -223,6 +226,8 @@ if ! grep -q '; Installed by yate-bts-nipc' %{cfgdir}/extmodule.conf 2>/dev/null
 fi
 chgrp -R apache %{cfgdir}
 chmod -R g+rw %{cfgdir}
+%else
+test "X$1" = "X1" && %{_datadir}/yate/scripts/rpm_restore.sh %{name}
 %endif
 
 
