@@ -227,7 +227,7 @@ fi
 chgrp -R apache %{cfgdir}
 chmod -R g+rw %{cfgdir}
 %else
-test "X$1" = "X1" && %{_datadir}/yate/scripts/rpm_restore.sh %{name}
+test "X$1" = "X1" && %{_datadir}/yate/scripts/rpm_restore.sh %{name}-nipc
 %endif
 
 
