@@ -675,7 +675,7 @@ public:
     inline const String& extraRelease() const
 	{ return m_extraRelease; }
     inline void extraRelease(const char* hexa)
-	{ m_extraRelease = hexa; }
+	{ if (hexa) m_extraRelease = hexa; }
     inline int hoReference() const
 	{ return m_reference; }
     inline bool isEmergency() const
@@ -1349,6 +1349,8 @@ public:
 		m_ue->stopPaging();
 	    m_paging = false;
 	}
+    inline void extraRelease(const char* hexa)
+	{ if (hexa) m_extraRelease = hexa; }
 
     ObjList m_sms;                       // MT SMS list
     RefPointer<YBTSConn> m_conn;         // Used connection
@@ -1360,6 +1362,7 @@ protected:
     // Release memory. Decrease connection usage. Stop UE paging
     virtual void destroyed();
 
+    String m_extraRelease;               // Extra octets for channel release
     bool m_paging;                       // Paging the UE
     RefPointer<YBTSUE> m_ue;
 };
@@ -5710,6 +5713,12 @@ bool YBTSSubmit::dispatch(bool route)
     bool ok = Engine::dispatch(m_msg);
     if (Thread::check(false) || Engine::exiting())
 	return false;
+    const char* rel = m_msg.getValue(YSTRING("iextra_rel"));
+    if (rel && __plugin.signalling()) {
+	RefPointer<YBTSConn> conn;
+	if (__plugin.signalling()->findConn(conn,connId(),false))
+	    conn->extraRelease(rel);
+    }
     if (!ok && route)
 	return false;
     if (route) {
@@ -7275,8 +7284,7 @@ void YBTSChan::startMT(YBTSConn* conn, bool pagingRsp)
 	lck.drop();
 	hangup("failure");
     }
-    if (m_extraRelease)
-	conn->extraRelease(m_extraRelease);
+    conn->extraRelease(m_extraRelease);
     if (m_cref >= 7 || !m_pending) {
 	if (m_cref >= 7)
 	    Debug(this,DebugWarn,"Could not allocate new call ref [%p]",this);
@@ -10129,6 +10137,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	setListParams(msg,s_error,s_reason,"failure");
 	return false;
     }
+    list->extraRelease(msg.getValue(YSTRING("extra_rel")));
     Debug(this,DebugInfo,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s",
 	sms->id().c_str(),(YBTSUE*)ue,ue->tmsi().safe(),ue->imsi().safe());
     lckUE.drop();
