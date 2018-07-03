@@ -1,5 +1,5 @@
 # Process this file with autoconf to produce a configure script.
-AC_INIT(Yate-BTS, 6.0.1)
+AC_INIT(Yate-BTS, 6.1.0)
 AC_CONFIG_SRCDIR([README])
 AC_PREREQ(2.52)
 AC_CONFIG_HEADERS([config.h])
@@ -9,7 +9,7 @@ if echo "$ac_confdir/$ac_pwd" | grep -q '[[[:space:]\\\$\"'\'']]'; then
 fi
 
 PACKAGE_RELEASE="1"
-PACKAGE_STATUS="devel"
+PACKAGE_STATUS=""
 
 PACKAGE_REVISION=`svn info 2>/dev/null | sed -n 's,^Revision: *,,p'`
 test -z "$PACKAGE_REVISION" && PACKAGE_REVISION=`cat "$srcdir/revision.txt" 2>/dev/null`
@@ -75,7 +75,7 @@ AC_CHECK_FUNCS([openlog syslog], , [AC_MSG_ERROR([This function is required.])])
 AC_CHECK_HEADERS([byteswap.h sys/prctl.h])
 
 # Check for Yate (required)
-YATE_REQ="6.0.0"
+YATE_REQ="6.1.0"
 YATE_VER=""
 YATE_DEF=""
 YATE_INC=""
