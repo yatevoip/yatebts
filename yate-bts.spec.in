@@ -66,10 +66,10 @@ Version: 	@PACKAGE_VERSION@
 Release:	%{xtra_stat}@PACKAGE_STATUS@%{revision}@PACKAGE_RELEASE@%{?status:_%{status}}%{dist}
 License:	GPL
 Packager:	Paul Chitescu <paulc@null.ro>
-Source:		http://yatebts.com/%{name}-%{version}-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
+Source:		https://yatebts.com/%{name}-%{version}-@PACKAGE_STATUS@@PACKAGE_RELEASE@.tar.gz
 Group:		Applications/Communication
 BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root
-URL:		http://yatebts.com/
+URL:		https://yatebts.com/
 %{?extra_prov:Provides: %{?extra_prov}}
 %{?extra_reqs:Requires: %{?extra_reqs}}
 BuildRequires:	gcc-c++
