@@ -182,7 +182,8 @@ YbtsConfig.prototype.validations =  {
     "control": {
 	"VEA=": {"callback": checkOnOff},
 	"LUR.AttachDetach=": {"callback": checkOnOff},
-	"SACCHTimeout.BumpDown=": {"minimum": 1,"maximum": 3}
+	"SACCHTimeout.BumpDown=": {"minimum": 1,"maximum": 3},
+	"SMSCB=": {"callback": checkOnOff}
     },
     "tapping": {
 	"GSM=": {"callback": checkOnOff},
