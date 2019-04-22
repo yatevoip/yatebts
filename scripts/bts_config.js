@@ -124,6 +124,16 @@ API.on_get_ybts_node = function(params,msg)
 API.on_set_ybts_node = function(params,msg,setNode)
 {
     var ybts = new YbtsConfig;
+    var mode = params["ybts"]["mode"];
+
+    if (!mode || ""==mode) {
+	ybtsfile = new ConfigFile(Engine.configFile("ybts"));
+	mode = ybtsfile.getValue("ybts", "mode");
+	params["ybts"]["mode"] = mode;
+	if (debug)
+	    Engine.output("Patching mode field to " + mode + " because it's missing from request.");	
+    } 
+
     var res = API.on_set_generic_file(ybts,params,msg,setNode);
 
     if (res.reason)
@@ -134,7 +144,6 @@ API.on_set_ybts_node = function(params,msg,setNode)
     ysipchan.getSection("$include sip-custom.conf",true);
     var codecs_section = ysipchan.getSection("codecs",true);
 
-    var mode = params["ybts"]["mode"];
     Engine.output("YBTS mode is "+mode+". Setting codecs in ysipchan.conf");
     if (mode == "nipc") {
 	codecs_section.setValue("default","enable");
