@@ -1584,14 +1584,14 @@ void GMMRoutingAreaIdIE::text(std::ostream&os) const
 
 void GMMRoutingAreaIdIE::raLoad()
 {
-	const char* wMCC, *wMNC;
+	string wMCC, wMNC;
 	if (Sgsn::isUmts()) {
-		wMCC = gConfig.getStr("UMTS.Identity.MCC").c_str();
-		wMNC = gConfig.getStr("UMTS.Identity.MNC").c_str();
+		wMCC = gConfig.getStr("UMTS.Identity.MCC");
+		wMNC = gConfig.getStr("UMTS.Identity.MNC");
 		mLAC = gConfig.getNum("UMTS.Identity.LAC");
 	} else {
-		wMCC = gConfig.getStr("GSM.Identity.MCC").c_str();
-		wMNC = gConfig.getStr("GSM.Identity.MNC").c_str();
+		wMCC = gConfig.getStr("GSM.Identity.MCC");
+		wMNC = gConfig.getStr("GSM.Identity.MNC");
 		mLAC = gConfig.getNum("GSM.Identity.LAC");
 	}
 	mRAC = gConfig.getNum("GPRS.RAC");
