@@ -40,6 +40,13 @@ namespace { // anonymous
 
 #include "ybts.h"
 
+//#define YBTS_DEBUG_SMS
+#ifndef YBTS_DEBUG_SMS
+    #ifdef DEBUG
+	#define YBTS_DEBUG_SMS
+    #endif
+#endif
+
 #define BTS_DIR "server/bts"
 #define BTS_CMD "mbts"
 
@@ -64,9 +71,9 @@ namespace { // anonymous
 // Peer check
 #define YBTS_PEERCHECK_DEF 3000
 // SMS
-#define YBTS_MT_SMS_TIMEOUT_DEF 300000
+#define YBTS_MT_SMS_TIMEOUT_DEF 30000
 #define YBTS_MT_SMS_TIMEOUT_MIN 5000
-#define YBTS_MT_SMS_TIMEOUT_MAX 600000
+#define YBTS_MT_SMS_TIMEOUT_MAX 60000
 // USSD
 #define YBTS_USSD_TIMEOUT_DEF 600000
 #define YBTS_USSD_TIMEOUT_MIN 30000
@@ -1036,6 +1043,9 @@ public:
 	    if (conn)
 		dropConn(conn->connId(),notifyPeer);
 	}
+    // Connection UE changed notification
+    void connUeChanged(YBTSConn* conn);
+
 protected:
     inline bool findConnDrop(YBTSMessage& msg, RefPointer<YBTSConn>& conn,
 	uint16_t connId) {
@@ -1286,7 +1296,7 @@ class YBTSMtSms : public Mutex, public RefObject
 public:
     inline YBTSMtSms(const char* id, const String& rpdu)
 	: Mutex(false,"YBTSMtSms"),
-	m_id(id), m_active(true), m_sent(false), m_ok(false),
+	m_id(id), m_active(true), m_sent(false), m_sentCount(0), m_confirmed(false), m_ok(false),
 	m_rpdu(rpdu)
 	{}
     inline const String& id() const
@@ -1295,6 +1305,10 @@ public:
 	{ return m_active; }
     inline bool sent() const
 	{ return m_sent; }
+    inline unsigned int sentCount() const
+	{ return m_sent; }
+    inline bool confirmed() const
+	{ return m_confirmed; }
     inline bool ok() const
 	{ return m_ok; }
     inline const String& callRef() const
@@ -1318,6 +1332,8 @@ protected:
     String m_id;
     bool m_active;
     bool m_sent;
+    unsigned int m_sentCount;
+    bool m_confirmed;
     bool m_ok;
     String m_callRef;
     String m_rpdu;
@@ -3266,7 +3282,7 @@ YBTSMessage* YBTSMessage::parse(YBTSSignalling* recv, uint8_t* data, unsigned in
     String reason;
     switch (m->primitive()) {
 	case SigL3Message:
-#ifdef DEBUG
+#ifdef XDEBUG
 	    {
 		String tmp;
 		tmp.hexify(data,len,' ');
@@ -3379,7 +3395,7 @@ bool YBTSMessage::build(YBTSSignalling* sender, DataBlock& buf, const YBTSMessag
     switch (msg.primitive()) {
 	case SigL3Message:
 	    if (encodeMsg(sender->codec(),msg,buf,reason)) {
-#ifdef DEBUG
+#ifdef XDEBUG
 		void* data = buf.data(4);
 		if (data) {
 		    String tmp;
@@ -3841,6 +3857,9 @@ bool YBTSConn::setUE(YBTSUE* ue)
 	Debug(m_owner,DebugAll,
 	    "Connection %u set UE (%p) TMSI=%s IMSI=%s [%p]",
 	    connId(),ue,ue->tmsi().safe(),ue->imsi().safe(),this);
+	lck.drop();
+	if (__plugin.signalling())
+	    __plugin.signalling()->connUeChanged(this);
 	return true;
     }
     if (m_ue == ue)
@@ -4845,6 +4864,29 @@ void YBTSSignalling::dropGprsConn(uint16_t connId, bool notifyPeer)
     }
     __plugin.gprsReleased(connId);
     conn = 0;
+}
+
+// Connection UE changed notification
+void YBTSSignalling::connUeChanged(YBTSConn* conn)
+{
+    if (!conn)
+	return;
+    XDebug(this,DebugAll,"Connection %u authenticated=%u: UE set",
+	conn->connId(),conn->authenticated());
+    // Remove all other connection(s) holding the same UE
+    ObjList remove;
+    Lock lck(m_connsMutex);
+    for (ObjList* o = m_conns.skipNull(); o; o = o->skipNext()) {
+	YBTSConn* c = static_cast<YBTSConn*>(o->get());
+	if (conn == c || conn->ue() != c->ue() || c->removed() || !c->ref())
+	    continue;
+	Debug(this,DebugNote,"Connection %u (%p) replaced by %u (%p): same UE",
+	    c->connId(),c,conn->connId(),conn);
+	remove.append(c);
+    }
+    lck.drop();
+    for (ObjList* o = remove.skipNull(); o; o = o->skipNext())
+	dropConn(static_cast<YBTSConn*>(o->get()),true);
 }
 
 void YBTSSignalling::changeState(int newStat, bool peerAbort)
@@ -8657,14 +8699,23 @@ void YBTSDriver::connReleased(uint16_t connId, YBTSConn* conn)
     }
     if (list) {
 	list->lock();
+#ifdef YBTS_DEBUG_SMS
+	Debug(this,DebugAll,"connReleased(%u) found mt sms list (%p)",connId,(void*)list);
+#endif
 	list->m_conn = 0;
 	list->m_auth = 0;
 	for (ObjList* o = list->m_sms.skipNull(); o; o = o->skipNext()) {
 	    YBTSMtSms* sms = static_cast<YBTSMtSms*>(o->get());
 	    // Reset sent flag to allow it to be re-sent
 	    Lock lck(sms);
-	    if (sms->active())
-		sms->m_sent = false;
+	    if (sms->active() && sms->sent()) {
+#ifdef YBTS_DEBUG_SMS
+		Debug(this,DebugAll,
+		    "connReleased(%u) mt sms list (%p) resetting sent flag for '%s'",
+		    connId, (void*)list,sms->id().c_str());
+#endif
+		sms->m_sent = sms->m_confirmed = false;
+	    }
 	}
 	list->stopPaging();
 	list->m_check = true;
@@ -9246,17 +9297,40 @@ void YBTSDriver::handleSmsCPData(YBTSMessage& m, YBTSConn* conn,
 void YBTSDriver::handleSmsCPRsp(YBTSMessage& m, YBTSConn* conn,
     const String& callRef, bool tiFlag, const XmlElement& rsp, bool ok)
 {
-    Debug(this,ok ? DebugAll : DebugNote,"SMS %s conn=%u callRef=%s tiFlag=%s",
-	(ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
-	String::boolText(tiFlag));
+    int level = ok ? DebugAll : DebugNote;
     if (!tiFlag) {
 	YBTSSmsInfo* info = signalling()->removeSms(conn,callRef,true);
+	Debug(this,info ? level : DebugNote,"SMS %s conn=%u callRef=%s tiFlag=%s: MO SMS %s",
+	    (ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
+	    String::boolText(tiFlag),(info ? "removed" : "not found"));
 	TelEngine::destruct(info);
 	return;
     }
     // Response to MT SMS transaction
     // Ack: Wait for CP-DATA with RP-DATA
     // Error: Stop waiting
+    String mtInfo;
+    YBTSMtSms* sms = 0;
+    if (conn) {
+	Lock lck(m_mtSmsMutex);
+	YBTSMtSmsList* list = findMtSmsList(conn->ue());
+	ObjList* first = list ? list->m_sms.skipNull() : 0;
+	sms = first ? static_cast<YBTSMtSms*>(first->get()) : 0;
+	if (sms && sms->callRef() == callRef) {
+	    if (ok)
+		sms->m_confirmed = true;
+	    mtInfo = sms->id();
+	}
+	else {
+	    sms = 0;
+	    mtInfo = "MT SMS not found";
+	}
+    }
+    else
+	mtInfo = "no connection";
+    Debug(this,sms ? level : DebugNote,"SMS %s conn=%u callRef=%s tiFlag=%s: %s",
+	(ok ? "CP-ACK" : "CP-ERROR"),m.connId(),callRef.c_str(),
+	String::boolText(tiFlag),mtInfo.c_str());
     if (!ok && conn)
 	handleMtSmsRsp(conn->ue(),false,callRef);
 }
@@ -9270,16 +9344,20 @@ bool YBTSDriver::checkMtSms(YBTSMtSmsList& list, unsigned int* toutAuth)
 	return false;
     YBTSMtSms* sms = static_cast<YBTSMtSms*>(o->get());
     if (!sms->active()) {
-	XDebug(this,DebugAll,"checkMtSms(%p) removing inactive '%s'",
-	    &list,sms->id().c_str());
+#ifdef YBTS_DEBUG_SMS
+	Debug(this,DebugAll,"checkMtSms(%p) removing inactive '%s'",&list,sms->id().c_str());
+#endif
 	o->remove();
 	lck.drop();
 	return checkMtSms(list);
     }
-    DDebug(this,DebugAll,
-	"checkMtSms(%p) '%s' sent=%u paging=%u conn=%p waitTraffic=%u",
-	&list,sms->id().c_str(),sms->sent(),!list.ue()->paging().null(),
+#ifdef YBTS_DEBUG_SMS
+    Debug(this,DebugAll,
+	"checkMtSms(%p) '%s' sent=%u(%u) confirmed=%u auth=%u paging=%u conn=%u (%p) waitTraffic=%u",
+	&list,sms->id().c_str(),sms->sent(),sms->sentCount(),sms->confirmed(),list.m_auth,
+	!list.ue()->paging().null(),list.m_conn ? list.m_conn->connId() : 0,
 	(YBTSConn*)(list.m_conn),(list.m_conn ? list.m_conn->waitForTraffic() : false));
+#endif
     // Do nothing if radio is not up
     if (m_state != RadioUp)
 	return true;
@@ -9296,8 +9374,17 @@ bool YBTSDriver::checkMtSms(YBTSMtSmsList& list, unsigned int* toutAuth)
 	    list.startPaging();
 	    return true;
 	}
+#ifdef YBTS_DEBUG_SMS
+	Debug(this,DebugAll,"checkMtSms(%p) '%s' list conn set to %u (%p) waitTraffic=%u",
+	    &list,sms->id().c_str(),list.m_conn->connId(),(YBTSConn*)(list.m_conn),
+	    list.m_conn->waitForTraffic());
+#endif
 	list.stopPaging();
 	if (list.m_conn->flag(YBTSConn::FLocUpd)) {
+#ifdef YBTS_DEBUG_SMS
+	    Debug(this,DebugAll,"checkMtSms(%p) '%s' list conn reset: update location in progress",
+		&list,sms->id().c_str());
+#endif
 	    list.m_conn = 0;
 	    return true;
 	}
@@ -9344,11 +9431,16 @@ bool YBTSDriver::checkMtSms(YBTSMtSmsList& list, unsigned int* toutAuth)
 	list.m_tid = 0;
     if (signalling()->sendSmsCPData(list.m_conn,sms->callRef(),false,sapi,sms->rpdu())) {
 	list.ue()->lock();
-	Debug(this,DebugAll,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s sent on conn %u",
+	String cnt;
+	if (sms->m_sentCount)
+	    cnt << " (count=" << (sms->m_sentCount + 1) << ")";
+	Debug(this,cnt ? DebugInfo : DebugAll,"MT SMS '%s' to (%p) TMSI=%s IMSI=%s sent%s on conn %u",
 	    sms->id().c_str(),list.ue(),list.ue()->tmsi().safe(),
-	    list.ue()->imsi().safe(),list.m_conn->connId());
+	    list.ue()->imsi().safe(),cnt.safe(),list.m_conn->connId());
 	list.ue()->unlock();
 	sms->m_sent = true;
+	sms->m_confirmed = false;
+	sms->m_sentCount++;
 	return true;
     }
     // Failed to send: terminate now
@@ -10159,7 +10251,7 @@ bool YBTSDriver::handleMsgExecute(Message& msg, const String& dest)
 	    if (!intervals)
 		YBTS_SMSOUT_DONE("timeout");
 	}
-	if (maxPdd && !sms->sent()) {
+	if (maxPdd && !sms->sentCount()) {
 	    maxPdd--;
 	    if (!maxPdd)
 		YBTS_SMSOUT_DONE("postdialdelay");
