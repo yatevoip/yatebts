@@ -1001,9 +1001,9 @@ Radio.C0=
 ; This interval includes paging if needed.
 ; This parameter can be overridden in the msg.execute message by a 'timeout' parameter.
 ; This parameter is applied on reload.
-; Interval allowed: 5000..600000.
-; Defaults to 300000.
-;sms.timeout=300000
+; Interval allowed: 5000..60000.
+; Defaults to 30000.
+;sms.timeout=30000
 
 ; ussd.session_timeout: integer: Timeout, in milliseconds, of USSD sessions.
 ; This parameter configures the overall USSD session duration.
