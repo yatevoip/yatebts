@@ -482,23 +482,25 @@ function imsis_telnet_command(command, name_in_result, name_in_message, column_n
 
     var subscriber;
     var col0;
-    var col1;
+    var coln;
 
     var reg_subs = {};
     var current_index;
     for (var i=2; i<res.length; i++) {
 	subscriber = res[i];
-	subscriber = subscriber.split(" ");
-	col1 = subscriber[subscriber.length - 1];
+	subscriber = strSplit(subscriber, " | ");
 	col0 = subscriber[0];
+	coln = subscriber[subscriber.length - 1];
 	if (!col0.length)
 		continue;
-	if (col1.endsWith("\r"))
-		col1 = col1.substr(0,col1.length-1);
+	if (coln.endsWith("\r\n")) {
+		subscriber[subscriber.length - 1] = coln.substr(0,coln.length-1);
+	}
 	current_index = i-2;
 	var reg_subscriber = {};
-        reg_subscriber[column_names[0]] = col0;
-        reg_subscriber[column_names[1]] = col1;
+	for (var j=0; j < subscriber.length; j++) {
+	    reg_subscriber[column_names[j]] = subscriber[j];
+	}
 	reg_subs[current_index] = reg_subscriber;
     }
 
@@ -530,7 +532,7 @@ function imsis_telnet_command(command, name_in_result, name_in_message, column_n
 // Get online subscribers
 API.on_get_online_nipc_subscribers = function(params,msg)
 {
-    var column_names = ["IMSI", "MSISDN"];
+    var column_names = ["IMSI", "MSISDN", "REGISTERED", "EXPIRES"];
     return imsis_telnet_command("nipc list registered", "subscribers", "online subscribers", column_names);
 };
 

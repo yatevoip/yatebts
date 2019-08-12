@@ -70,7 +70,11 @@ function readUEsFromConf()
 	var expires = subscriber_info[3];
 	expires = parseInt(expires);
 	var loc = subscriber_info[4];
-	registered_subscribers[imsi] = {"tmsi":tmsi,"imei":imei,"msisdn":msisdn,"expires":expires,"location":loc};
+	var registered = subscriber_info[5];
+	if (undefined===registered)
+	    registered = expires - imsi_cleanup;
+
+	registered_subscribers[imsi] = {"tmsi":tmsi,"imei":imei,"msisdn":msisdn,"expires":expires,"location":loc,"registered":registered};
 	count_ues = count_ues+1;
     }
 
@@ -101,7 +105,7 @@ function saveUE(imsi,subscriber)
 
 function subscriberEqual(obj1, obj2)
 {
-    var keys = ["tmsi", "msisdn", "imei", "expires", "location"];
+    var keys = ["tmsi", "msisdn", "imei", "expires", "location", "registered"];
     for (var key of keys) {
 	if (obj1[key]!=obj2[key])
 	    return false;
@@ -117,7 +121,7 @@ function subscriberEqual(obj1, obj2)
 function saveUEinConf(imsi,subscriber)
 {
     if (subscriber!=undefined) {
-	var fields = subscriber["tmsi"]+","+subscriber["imei"]+","+subscriber["msisdn"]+","+subscriber["expires"]+","+subscriber["location"];
+	var fields = subscriber["tmsi"]+","+subscriber["imei"]+","+subscriber["msisdn"]+","+subscriber["expires"]+","+subscriber["location"] +","+subscriber["registered"];
 	conf.setValue(ues,imsi,fields);
     } else
 	conf.clearKey(ues,imsi);
@@ -157,8 +161,9 @@ function registerSubscriber(msg,loc)
     if (imei=="" && registered_subscribers[imsi]!=undefined)
 	imei = registered_subscribers[imsi]["imei"];
 
-    var expire_subscriber = Date.now()/1000 + imsi_cleanup;
-    var subscriber = {"tmsi":msg.tmsi, "msisdn":msg.msisdn, "imei":imei, "expires":expire_subscriber};
+    var registered = Date.now()/1000;
+    var expire_subscriber = registered + imsi_cleanup;
+    var subscriber = {"tmsi":msg.tmsi, "msisdn":msg.msisdn, "imei":imei, "expires":expire_subscriber, "registered":registered };
     if (loc==undefined)
 	subscriber["location"] = "ybts/TMSI"+msg.tmsi;
     else
@@ -176,7 +181,8 @@ function unregisterSubscriber(imsi)
     var msisdn = registered_subscribers[imsi]["msisdn"];
     var imei = registered_subscribers[imsi]["imei"];
     var expires = registered_subscribers[imsi]["expires"];
-    var subscriber = {"tmsi":tmsi, "msisdn":msisdn, "imei":imei, "expires":expires};
+    var registered = registered_subscribers[imsi]["registered"];
+    var subscriber = {"tmsi":tmsi, "msisdn":msisdn, "imei":imei, "expires":expires, "registered":registered};
 
     saveUE(imsi,subscriber);
 }
@@ -1094,7 +1100,7 @@ function startAuth(msg,imsi,is_auth)
 	sqn = "000000000000";
 
     if (ki=="" || ki==null) {
-	Engine.alarm(alarm_conf, "Please configure ki and imsi_type in subscribers.conf. You can edit the file directly or use the LMI interface. If you don't wish to authenticate SIMs, please configure regexp instead of individual subscribers, but in this case MT authentication can't be used -- see [security] section in ybts.conf.");
+	Engine.alarm(alarm_conf, "Please configure ki and imsi_type in subscribers.conf. You can edit the file directly or use the NiPC interface. If you don't wish to authenticate SIMs, please configure regexp instead of individual subscribers, but in this case MT authentication can't be used -- see [security] section in ybts.conf.");
 	msg.error = "unacceptable";
 	return false;
     }
@@ -1440,18 +1446,21 @@ function onCommand(msg)
     switch (msg.line) {
 	case "nipc list accepted":
 	    var tmp = "IMSI            MSISDN \r\n";
-	    tmp += "--------------- ---------------\r\n";
+	    tmp += "--------------- -------------\r\n";
 	    for (var imsi_key in registered_subscribers)
-		tmp += imsi_key+"   "+registered_subscribers[imsi_key]["msisdn"]+"\r\n";
+		tmp += imsi_key+" | "+registered_subscribers[imsi_key]["msisdn"]+"\r\n";
 	    msg.retValue(tmp);
 	    return true;
 
 	case "nipc list registered":
-	    var tmp = "IMSI            MSISDN \r\n";
-	    tmp += "--------------- ---------------\r\n";
+	    var tmp = "IMSI            MSISDN          REGISTERED                 EXPIRES\r\n";
+	    tmp += "--------------- ------------- -------------------------  --------------------------\r\n";
 	    for (var imsi_key in registered_subscribers)
-		if (registered_subscribers[imsi_key]["location"]!="")
-		    tmp += imsi_key+"   "+registered_subscribers[imsi_key]["msisdn"]+"\r\n";
+		if (registered_subscribers[imsi_key]["location"]!="") {
+		    tmp += imsi_key+" | "+registered_subscribers[imsi_key]["msisdn"]+" | ";
+		    tmp += buildDate(registered_subscribers[imsi_key]["registered"]) + " | ";
+		    tmp += buildDate(registered_subscribers[imsi_key]["expires"]) + "\r\n";
+		}
 	    msg.retValue(tmp);
 	    return true;
 
@@ -1459,7 +1468,7 @@ function onCommand(msg)
 	    var tmp = "FROM_IMSI        FROM_MSISDN        TO_IMSI        TO_MSISDN\r\n";
 	    tmp += "--------------- --------------- --------------- ---------------\r\n";
 	    for (var i=0; i<pendingSMSs.length; i++)
-		tmp += pendingSMSs[i].imsi+"   "+pendingSMSs[i].msisdn+"   "+pendingSMSs[i].dest_imsi+"   "+pendingSMSs[i].dest+"\r\n";
+		tmp += pendingSMSs[i].imsi+" | "+pendingSMSs[i].msisdn+" | "+pendingSMSs[i].dest_imsi+" | "+pendingSMSs[i].dest+"\r\n";
 	    msg.retValue(tmp);
 	    return true;
 
@@ -1467,7 +1476,7 @@ function onCommand(msg)
 	    var tmp = "IMSI            No attempts register \r\n";
 	    tmp += "--------------- ---------------\r\n";
 	    for (var imsi_key in seenIMSIs)
-		tmp += imsi_key+"    "+seenIMSIs[imsi_key]+"\r\n";
+		tmp += imsi_key+" | "+seenIMSIs[imsi_key]+"\r\n";
 	    msg.retValue(tmp);
 	    return true;
 
