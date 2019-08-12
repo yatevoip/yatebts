@@ -28,6 +28,8 @@
 conf_node = "bts";
 // define configuration files that can be set/get 
 confs = ["cdrfile", "accfile", "subscribers", "ybts", "sdr", "ybladerf", "calibrate"];
+additional_confs_set = ["regexroute", "javascript"];
+additional_confs_get = [];
 
 YbtsConfig = function()
 {
