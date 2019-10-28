@@ -43,6 +43,7 @@ YbtsConfig = function()
     this.params_allowed_empty = ["Args", "DNS", "ShellScript", "MS.IP.Route", "Logfile.Name", "peer_arg", "RadioFrequencyOffset", "TxAttenOffset", "Radio.RxGain", "gprs_nnsf_bits", "nnsf_dns", "network_map", "local_breakout", "neighbors", "reg_sip", "nodes_sip", "my_sip", "gstn_location", "networkname", "networkname.full", "networkname.ci", "sos_sip", "extra_yatepeer_args", "peer_abort"];
     this.params_required = { "gsm": ["Radio.Band", "Radio.C0","Identity.MCC", "Identity.MNC", "Identity.LAC", "Identity.CI", "Identity.BSIC.NCC", "Identity.BSIC.BCC", "Radio.PowerManager.MaxAttenDB", "Radio.PowerManager.MinAttenDB"]};
     this.factory_calibrated = {"transceiver": ["TxAttenOffset","RadioFrequencyOffset"], "gsm_advanced": ["Radio.RxGain"]};
+    this.overwrite = false;
 };
 
 YbtsConfig.prototype = new GenericConfig;
