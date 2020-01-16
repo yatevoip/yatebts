@@ -212,8 +212,8 @@ YbtsConfig.prototype.validations =  {
 	"auth.call=": {"callback": checkOnOff},
 	"auth.sms=": {"callback": checkOnOff},
 	"auth.ussd=": {"callback": checkOnOff},
-	"networkname=": {"regex": "^[a-zA-Z0-9 ]+$"},
-	"networkname.full=": {"regex": "^[a-zA-Z0-9 ]+$"},
+	"networkname=": {"regex": "^[a-zA-Z0-9 \.\-]+$"},
+	"networkname.full=": {"regex": "^[a-zA-Z0-9 \.\-]+$"},
 	"networkname.ci=": {"callback": checkOnOff},
 	"peer_abort=": {"minimum": 0, "maximum": 100}
     },
