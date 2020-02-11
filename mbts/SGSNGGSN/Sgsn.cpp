@@ -149,7 +149,7 @@ void SgsnInfo::sirm()
 	clearConn(GprsConnNone,SigConnLost);
 	std::ostringstream ss;
 	sgsnInfoDump(this,ss);
-	SGSNLOGF(INFO,GPRS_OK|GPRS_MSG,"SGSN","Removing SgsnInfo:"<<ss);
+	SGSNLOGF(INFO,GPRS_OK|GPRS_MSG,"SGSN","Removing SgsnInfo:"<<ss.str());
 	sSgsnInfoList.remove(this);
 	GmmInfo *gmm = getGmm();
 	if (gmm && (gmm->getSI() == this)) {
@@ -253,7 +253,7 @@ static void GmmRemove(GmmInfo *gmm)
 {
 	std::ostringstream ss;
 	gmmInfoDump(gmm,ss,0);
-	SGSNLOGF(INFO,GPRS_OK|GPRS_MSG,"SGSN","Removing gmm:"<<ss);
+	SGSNLOGF(INFO,GPRS_OK|GPRS_MSG,"SGSN","Removing gmm:"<<ss.str());
 	SgsnInfo *si;
 	RN_FOR_ALL(SgsnInfoList_t,sSgsnInfoList,si) {
 		// The second test here should be redundant.

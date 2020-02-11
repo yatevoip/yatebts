@@ -638,7 +638,7 @@ bool MSInfo::msAssignChannels()
         if (msPCHDowns.size() > 1) {
             std::ostringstream os;
             msDumpChannels(os);
-            GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_OK) << "Multislot assignment for "<<this<<os;
+            GPRSLOG(INFO,GPRS_MSG|GPRS_CHECK_OK) << "Multislot assignment for "<<this<<os.str();
         }
 
 	} else {

@@ -835,7 +835,7 @@ PDCHL1FEC *L2MAC::macPickChannel()
 	devassert(npacch);
 	PDCHL1FEC *ch, *bestch = NULL;
 	int bestload = 0;			// unneeded init to make gcc happy.
-	for (RListIterator<typeof(ch)> itr(macPacchs); itr.next(ch); ) {
+	for (RListIterator<PDCHL1FEC*> itr(macPacchs); itr.next(ch); ) {
 		int load = 0;
 		MSInfo *ms;
 		RN_MAC_FOR_ALL_MS(ms) {
