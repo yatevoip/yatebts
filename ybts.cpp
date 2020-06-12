@@ -7057,7 +7057,9 @@ bool YBTSChan::serialize(String& str)
 {
     if (!(conn() && conn()->serialize(str)))
 	return false;
-    str << " " << status() << ":" << (int)m_cref;
+    str << " ";
+    getStatus(str);
+    str << ":" << (int)m_cref;
 
     YBTSCallDesc* act = m_activeCall;
     if (act)
