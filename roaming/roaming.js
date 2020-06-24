@@ -588,9 +588,7 @@ function routeSMS(msg)
 		msg.error = "nomedia";
 		return false;
 	}
-	imsi = getIMSI(null, msg.called);
-	if (imsi == "")
-	    imsi = getIMSIFromSIPParam(msg["sip_p-called-party-id"]);
+	imsi = detectIMSI(msg.called, msg["sip_p-called-party-id"]);	
 	if (imsi=="") {
 	    msg.error = "offline";
 	    return false;
@@ -735,9 +733,7 @@ function onMoSMS(msg)
  */
 function fillMtUSSD(msg,route)
 {
-    var imsi = getIMSIFromCalled(msg.called);
-    if (imsi == "")
-	    imsi = getIMSIFromSIPParam(msg["sip_p-called-party-id"]);
+    imsi = detectIMSI(msg.called,msg["sip_p-called-party-id"]);
     if (imsi == "") {
 	msg.error = "offline";
 	return false;
@@ -881,9 +877,7 @@ function onRoute(msg)
 	// MT call
 
 	// check that called is registered in this bts
-	imsi = getIMSIFromCalled(msg.called);
-	if (imsi == "")
-	    imsi = getIMSIFromSIPParam(msg["sip_p-called-party-id"]);
+	imsi = detectIMSI(msg.called,msg["sip_p-called-party-id"]);
 	if (imsi=="") {
 	    msg.error = "offline";
 	    return false;
@@ -976,6 +970,26 @@ function getIMSIFromSIPParam(param)
     if (res)
 	return res[1];
     return "";
+}
+
+/**
+ * Detect IMSI from called if it starts with IMSI / TMSI / or it's added in specific param (Ex: P-Called-Party-ID)
+ * Otherwise detect it based on MSISDN from called param
+ */
+function detectIMSI(called,param)
+{
+    if (called.match(/IMSI/))
+	return called.substr(4);
+    else if (called.match(/TMSI/)) {
+	var tmsi = called.substr(4);
+	return getIMSI(tmsi);
+    }
+    if (param) {
+	var imsi = getIMSIFromSIPParam(param);
+	if (imsi)
+	    return imsi;
+    }
+    return getIMSI(null,called);
 }
 
 /**
