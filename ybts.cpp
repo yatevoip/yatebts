@@ -6952,7 +6952,7 @@ YBTSChan::YBTSChan(YBTSUE* ue, YBTSConn* conn, bool outgoing, String& state)
     tmp = 0;
     state >> tmp;
     m_cref = tmp;
-    DDebug(this,DebugInfo,"Restored channel state %s and cref %d",status().c_str(),(int)m_cref);
+    DDebug(this,DebugInfo,"Restored channel state %s and cref %d",getStatus().c_str(),(int)m_cref);
     while (state.at(0) == '|') {
 	state >> "|";
 	YBTSCallDesc* call = new YBTSCallDesc(this,state);
