@@ -3,7 +3,7 @@
  * create_radio_band_select_array.php
  * This file is part of the Yate-BTS Project http://www.yatebts.com
  *
- * Copyright (C) 2014 Null Team
+ * Copyright (C) 2014-2023 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing

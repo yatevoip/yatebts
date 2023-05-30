@@ -5,7 +5,7 @@
  * GSM Utility classes implementation
  *
  * Yet Another Telephony Engine - Base Transceiver Station
- * Copyright (C) 2014 Null Team Impex SRL
+ * Copyright (C) 2014-2023 Null Team Impex SRL
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing

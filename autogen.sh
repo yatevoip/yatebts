@@ -4,7 +4,7 @@
 # This file is part of the Yate-BTS Project http://www.yatebts.com
 #
 # Yet Another Telephony Engine - Base Transceiver Station
-# Copyright (C) 2013-2014 Null Team Impex SRL
+# Copyright (C) 2013-2023 Null Team Impex SRL
 #
 # This software is distributed under multiple licenses;
 # see the COPYING file in the main directory for licensing

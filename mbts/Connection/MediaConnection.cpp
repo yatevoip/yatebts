@@ -5,7 +5,7 @@
  * Media socket connection
  *
  * Yet Another Telephony Engine - Base Transceiver Station
- * Copyright (C) 2013-2014 Null Team Impex SRL
+ * Copyright (C) 2013-2023 Null Team Impex SRL
  * Copyright (C) 2014 Legba, Inc
  *
  * This software is distributed under multiple licenses;

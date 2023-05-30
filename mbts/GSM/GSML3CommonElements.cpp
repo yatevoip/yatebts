@@ -5,7 +5,7 @@
 /*
 * Copyright 2008, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
-* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2013-2023 Null Team Impex SRL
 * Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;

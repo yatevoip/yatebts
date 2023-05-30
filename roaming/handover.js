@@ -5,7 +5,7 @@
  * SIP based handover functions for YateBTS
  * This file must be included by roaming.js
  *
- * Copyright (C) 2014 Null Team
+ * Copyright (C) 2014-2023 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing

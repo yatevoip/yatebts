@@ -3,7 +3,7 @@
 /*
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
-* Copyright (C) 2014 Null Team Impex SRL
+* Copyright (C) 2014-2023 Null Team Impex SRL
 * Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;

@@ -4,7 +4,7 @@
  *
  * String utility functions library for Javascript
  *
- * Copyright (C) 2014 Null Team
+ * Copyright (C) 2014-2023 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing

@@ -2,7 +2,7 @@
  * custom_sms.js
  * This file is part of the Yate-BTS Project http://www.yatebts.com
  *
- * Copyright (C) 2015 Null Team
+ * Copyright (C) 2015-2023 Null Team
  *
  * This software is distributed under multiple licenses;
  * see the COPYING file in the main directory for licensing

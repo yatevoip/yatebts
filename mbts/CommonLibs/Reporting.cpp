@@ -1,7 +1,7 @@
 /**@file Module for performance-reporting mechanisms. */
 /*
 * Copyright 2012, 2013 Range Networks, Inc.
-* Copyright (C) 2014 Null Team Impex SRL
+* Copyright (C) 2014-2023 Null Team Impex SRL
 * Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under the terms of the GNU Affero Public License.

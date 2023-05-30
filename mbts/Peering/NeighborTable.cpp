@@ -1,7 +1,7 @@
 /*
  * Copright 2011 Range Networks, Inc.
  * All rights reserved.
- * Copyright (C) 2013-2014 Null Team Impex SRL
+ * Copyright (C) 2013-2023 Null Team Impex SRL
  * Copyright (C) 2014 Legba, Inc
 */
 

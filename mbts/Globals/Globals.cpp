@@ -3,7 +3,7 @@
 * Copyright 2008, 2009, 2010 Free Software Foundation, Inc.
 * Copyright 2010 Kestrel Signal Processing, Inc.
 * Copyright 2011, 2012 Range Networks, Inc.
-* Copyright (C) 2013-2014 Null Team Impex SRL
+* Copyright (C) 2013-2023 Null Team Impex SRL
 * Copyright (C) 2014 Legba, Inc
 *
 * This software is distributed under multiple licenses;
@@ -38,7 +38,7 @@ const char* gOpenBTSWelcome =
 	"Copyright 2008, 2009, 2010 Free Software Foundation, Inc.\n"
 	"Copyright 2010 Kestrel Signal Processing, Inc.\n"
 	"Copyright 2011, 2012, 2013 Range Networks, Inc.\n"
-	"Copyright 2013, 2014 Null Team Impex SRL\n"
+	"Copyright 2013, 2014-2023 Null Team Impex SRL\n"
 	"Copyright 2014 Legba, Inc.\n"
 	"\"OpenBTS\" is a registered trademark of Range Networks, Inc.\n"
 	"\nContributors:\n"
